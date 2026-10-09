@@ -52,6 +52,8 @@ class Config:
     partition_seconds: float = 0.0
     late_insert_fraction: float = 0.0  # share of inserts that go to the previous partition
     retention_partitions: int = 0  # keep this many newest partitions, the current one included (0: keep all)
+    # seconds between a trigger and the assignee run; 0 in ClickHouse terms means "as soon as a thread is free"
+    assign_latency: float = 0.0
     seed: int = 1
 
 
@@ -198,8 +200,8 @@ class Table:
 
     def trigger(self):
         self.no_work_count //= 2
-        if self._assignee_at > self.engine.now:
-            self._schedule_assignee(0.0)
+        if self._assignee_at > self.engine.now + self.cfg.assign_latency:
+            self._schedule_assignee(self.cfg.assign_latency)
 
     def postpone(self):
         self.no_work_count += 1
