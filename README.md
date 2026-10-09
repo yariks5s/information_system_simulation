@@ -13,6 +13,7 @@
 | `calibration.json`, `results/`, `runs/` | відкалібровані параметри, результати експериментів, дані валідації |
 | `test_*.py` | тести Python-моделі |
 | `app/` | інтерактивна лабораторія в браузері: [app/README.md](app/README.md) |
+| `docs/` | однесторінковий план (`plan.md`, `plan.docx`) і звіт (`report.md`, `report.docx`, `report.pdf`); `docs/build.sh` перезбирає docx і pdf |
 
 ## Як запустити
 

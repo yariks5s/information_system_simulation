@@ -1,0 +1,24 @@
+@page { size: A4; margin: 20mm 18mm 20mm 25mm; }
+body { font-family: "DejaVu Serif", Georgia, serif; font-size: 11pt; line-height: 1.45; color: #111; max-width: none; margin: 0; padding: 0; }
+h1, h2, h3, header .title, header .subtitle { font-family: "DejaVu Sans", system-ui, sans-serif; color: #1c3d6e; }
+header { text-align: center; margin: 60mm 0 30mm; page-break-after: always; }
+header .title { font-size: 22pt; line-height: 1.25; margin-bottom: 8mm; }
+header .subtitle { font-size: 13pt; font-weight: normal; }
+header .author, header .date { font-size: 12pt; margin-top: 6mm; }
+header p { text-align: center; }
+nav#TOC { page-break-after: always; }
+nav#TOC h2 { font-size: 16pt; }
+nav#TOC ul { list-style: none; padding-left: 0; }
+nav#TOC ul ul { padding-left: 6mm; }
+nav#TOC a { color: #111; text-decoration: none; }
+h1 { font-size: 15pt; margin: 9mm 0 3mm; page-break-after: avoid; }
+h2 { font-size: 12.5pt; margin: 6mm 0 2mm; page-break-after: avoid; }
+p { margin: 0 0 2.5mm; text-align: justify; hyphens: auto; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 9.5pt; }
+table { border-collapse: collapse; width: 100%; margin: 3mm 0 4mm; font-size: 9.5pt; page-break-inside: avoid; }
+th, td { border-bottom: 0.4pt solid #bbb; padding: 1.2mm 2mm; text-align: left; vertical-align: top; }
+th { border-bottom: 0.8pt solid #333; font-family: "DejaVu Sans", sans-serif; font-weight: 600; }
+figure { margin: 4mm 0 5mm; page-break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; max-height: 120mm; }
+figcaption { font-size: 9.5pt; color: #444; margin-top: 1.5mm; font-style: italic; }
+ol { padding-left: 6mm; }
