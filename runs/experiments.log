@@ -1,0 +1,20 @@
+e1_load: 626s
+e2_batch: 235s
+e3_boundary: 2462s
+e4_selector: 315s
+e5_policy: 261s
+e6_feedback: 1699s
+e7_burst: 468s
+e8_aux: 78s
+e9_factorial: 128s
+wrote results/e1_load.png
+wrote results/e1_series.png
+wrote results/e2_batch.png
+wrote results/e3_boundary.png
+wrote results/e4_selector.png
+wrote results/e5_policy.png
+wrote results/e6_feedback.png
+wrote results/e7_burst.png
+wrote results/e9_factorial.png
+wrote results/validation.png
+done

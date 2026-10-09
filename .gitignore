@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+# regenerable: python3 app/tools/record_python.py
+app/tests/python_runs.json
+app/tests/shots/
+results_quick/
+# the private ClickHouse server: only its configs are kept
+server/*
+!server/config.xml
+!server/users.xml

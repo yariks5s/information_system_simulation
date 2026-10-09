@@ -1,0 +1,13 @@
+{
+  "name": "merge-sim-lab",
+  "private": true,
+  "type": "module",
+  "description": "Interactive discrete-event simulation of MergeTree background merges",
+  "scripts": {
+    "serve": "python3 tools/serve.py",
+    "build": "python3 tools/build.py",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "python3 tools/build.py && python3 tests/browser_check.py light && python3 tests/browser_check.py dark",
+    "data": "cd .. && python3 app/tools/export_data.py && python3 app/tools/record_python.py"
+  }
+}

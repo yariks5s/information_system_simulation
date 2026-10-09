@@ -1,0 +1,15 @@
+<clickhouse>
+    <logger><level>information</level><log>/home/ubuntu/merge-sim/server/log/server.log</log><errorlog>/home/ubuntu/merge-sim/server/log/err.log</errorlog><console>0</console></logger>
+    <tcp_port>19480</tcp_port>
+    <http_port>19481</http_port>
+    <listen_host>127.0.0.1</listen_host>
+    <path>/home/ubuntu/merge-sim/server/data/</path>
+    <tmp_path>/home/ubuntu/merge-sim/server/data/tmp/</tmp_path>
+    <user_files_path>/home/ubuntu/merge-sim/server/data/user_files/</user_files_path>
+    <user_directories>
+        <users_xml><path>/home/ubuntu/merge-sim/server/users.xml</path></users_xml>
+        <local_directory><path>/home/ubuntu/merge-sim/server/data/access/</path></local_directory>
+    </user_directories>
+    <part_log><database>system</database><table>part_log</table><flush_interval_milliseconds>1000</flush_interval_milliseconds></part_log>
+    <query_log><database>system</database><table>query_log</table><flush_interval_milliseconds>1000</flush_interval_milliseconds></query_log>
+</clickhouse>

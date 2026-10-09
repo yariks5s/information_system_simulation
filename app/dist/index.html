@@ -1,0 +1,3240 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лабораторія фонових злиттів MergeTree</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%271%27 y=%279%27 width=%2714%27 height=%276%27 rx=%271%27 fill=%27%232a78d6%27/%3E%3Crect x=%271%27 y=%272%27 width=%277%27 height=%276%27 rx=%271%27 fill=%27%2386b6ef%27/%3E%3Crect x=%279%27 y=%272%27 width=%276%27 height=%276%27 rx=%271%27 fill=%27%23eb6834%27/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --level-0: #86b6ef;
+  --level-1: #5598e7;
+  --level-2: #2a78d6;
+  --level-3: #1c5cab;
+  --level-4: #0d366b;
+  --track: #cde2fb;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 4px 16px rgba(11, 11, 11, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232321;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --level-0: #184f95;
+    --level-1: #256abf;
+    --level-2: #3987e5;
+    --level-3: #6da7ec;
+    --level-4: #b7d3f6;
+    --track: #184f95;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #232321;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --level-0: #184f95;
+  --level-1: #256abf;
+  --level-2: #3987e5;
+  --level-3: #6da7ec;
+  --level-4: #b7d3f6;
+  --track: #184f95;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+header.top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 32px 0;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+header.top h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+header.top p { margin: 0; color: var(--text-secondary); max-width: 860px; }
+
+nav.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 18px 32px 0;
+  max-width: 1440px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--grid);
+}
+
+nav.tabs button {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 550;
+  padding: 10px 14px 12px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+nav.tabs button:hover { color: var(--text-primary); }
+nav.tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--series-1); }
+nav.tabs button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+
+main { max-width: 1440px; margin: 0 auto; padding: 20px 32px 48px; }
+section.tab[hidden] { display: none; }
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px 14px;
+  min-width: 0;
+}
+
+.card h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
+.card h3 { font-size: 13px; font-weight: 600; margin: 0 0 6px; color: var(--text-secondary); }
+.card .sub { color: var(--text-secondary); margin: 0 0 10px; font-size: 13px; }
+.card .note { color: var(--text-muted); font-size: 12px; margin: 8px 0 0; }
+
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+.grid { display: grid; gap: 16px; }
+.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.sim { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
+@media (max-width: 1100px) { .grid.two, .grid.three, .grid.sim { grid-template-columns: minmax(0, 1fr); } }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+}
+
+.controls label { color: var(--text-secondary); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+
+select, .btn {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--axis);
+  border-radius: 7px;
+  padding: 6px 10px;
+}
+
+.btn { cursor: pointer; font-weight: 550; min-width: 92px; }
+.btn:hover { background: var(--surface-2); }
+.btn.ghost { min-width: 0; border-color: var(--border); }
+
+.scrub { flex: 1 1 320px; display: flex; align-items: center; gap: 10px; }
+.scrub input[type="range"] { flex: 1; accent-color: var(--series-1); }
+.clock { font-variant-numeric: tabular-nums; color: var(--text-secondary); min-width: 108px; text-align: right; }
+
+.scenario-text { color: var(--text-secondary); margin: 0 0 14px; max-width: 980px; }
+
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); }
+.tile .label { color: var(--text-secondary); font-size: 12.5px; }
+.tile .value { font-size: 24px; font-weight: 620; margin-top: 2px; letter-spacing: -0.01em; }
+.tile .value small { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-left: 4px; }
+.tile .detail { color: var(--text-muted); font-size: 12px; margin-top: 2px; min-height: 17px; }
+.meter { height: 6px; border-radius: 3px; background: var(--track); margin-top: 8px; overflow: hidden; }
+.meter > span { display: block; height: 100%; border-radius: 3px; background: var(--series-1); transition: width 120ms linear; }
+.meter.full > span { background: var(--warning); }
+
+.status { display: inline-flex; align-items: center; gap: 4px; }
+.status .icon { font-size: 11px; line-height: 1; }
+.status.warning .icon { color: var(--warning); }
+.status.critical .icon { color: var(--critical); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-secondary); font-size: 12.5px; margin: 2px 0 8px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.legend .swatch.outline { background: transparent; box-shadow: inset 0 0 0 2px var(--series-2); }
+.legend .line { width: 16px; height: 2px; border-radius: 1px; display: inline-block; }
+
+canvas.tree { width: 100%; display: block; cursor: crosshair; }
+
+.pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 14px; }
+.slot { font-size: 11.5px; color: var(--text-secondary); min-width: 0; }
+.slot .bar { height: 7px; border-radius: 3.5px; background: var(--surface-2); overflow: hidden; margin-top: 2px; }
+.slot .bar > span { display: block; height: 100%; border-radius: 3.5px; background: var(--series-1); }
+.slot.waiting .bar > span { background: var(--axis); }
+.slot.free { color: var(--text-muted); }
+.slot .meta { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; overflow: hidden; }
+.slot .meta span:last-child { font-variant-numeric: tabular-nums; }
+
+svg.chart { width: 100%; display: block; overflow: visible; }
+svg.chart text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+svg.chart .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+svg.chart .axis-label { fill: var(--text-secondary); font-size: 11.5px; }
+svg.chart .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+svg.chart .base-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+svg.chart .threshold { stroke: var(--text-muted); stroke-width: 1; shape-rendering: crispEdges; }
+svg.chart .threshold-label { fill: var(--text-muted); font-size: 10.5px; paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
+svg.chart .end-label { fill: var(--text-secondary); font-size: 11.5px; }
+svg.chart .point-label { fill: var(--text-secondary); font-size: 10.5px; }
+svg.chart .playhead { stroke: var(--text-primary); stroke-width: 1; opacity: 0.6; }
+svg.chart .crosshair { stroke: var(--text-muted); stroke-width: 1; }
+svg.chart .hit { fill: transparent; cursor: crosshair; }
+
+.tooltip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+  padding: 8px 10px;
+  font-size: 12px;
+  min-width: 140px;
+  max-width: 320px;
+}
+.tooltip[hidden] { display: none; }
+.tooltip .title { color: var(--text-secondary); margin-bottom: 4px; }
+.tooltip .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.tooltip .row .name { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.tooltip .row .name i { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+.tooltip .row strong { font-weight: 650; font-variant-numeric: tabular-nums; }
+
+table.data { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 10px; }
+table.data th, table.data td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data th { color: var(--text-secondary); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+.toggle-table { font-size: 12px; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.toggle-table:hover { color: var(--text-primary); }
+
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 12.5px; background: var(--surface-1); color: var(--text-secondary); border: 0; border-right: 1px solid var(--border); padding: 5px 10px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+
+.diagram svg { width: 100%; height: auto; display: block; }
+.diagram .box { fill: var(--surface-1); stroke: var(--axis); stroke-width: 1; }
+.diagram .box.accent { stroke: var(--series-1); stroke-width: 1.5; }
+.diagram .box-title { fill: var(--text-primary); font-size: 14px; font-weight: 650; }
+.diagram .box-text { fill: var(--text-secondary); font-size: 12px; }
+.diagram .formula { fill: var(--text-secondary); font-size: 12px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.diagram .arrow { stroke: var(--text-muted); stroke-width: 1.5; fill: none; }
+.diagram .arrow.feedback { stroke: var(--series-2); stroke-width: 2; }
+.diagram .arrow-label { fill: var(--text-secondary); font-size: 12px; }
+.diagram .arrow-label.feedback { fill: var(--text-primary); font-weight: 600; }
+.diagram .head { fill: var(--text-muted); }
+.diagram .head.feedback { fill: var(--series-2); }
+.diagram .live { fill: var(--text-primary); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.prose { color: var(--text-secondary); max-width: 900px; }
+.prose p { margin: 0 0 10px; }
+.prose strong { color: var(--text-primary); font-weight: 600; }
+.prose h2 { color: var(--text-primary); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 13px; }
+.kv dt { color: var(--text-secondary); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+.loading { color: var(--text-muted); padding: 40px 0; text-align: center; }
+footer { color: var(--text-muted); font-size: 12px; max-width: 1440px; margin: 0 auto; padding: 0 32px 32px; }
+
+/* ---------- laboratory ---------- */
+
+.lab { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .lab { grid-template-columns: minmax(0, 1fr); } }
+.lab-main { display: grid; gap: 16px; min-width: 0; }
+.sidebar { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; padding-bottom: 18px; }
+@media (max-width: 1100px) { .sidebar { position: static; max-height: none; } }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 14px; }
+.toolbar label { color: var(--text-secondary); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.toolbar input[type="number"] { width: 64px; font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--axis); border-radius: 7px; padding: 5px 8px; }
+.clock-wrap { color: var(--text-secondary); font-size: 13px; }
+.clock-wrap .clock { color: var(--text-primary); font-size: 15px; margin-left: 4px; }
+.spacer { flex: 1; }
+.keys { color: var(--text-muted); font-size: 12px; }
+.muted { color: var(--text-muted); font-size: 12.5px; }
+.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); background: var(--series-1); }
+.btn.small { min-width: 0; padding: 4px 9px; font-size: 12.5px; }
+
+.tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0; }
+@media (max-width: 1300px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.lab-split { grid-template-columns: minmax(0, 1fr) 400px; align-items: start; }
+@media (max-width: 1300px) { .lab-split { grid-template-columns: minmax(0, 1fr); } }
+.side-stack { display: grid; gap: 16px; }
+
+.field { margin: 10px 0 0; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.field-label { font-size: 12.5px; color: var(--text-secondary); }
+.field-value { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.field input[type="range"] { width: 100%; accent-color: var(--series-1); margin: 4px 0 0; }
+.field select { width: 100%; margin-top: 4px; }
+.field.toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
+.field.toggle input { accent-color: var(--series-1); width: 16px; height: 16px; margin: 0; }
+.field .seg { margin-top: 4px; display: flex; }
+.field .seg button { flex: 1; }
+.hint { color: var(--text-muted); font-size: 11.5px; margin: 3px 0 0; line-height: 1.35; }
+.preset-text { color: var(--text-secondary); font-size: 12.5px; margin: 8px 0 4px; }
+details.group { border-top: 1px solid var(--grid); margin-top: 14px; padding-top: 10px; }
+details.group summary { cursor: pointer; font-weight: 650; font-size: 13.5px; list-style-position: outside; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.actions .burst { display: inline-flex; gap: 4px; }
+.actions .burst select { padding: 3px 6px; font-size: 12.5px; }
+
+button.slot { appearance: none; border: 0; background: none; padding: 3px 4px; margin: 0; text-align: left; font: inherit; color: inherit; border-radius: 6px; cursor: pointer; }
+button.slot:hover:not(:disabled) { background: var(--surface-2); }
+button.slot:disabled { cursor: default; }
+button.slot .meta { display: flex; }
+button.slot .bar { display: block; }
+.slot.selected { box-shadow: inset 0 0 0 2px var(--series-2); }
+.slot.over { opacity: 0.5; }
+.pool-more { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+
+.empty { color: var(--text-muted); font-size: 13px; margin: 4px 0; }
+.status-line { color: var(--text-secondary); font-size: 12.5px; margin: 2px 0 10px; }
+.kv dd { overflow-wrap: anywhere; }
+.side-stack h3 { margin-top: 6px; }
+.side-stack .btn.small { margin-top: 10px; }
+
+.log-filters { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
+.check input { accent-color: var(--series-1); }
+ol.log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; border-top: 1px solid var(--grid); }
+ol.log li { display: grid; grid-template-columns: 62px 96px minmax(0, 1fr); gap: 10px; padding: 5px 4px; border-bottom: 1px solid var(--grid); font-size: 12.5px; color: var(--text-secondary); }
+ol.log li.pick { cursor: pointer; }
+ol.log li.pick:hover { background: var(--surface-2); }
+.log-time { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.log-kind { color: var(--text-muted); }
+.log-throttle .log-kind { color: var(--text-primary); }
+.log-throttle .log-kind::before { content: "▲ "; color: var(--warning); }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Лабораторія фонових злиттів MergeTree</h1>
+    <p>Жива імітаційна модель підсистеми злиттів ClickHouse як системи масового обслуговування, черга якої гальмує власний вхідний потік. Змінюйте параметри на ходу і спостерігайте, як система реагує. Ядро моделі подія в подію збігається з відкаліброваною і провалідованою Python-моделлю.</p>
+  </div>
+  <button class="btn ghost" id="theme" type="button" title="Перемкнути тему">Тема: авто</button>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Розділи">
+  <button role="tab" aria-selected="true" aria-controls="tab-lab" id="t-lab">Лабораторія</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-model" id="t-model">Як влаштована модель</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-results" id="t-results">Результати експериментів</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-validation" id="t-validation">Валідація</button>
+</nav>
+
+<main>
+  <section class="tab" id="tab-lab" role="tabpanel" aria-labelledby="t-lab">
+    <div class="lab">
+      <aside class="sidebar card" aria-label="Параметри моделі">
+        <h2>Параметри</h2>
+        <p class="sub">Кожна зміна діє одразу, з поточного моменту модельного часу.</p>
+        <div id="params"></div>
+      </aside>
+
+      <div class="lab-main">
+        <div class="toolbar card">
+          <button class="btn primary" id="play" type="button">▶ Пуск</button>
+          <button class="btn" id="step" type="button" title="До наступної події, що щось змінює (клавіша →)">Крок ›</button>
+          <label>Швидкість
+            <select id="speed">
+              <option value="0.25">×0.25</option>
+              <option value="1">×1</option>
+              <option value="5">×5</option>
+              <option value="10" selected>×10</option>
+              <option value="30">×30</option>
+              <option value="100">×100</option>
+              <option value="1000">×1000</option>
+            </select>
+          </label>
+          <span class="clock-wrap">модельний час <strong class="clock" id="clock">00:00</strong><span id="speed-real" class="muted"></span></span>
+          <span class="spacer"></span>
+          <label>Зерно <input type="number" id="seed" value="1" min="1" step="1"></label>
+          <button class="btn" id="reset" type="button">Почати знову</button>
+          <span class="keys">Пробіл: пуск і пауза · →: крок</span>
+        </div>
+
+        <div class="tiles">
+          <div class="tile"><div class="label">Активні куски</div><div class="value" id="v-parts">—</div><div class="detail" id="d-parts"></div></div>
+          <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div></div>
+          <div class="tile"><div class="label">Задачі злиття в пулі</div><div class="value" id="v-tasks">—</div><div class="meter" id="m-tasks"><span></span></div></div>
+          <div class="tile"><div class="label">Підсилення записів за хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
+          <div class="tile"><div class="label">Вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
+          <div class="tile"><div class="label">Середнє злиття за хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Активні куски даних</h2>
+              <p class="sub">Кожен прямокутник є куском, ряд показує рівень злиття. По горизонталі: які вставки кусок містить, у логарифмічному масштабі від найновіших праворуч до найстаріших ліворуч. Клацніть на кусок, щоб дослідити його.</p>
+            </div>
+          </div>
+          <div class="legend"><span>рівень злиття:</span>
+            <span class="key"><span class="swatch" style="background:var(--level-0)"></span>0</span>
+            <span class="key"><span class="swatch" style="background:var(--level-1)"></span>1</span>
+            <span class="key"><span class="swatch" style="background:var(--level-2)"></span>2</span>
+            <span class="key"><span class="swatch" style="background:var(--level-3)"></span>3</span>
+            <span class="key"><span class="swatch" style="background:var(--level-4)"></span>4+</span>
+            <span class="key"><span class="swatch outline"></span>зливається зараз</span>
+          </div>
+          <canvas class="tree" id="tree"></canvas>
+        </div>
+
+        <div class="grid lab-split">
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
+              <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--axis)"></span>чекає потоку</span></div>
+            </div>
+            <div id="pool"></div>
+          </div>
+          <div class="side-stack">
+            <div class="card"><h2>Вибране</h2><div id="inspector"></div></div>
+            <div class="card"><h2>Останнє рішення селектора</h2><div id="explain"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Як змінюється система</h2><p class="sub">Одна точка на секунду модельного часу; лінії згладжені за 5 секунд.</p></div>
+            <label class="muted">Вікно
+              <select id="window">
+                <option value="300">5 хв</option>
+                <option value="600" selected>10 хв</option>
+                <option value="1800">30 хв</option>
+                <option value="7200">2 год</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid two">
+            <div><h3>Кількість кусків</h3><div id="c-parts"></div></div>
+            <div><h3>Пул</h3><div id="c-busy"></div></div>
+            <div><h3>Вставки за секунду</h3><div id="c-inserts"></div></div>
+            <div><h3>Підсилення записів</h3><div id="c-wa"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Журнал подій</h2>
+          <p class="sub">Найновіші зверху. Записи про злиття клікабельні.</p>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-model" role="tabpanel" aria-labelledby="t-model" hidden>
+    <div class="card diagram">
+      <h2>Схема системи масового обслуговування</h2>
+      <p class="sub">Кожен механізм перенесено з коду ClickHouse; у лабораторії кожен з них можна змінити. Помаранчеві стрілки показують зворотний зв'язок: кількість кусків гальмує вхідний потік. Жирні значення внизу блоків і ряд кусків беруться з моделі, що зараз працює в лабораторії.</p>
+      <svg viewBox="0 0 1200 545" role="img" aria-label="Схема моделі">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="arr-fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head feedback" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <rect class="box" x="20" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="38" y="90">Клієнти</text>
+        <text class="live" id="live-clients" x="38" y="196"></text>
+        <text class="box-text" x="38" y="116">відкритий потік λ(t): пуасонівський,</text>
+        <text class="box-text" x="38" y="134">добовий профіль і сплески,</text>
+        <text class="box-text" x="38" y="152">або N замкнених клієнтів з часом</text>
+        <text class="box-text" x="38" y="170">думання Z між вставками</text>
+
+        <rect class="box" x="450" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="468" y="90">Перевірка перед вставкою</text>
+        <text class="live" id="live-check" x="468" y="196"></text>
+        <text class="box-text" x="468" y="116">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
+        <text class="box-text" x="468" y="134">n ≥ 1000: затримати на</text>
+        <text class="formula" x="468" y="152">max(10, 1000·(n−999)/2000) мс</text>
+        <text class="box-text" x="468" y="170">середній кусок &gt; 1 ГіБ: без обмежень</text>
+
+        <rect class="box accent" x="880" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="898" y="90">Активні куски</text>
+        <text class="live" id="live-parts" x="898" y="196"></text>
+        <text class="box-text" x="898" y="116">черга з дисципліною не FIFO</text>
+        <text class="box-text" x="898" y="134">впорядковані за номером блоку</text>
+        <text class="box-text" x="898" y="152">усередині кожної партиції</text>
+        <g id="model-parts"></g>
+
+        <rect class="box" x="880" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="898" y="390">Призначувач</text>
+        <text class="live" id="live-assignee" x="898" y="496"></text>
+        <text class="box-text" x="898" y="416">одне злиття за запуск; будить вставка</text>
+        <text class="box-text" x="898" y="434">без роботи спить</text>
+        <text class="formula" x="898" y="452">min(600, 0.1·1.1ⁿ) + U(0, 1) с</text>
+        <text class="box-text" x="898" y="470">пул повний: вибір пропускається</text>
+
+        <rect class="box" x="450" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="468" y="390">SimpleMergeSelector</text>
+        <text class="live" id="live-selector" x="468" y="496"></text>
+        <text class="box-text" x="468" y="416">діапазон сусідніх вільних кусків, якщо</text>
+        <text class="formula" x="468" y="434">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
+        <text class="box-text" x="468" y="452">base′: від 5 до 2 з віком і кількістю</text>
+        <text class="formula" x="468" y="470">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
+
+        <rect class="box" x="20" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="38" y="390">Пул фонових задач</text>
+        <text class="live" id="live-pool" x="38" y="496"></text>
+        <text class="box-text" x="38" y="416">16 потоків, 32 задачі</text>
+        <text class="box-text" x="38" y="434">round_robin або shortest_task_first</text>
+        <text class="box-text" x="38" y="452">тривалість роботи злиття:</text>
+        <text class="formula" x="38" y="470">(2.7 мс + Σ/244.5 МБ/с)·ε·(1+δ)</text>
+
+        <path class="arrow" d="M320,110 L446,110" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="330" y="100">вставка ≈ 3.6 МБ</text>
+        <path class="arrow" d="M750,110 L876,110" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="760" y="100">кусок рівня 0</text>
+        <path class="arrow" d="M1030,226 L1030,356" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="1040" y="296">будить після вставки</text>
+        <path class="arrow" d="M880,440 L754,440" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="770" y="430">запуск вибору</text>
+        <path class="arrow" d="M450,440 L324,440" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="336" y="430">задача злиття</text>
+        <path class="arrow" d="M170,360 L170,282 L960,282 L960,230" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="190" y="274">злитий кусок рівня max + 1 замінює джерела</text>
+
+        <path class="arrow feedback" d="M1030,60 L1030,28 L620,28 L620,56" marker-end="url(#arr-fb)"/>
+        <text class="arrow-label feedback" x="660" y="20">n: кількість кусків найбільшої партиції</text>
+        <path class="arrow feedback" d="M450,170 L324,170" marker-end="url(#arr-fb)"/>
+        <text class="arrow-label feedback" x="20" y="252">затримка сповільнює замкнених клієнтів</text>
+      </svg>
+    </div>
+    <div class="grid two" style="margin-top:16px">
+      <div class="card">
+        <h2>Відкалібровані параметри</h2>
+        <p class="sub">Підібрано по 1 409 злиттях з <code>system.part_log</code> окремого сервера ClickHouse 26.10.</p>
+        <dl class="kv" id="calibration"></dl>
+      </div>
+      <div class="card prose">
+        <h2>Що робить модель складною</h2>
+        <p><strong>Обслуговування партіями змінного розміру.</strong> Селектор забирає з черги не одну заявку, а діапазон сусідніх кусків, і розмір партії залежить від стану черги.</p>
+        <p><strong>Дисципліна залежить від навантаження.</strong> Поріг <code>base′</code> знижується з віком і кількістю кусків, а межа розміру злиття звужується від 150 ГБ до 1 МБ, коли пул заповнюється.</p>
+        <p><strong>Зворотний зв'язок.</strong> Кількість кусків затримує і відхиляє вставки. Для замкнених клієнтів це прямо зменшує вхідний потік.</p>
+        <p><strong>Нестаціонарність.</strong> Партиція, що росте, не має стаціонарного режиму: рівнів злиття стає більше з логарифмом розміру таблиці. Ротація партицій з видаленням старих це виправляє.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-results" role="tabpanel" aria-labelledby="t-results" hidden></section>
+  <section class="tab" id="tab-validation" role="tabpanel" aria-labelledby="t-validation" hidden></section>
+</main>
+
+<footer>Проєкт: <code>~/merge-sim/app</code>. Модель, калібрування і експерименти: <code>~/merge-sim</code>, опис у <code>RFC.md</code>.</footer>
+<div class="tooltip" id="tooltip" hidden></div>
+<script>
+"use strict";
+// ---- src/sim/engine.js
+const __module_0 = (() => {
+// Discrete-event engine: model clock and event calendar (RFC section 4).
+// The calendar is a binary heap ordered by (time, seq); seq keeps events at equal times in scheduling order.
+
+class Engine {
+  constructor() {
+    this.now = 0;
+    this.events = 0;
+    this.heap = [];
+    this.seq = 0;
+  }
+
+  schedule(delay, handler, ...args) {
+    if (delay < 0) throw new Error(`negative delay ${delay}`);
+    const item = { time: this.now + delay, seq: this.seq++, handler, args };
+    const h = this.heap;
+    h.push(item);
+    let i = h.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (!less(h[i], h[p])) break;
+      [h[i], h[p]] = [h[p], h[i]];
+      i = p;
+    }
+  }
+
+  peekTime() {
+    return this.heap.length ? this.heap[0].time : Infinity;
+  }
+
+  pop() {
+    const h = this.heap, top = h[0], last = h.pop();
+    if (h.length) {
+      h[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1;
+        let m = i;
+        if (l < h.length && less(h[l], h[m])) m = l;
+        if (r < h.length && less(h[r], h[m])) m = r;
+        if (m === i) break;
+        [h[i], h[m]] = [h[m], h[i]];
+        i = m;
+      }
+    }
+    return top;
+  }
+
+  step() {
+    // one event; false if the calendar is empty
+    if (!this.heap.length) return false;
+    const item = this.pop();
+    if (item.time < this.now) throw new Error("time went backwards");
+    this.now = item.time;
+    item.handler(...item.args);
+    this.events++;
+    return true;
+  }
+
+  run(until = Infinity, maxEvents = Infinity, afterEvent = null) {
+    const stop = this.events + maxEvents;
+    while (this.heap.length && this.heap[0].time <= until && this.events < stop) {
+      this.step();
+      if (afterEvent) afterEvent();
+    }
+    if (this.events < stop && until < Infinity) this.now = until;
+  }
+}
+
+function less(a, b) {
+  return a.time < b.time || (a.time === b.time && a.seq < b.seq);
+}
+
+return { Engine };
+})();
+
+// ---- src/sim/pool.js
+const __module_1 = (() => {
+// Background merges and mutations executor (RFC 3.4) as a rate-allocation queue.
+// round_robin shares the threads equally among all tasks (processor sharing); shortest_task_first gives the
+// threads to the tasks with the smallest priority, the sum of source part bytes. One event per change of the task set.
+
+const POLICIES = ["round_robin", "shortest_task_first"];
+
+class Pool {
+  constructor(engine, threads, maxTasks, policy, onDone) {
+    if (!POLICIES.includes(policy)) throw new Error(`unknown scheduling policy ${policy}`);
+    this.engine = engine;
+    this.threads = threads;
+    this.maxTasks = maxTasks;
+    this.policy = policy;
+    this.onDone = onDone;
+    this.tasks = [];
+    this.updatedAt = 0;
+    this.token = 0;
+  }
+
+  hasCapacity() {
+    return this.tasks.length < this.maxTasks;
+  }
+
+  busyThreads() {
+    let s = 0;
+    for (const t of this.tasks) s += t.rate;
+    return s;
+  }
+
+  add(task) {
+    if (!this.hasCapacity()) throw new Error("pool is full");
+    this.advance();
+    task.remaining = task.work;
+    task.createdAt = this.engine.now;
+    this.tasks.push(task);
+    this.reallocate();
+  }
+
+  // live changes from the UI
+  configure({ threads, maxTasks, policy }) {
+    this.advance();
+    if (threads != null) this.threads = threads;
+    if (maxTasks != null) this.maxTasks = maxTasks;
+    if (policy != null) {
+      if (!POLICIES.includes(policy)) throw new Error(`unknown scheduling policy ${policy}`);
+      this.policy = policy;
+    }
+    this.reallocate();
+  }
+
+  advance() {
+    const elapsed = this.engine.now - this.updatedAt;
+    if (elapsed > 0) for (const t of this.tasks) t.remaining -= t.rate * elapsed;
+    this.updatedAt = this.engine.now;
+  }
+
+  // remaining work of a task at the current model time, without advancing the pool
+  remainingNow(task) {
+    return task.remaining - task.rate * (this.engine.now - this.updatedAt);
+  }
+
+  reallocate() {
+    if (this.policy === "round_robin") {
+      const rate = this.tasks.length ? Math.min(1.0, this.threads / this.tasks.length) : 0.0;
+      for (const t of this.tasks) t.rate = rate;
+    } else {
+      const ranked = this.tasks.slice().sort((a, b) => a.priority - b.priority || a.id - b.id);
+      ranked.forEach((t, i) => { t.rate = i < this.threads ? 1.0 : 0.0; });
+    }
+    this.token++;
+    let first = null;
+    for (const t of this.tasks) {
+      if (t.rate > 0 && (first === null || t.remaining / t.rate < first.remaining / first.rate)) first = t;
+    }
+    if (first) this.engine.schedule(Math.max(0.0, first.remaining / first.rate), (token, task) => this.complete(token, task), this.token, first);
+  }
+
+  complete(token, task) {
+    if (token !== this.token) return;
+    this.advance();
+    this.tasks.splice(this.tasks.indexOf(task), 1);
+    this.reallocate();
+    this.onDone(task);
+  }
+}
+
+return { POLICIES, Pool };
+})();
+
+// ---- src/sim/rng.js
+const __module_2 = (() => {
+// Seeded random streams. One stream per source of randomness, like the Python model (RFC section 4),
+// so that changing one parameter does not shift the random numbers of the others.
+
+const NV_MAGICCONST = 4 * Math.exp(-0.5) / Math.sqrt(2.0);
+
+function hash(text) {
+  // cyrb128: four 32-bit words from a string
+  let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+  for (let i = 0; i < text.length; i++) {
+    const k = text.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  return [(h1 ^ h2 ^ h3 ^ h4) >>> 0, (h2 ^ h1) >>> 0, (h3 ^ h1) >>> 0, (h4 ^ h1) >>> 0];
+}
+
+class Rng {
+  constructor(seed) {
+    [this.a, this.b, this.c, this.d] = hash(String(seed));
+  }
+
+  // sfc32, 53-bit doubles from two outputs
+  next32() {
+    let { a, b, c, d } = this;
+    const t = (((a + b) | 0) + d) | 0;
+    d = (d + 1) | 0;
+    a = b ^ (b >>> 9);
+    b = (c + (c << 3)) | 0;
+    c = (c << 21) | (c >>> 11);
+    c = (c + t) | 0;
+    this.a = a; this.b = b; this.c = c; this.d = d;
+    return t >>> 0;
+  }
+
+  random() {
+    return ((this.next32() >>> 5) * 67108864 + (this.next32() >>> 6)) / 9007199254740992;
+  }
+
+  // the same algorithms as Python's random module
+  expovariate(lambd) {
+    return -Math.log(1.0 - this.random()) / lambd;
+  }
+
+  normalvariate(mu, sigma) {
+    for (;;) {
+      const u1 = this.random();
+      const u2 = 1.0 - this.random();
+      const z = NV_MAGICCONST * (u1 - 0.5) / u2;
+      if (z * z / 4.0 <= -Math.log(u2)) return mu + z * sigma;
+    }
+  }
+
+  lognormvariate(mu, sigma) {
+    return Math.exp(this.normalvariate(mu, sigma));
+  }
+
+  uniform(a, b) {
+    return a + (b - a) * this.random();
+  }
+}
+
+function streams(seed, ...names) {
+  const out = {};
+  for (const name of names) out[name] = new Rng(`${seed}:${name}`);
+  return out;
+}
+
+function lognormal(rng, mean, cv) {
+  // lognormal variate with the given mean and coefficient of variation
+  if (cv === 0) return mean;
+  const sigma2 = Math.log1p(cv * cv);
+  return rng.lognormvariate(Math.log(mean) - sigma2 / 2, Math.sqrt(sigma2));
+}
+
+// Python's round(): half to even
+function roundHalfEven(x) {
+  const r = Math.round(x);
+  return Math.abs(x % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r;
+}
+
+return { Rng, streams, lognormal, roundHalfEven };
+})();
+
+// ---- src/sim/selector.js
+const __module_3 = (() => {
+// Merge selection (RFC 3.5, 3.6), a port of selector.py: SimpleMergeSelector with both heuristics, the
+// pool-dependent merge size limit, and the baseline tiered selector. Besides the chosen range it returns why
+// it was chosen, for the explanation panel of the UI.
+
+const MIB = 1024 * 1024;
+const FIXED_COST = 5 * MIB;  // size_fixed_cost_to_add
+const MIN_SIZE_TO_LOWER_BASE_LOG = Math.log(1 + MIB);
+const MAX_SIZE_TO_LOWER_BASE_LOG = Math.log(1 + 100 * 1024 * MIB);
+const AGE_AT_MIN_SIZE = [10, 3600];  // (min_age, max_age) to lower base, seconds
+const AGE_AT_MAX_SIZE = [10, 30 * 86400];
+const PARTS_TO_LOWER_BASE = [10, 50];
+const REMOVE_SMALL_AT_RIGHT_RATIO = 0.01;
+const ALIGN_MIN_RATIO_TO_PREV = 0.9;
+const ALIGN_MAX_POWERS_OF_TWO = 0.5;
+const ALIGN_MAX_SCORE_ADJUSTMENT = 0.75;
+
+function maxSourcePartsBytes(maxTasks, scheduled, cfg) {
+  // CompactionStatistics::getMaxSourcePartsBytesForMerge
+  if (cfg.max_bytes_at_max_space === 0) return 0;
+  const free = maxTasks - scheduled;
+  if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) return cfg.max_bytes_at_max_space;
+  const low = Math.max(1, Math.min(cfg.max_bytes_at_min_space, cfg.max_bytes_at_max_space));
+  return Math.trunc(low * Math.pow(cfg.max_bytes_at_max_space / low, free / cfg.free_entries_to_lower_max_size));
+}
+
+const unit = (v, lo, hi) => (v <= lo ? 0.0 : v >= hi ? 1.0 : (v - lo) / (hi - lo));
+const lerp = (lo, hi, r) => lo + (hi - lo) * r;
+
+function loweredBase(sumSize, minAge, rangeSize, base) {
+  const sizeNormalized = unit(Math.log(1 + sumSize), MIN_SIZE_TO_LOWER_BASE_LOG, MAX_SIZE_TO_LOWER_BASE_LOG);
+  const minAgeToLower = lerp(AGE_AT_MIN_SIZE[0], AGE_AT_MAX_SIZE[0], sizeNormalized);
+  const maxAgeToLower = lerp(AGE_AT_MIN_SIZE[1], AGE_AT_MAX_SIZE[1], sizeNormalized);
+  const ageNormalized = unit(minAge, minAgeToLower, maxAgeToLower);
+  // ClickHouse passes the size of the mergeable range here, not of the whole partition
+  const partsNormalized = unit(rangeSize, PARTS_TO_LOWER_BASE[0], PARTS_TO_LOWER_BASE[1]);
+  return lerp(base, 2.0, Math.min(1.0, ageNormalized + partsNormalized));
+}
+
+function score(segment, begin, end, sumSize) {
+  // heuristic_to_remove_small_parts_at_right compares against the sum before removal
+  const threshold = REMOVE_SMALL_AT_RIGHT_RATIO * sumSize;
+  while (end >= begin + 3 && segment[end - 1].size < threshold) {
+    end -= 1;
+    sumSize -= segment[end].size;
+  }
+  const count = end - begin;
+  let s = (sumSize + FIXED_COST * count) / (count - 1.9);
+  const prev = begin ? segment[begin - 1].size : 0;
+  let aligned = false;
+  if (prev > sumSize * ALIGN_MIN_RATIO_TO_PREV) {
+    const difference = Math.abs(Math.log2(sumSize / prev));
+    if (difference < ALIGN_MAX_POWERS_OF_TWO) {
+      s *= lerp(ALIGN_MAX_SCORE_ADJUSTMENT, 1, difference / ALIGN_MAX_POWERS_OF_TWO);
+      aligned = true;
+    }
+  }
+  return { score: s, end, sumSize, aligned };
+}
+
+function maxPartsToMerge(partCount, cfg) {
+  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once
+  const limit = cfg.max_parts_to_merge_at_once;
+  if (partCount < cfg.base) return limit;
+  if (partCount >= cfg.parts_to_throw_insert) return Math.max(2, Math.trunc(cfg.base));
+  const fill = (partCount - cfg.base) / (cfg.parts_to_throw_insert - cfg.base);
+  return Math.min(limit, Math.trunc(cfg.base + (limit - cfg.base) * (1 - Math.pow(fill, cfg.lower_max_parts_exponent))));
+}
+
+// smaller is better: score, then the rightmost partition, then the rightmost begin, then the shortest range
+function better(a, b) {
+  if (a.score !== b.score) return a.score < b.score;
+  if (a.key !== b.key) return a.key > b.key;
+  if (a.begin !== b.begin) return a.begin > b.begin;
+  return a.end < b.end;
+}
+
+function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) {
+  const n = segment.length;
+  let best = null;
+  for (let begin = Math.max(0, n - cfg.window_size); begin < n; begin++) {
+    let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - segment[begin].createdAt;
+    for (let end = begin + 2; end <= n; end++) {
+      if (end - begin > maxParts) break;
+      const part = segment[end - 1];
+      sumSize += part.size;
+      if (part.size > maxSize) maxSize = part.size;
+      const age = now - part.createdAt;
+      if (age < minAge) minAge = age;
+      if (sumSize > maxBytes) break;
+      stats.considered++;
+      const base = loweredBase(sumSize, minAge, n, cfg.base);  // n: the length of this run of free parts
+      if ((sumSize + (end - begin) * FIXED_COST) / (maxSize + FIXED_COST) >= base) {
+        stats.allowed++;
+        const s = score(segment, begin, end, sumSize);
+        const candidate = { key, score: s.score, begin: offset + begin, end: offset + s.end, sumSize: s.sumSize, count: s.end - begin,
+                            maxSize, minAge, loweredBase: base, aligned: s.aligned, trimmed: end - s.end, segmentLength: n };
+        if (best === null || better(candidate, best)) best = candidate;
+      }
+    }
+  }
+  return best;
+}
+
+function segments(parts) {
+  // maximal runs of parts that are not being merged, as [offset, parts]
+  const out = [];
+  let start = 0;
+  for (let i = 0; i <= parts.length; i++) {
+    if (i === parts.length || parts[i].merging) {
+      if (i > start) out.push([start, parts.slice(start, i)]);
+      start = i + 1;
+    }
+  }
+  return out;
+}
+
+function selectTieredIn(parts, maxBytes, cfg) {
+  // baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level
+  const base = Math.trunc(cfg.base);
+  let run = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.merging) { run = 0; continue; }
+    run = run && part.level === parts[i - 1].level ? run + 1 : 1;
+    if (run >= base) {
+      let sum = 0;
+      for (let j = i - base + 1; j <= i; j++) sum += parts[j].size;
+      if (sum <= maxBytes) return [i - base + 1, i + 1];
+    }
+  }
+  return null;
+}
+
+// One merge over all partitions (a Map of key -> parts ordered by block, keys ascending).
+// Returns { key, begin, end, ...explanation } or null, plus the counters in `stats`.
+function selectAcross(partitions, now, maxBytes, cfg, selector, stats = { considered: 0, allowed: 0 }) {
+  if (selector === "tiered") {
+    for (const [key, parts] of partitions) {
+      const found = selectTieredIn(parts, maxBytes, cfg);
+      if (found) {
+        let sumSize = 0;
+        for (let j = found[0]; j < found[1]; j++) sumSize += parts[j].size;
+        return { key, begin: found[0], end: found[1], count: found[1] - found[0], sumSize, tiered: true };
+      }
+    }
+    return null;
+  }
+  let best = null;
+  for (const [key, parts] of partitions) {
+    const maxParts = maxPartsToMerge(parts.length, cfg);  // counts parts being merged too
+    for (const [offset, segment] of segments(parts)) {
+      if (segment.length <= 1) continue;
+      const candidate = segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats);
+      if (candidate && (best === null || better(candidate, best))) best = { ...candidate, maxParts };
+    }
+  }
+  return best;
+}
+
+return { maxSourcePartsBytes, maxPartsToMerge, selectAcross };
+})();
+
+// ---- src/sim/throttle.js
+const __module_4 = (() => {
+// Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded. The delay grows linearly with the
+// number of parts over parts_to_delay_insert; the doc string of max_delay_to_insert still shows an older formula.
+
+// Returns null if the insert is rejected with TOO_MANY_PARTS, otherwise its delay in milliseconds.
+// partsCount and partitionBytes are of the partition with the most parts; totalParts counts all partitions.
+function checkInsert(partsCount, partitionBytes, cfg, totalParts = partsCount) {
+  if (totalParts >= cfg.max_parts_in_total) return null;
+  const average = partsCount ? Math.floor(partitionBytes / partsCount) : 0;
+  if (cfg.max_avg_part_size_for_too_many_parts && average > cfg.max_avg_part_size_for_too_many_parts) return 0;
+  if (partsCount >= cfg.parts_to_throw_insert) return null;
+  if (!cfg.parts_to_delay_insert || partsCount < cfg.parts_to_delay_insert) return 0;
+  const over = partsCount - cfg.parts_to_delay_insert + 1;
+  const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert;
+  const maxMs = cfg.max_delay_to_insert > 0 ? cfg.max_delay_to_insert * 1000 : 1000;
+  if (over >= allowed) return maxMs;
+  return Math.max(cfg.min_delay_to_insert_ms, Math.trunc(maxMs * over / allowed));
+}
+
+return { checkInsert };
+})();
+
+// ---- src/sim/model.js
+const __module_5 = (() => {
+// MergeTree background merges: state and event handlers, a port of model.py (RFC sections 3 and 5).
+// The same event order and the same draws from the same streams, so that with recorded random numbers it
+// reproduces the Python model event by event (tests/diff.test.mjs). On top of that: parameters can change while
+// the model runs, and an observer sees every event.
+
+const { Engine } = __module_0;
+const { Pool } = __module_1;
+const { lognormal, roundHalfEven, streams, Rng } = __module_2;
+const { maxSourcePartsBytes, selectAcross } = __module_3;
+const { checkInsert } = __module_4;
+const MIB = 1024 * 1024;
+const DAY = 86400;
+
+const DEFAULTS = {
+  // input (RFC 3.2, 3.8)
+  arrivals: "open",
+  insert_rate: 2.0,
+  rate_amplitude: 0.0,
+  rate_peak_at: 14 * 3600,
+  burst: null,  // [start, duration, factor]
+  clients: 4,
+  think_time: 2.0,
+  insert_bytes_mean: 10 * MIB,
+  insert_bytes_cv: 1.0,
+  // throttling (RFC 3.3)
+  parts_to_delay_insert: 1000,
+  max_delay_to_insert: 1,
+  min_delay_to_insert_ms: 10,
+  max_avg_part_size_for_too_many_parts: 1024 * MIB,
+  max_parts_in_total: 100000,
+  // pool
+  threads: 16,
+  concurrency_ratio: 2,
+  scheduling_policy: "round_robin",
+  // selector
+  selector: "simple",
+  base: 5.0,
+  window_size: 1000,
+  max_parts_to_merge_at_once: 100,
+  lower_max_parts_exponent: 5,
+  parts_to_throw_insert: 3000,
+  max_bytes_at_max_space: 150 * 1024 * MIB,
+  max_bytes_at_min_space: MIB,
+  free_entries_to_lower_max_size: 8,
+  // merge cost
+  merge_fixed_seconds: 0.05,
+  merge_bytes_per_second: 150e6,
+  merge_noise_cv: 0.3,
+  aux: [],  // [storage overhead s, merge time overhead δ] per projection or skip index
+  // partitions (RFC 3.9)
+  partition_seconds: 0.0,
+  late_insert_fraction: 0.0,
+  retention_partitions: 0,
+  seed: 1,
+};
+
+class Table {
+  // rng: optional { streams, client(c) } to replace the random streams, used by the differential test
+  constructor(config = {}, rng = null) {
+    this.cfg = { ...DEFAULTS, ...config };
+    const cfg = this.cfg;
+    if (!["open", "closed"].includes(cfg.arrivals)) throw new Error(`unknown arrivals ${cfg.arrivals}`);
+    if (!["simple", "simple_reference", "tiered"].includes(cfg.selector)) throw new Error(`unknown selector ${cfg.selector}`);
+    this.engine = new Engine();
+    this.rngSource = rng;
+    this.rng = rng ? rng.streams : streams(cfg.seed, "arrival", "thinning", "size", "merge", "assignee", "partition");
+    this.think = [];
+    for (let c = 0; c < cfg.clients; c++) this.think.push(this.clientRng(c));
+    this.pool = new Pool(this.engine, cfg.threads, cfg.threads * cfg.concurrency_ratio, cfg.scheduling_policy, task => this.onMergeDone(task));
+    this.partitions = new Map([[0, []]]);  // key -> active parts ordered by block number, keys ascending
+    this.partitionBytes = new Map([[0, 0]]);
+    this.partCount = 0;
+    this.currentPartition = 0;
+    this.pendingDrops = new Set();
+    this.droppedPartitions = [];
+    this.nextId = 1;
+    this.lastBlock = 0;
+    this.insertedBytes = 0;
+    this.droppedBytes = 0;
+    this.droppedBlocks = 0;
+    this.arrivals = 0;
+    this.inFlight = 0;
+    this.rejected = 0;
+    this.delayed = 0;
+    this.delayTotalMs = 0;
+    this.mergedBytes = 0;
+    this.mergesDone = 0;
+    this.selectorRuns = 0;
+    this.noWorkCount = 0;
+    this.assigneeAt = Infinity;
+    this.assigneeToken = 0;
+    this.arrivalToken = 0;
+    this.rotationToken = 0;
+    this.activeClients = cfg.clients;
+    this.insertsPaused = false;
+    this.lastSelection = null;  // the outcome of the last selector run, for the UI
+    this.lastMerge = null;  // why the last merge was chosen
+    this.observer = null;  // (type, ...data) on every event, see emit
+    this.updateDerived();
+  }
+
+  clientRng(c) {
+    return this.rngSource ? this.rngSource.client(c) : new Rng(`${this.cfg.seed}:think:${c}`);
+  }
+
+  updateDerived() {
+    const cfg = this.cfg;
+    this.auxStorage = 1 + cfg.aux.reduce((s, a) => s + a[0], 0);
+    this.auxTime = 1 + cfg.aux.reduce((s, a) => s + a[1], 0);
+    const peakFactor = Math.max(1.0, cfg.burst ? cfg.burst[2] : 1.0);
+    this.peakRate = cfg.insert_rate * (1 + cfg.rate_amplitude) * peakFactor;
+  }
+
+  rate(t) {
+    const cfg = this.cfg;
+    let value = cfg.insert_rate * (1 + cfg.rate_amplitude * Math.cos(2 * Math.PI * (t - cfg.rate_peak_at) / DAY));
+    const b = cfg.burst;
+    if (b && b[0] <= t && t < b[0] + b[1]) value *= b[2];
+    return value;
+  }
+
+  emit(type, ...data) {
+    if (this.observer) this.observer(type, this.engine.now, ...data);
+  }
+
+  get parts() {
+    const out = [];
+    for (const parts of this.partitions.values()) out.push(...parts);
+    return out;
+  }
+
+  start() {
+    if (this.cfg.partition_seconds) this.scheduleRotation();
+    if (this.cfg.arrivals === "open") this.scheduleArrival();
+    else for (let c = 0; c < this.cfg.clients; c++) this.thinkThen(c);
+    this.trigger();
+  }
+
+  // inputs
+
+  scheduleArrival() {
+    // a non-homogeneous Poisson process by thinning (Lewis, Shedler)
+    if (this.insertsPaused || this.cfg.insert_rate <= 0) return;
+    let t = this.engine.now;
+    for (;;) {
+      t += this.rng.arrival.expovariate(this.peakRate);
+      if (this.rng.thinning.random() * this.peakRate <= this.rate(t)) break;
+    }
+    this.engine.schedule(t - this.engine.now, token => { if (token === this.arrivalToken) this.onInsertArrival(null); }, this.arrivalToken);
+  }
+
+  thinkThen(client) {
+    this.engine.schedule(this.think[client].expovariate(1 / this.cfg.think_time), c => this.onInsertArrival(c), client);
+  }
+
+  onInsertArrival(client) {
+    if (client === null) this.scheduleArrival();
+    else if (client >= this.activeClients || this.insertsPaused) return;  // the client was removed or inserts are paused
+    this.arrivals++;
+    // drawn before the throttling decision, so that the i-th insert has the same size in every configuration
+    const size = Math.max(1, roundHalfEven(lognormal(this.rng.size, this.cfg.insert_bytes_mean, this.cfg.insert_bytes_cv) * this.auxStorage));
+    let key = null, most = -1;
+    for (const [k, parts] of this.partitions) if (parts.length >= most) { most = parts.length; key = k; }
+    const delay = checkInsert(this.partitions.get(key).length, this.partitionBytes.get(key), this.cfg, this.partCount);
+    this.emit("arrival", delay, size, client);
+    if (delay === null) {
+      this.rejected++;
+      if (client !== null) this.thinkThen(client);
+      return;
+    }
+    if (delay) {
+      this.delayed++;
+      this.delayTotalMs += delay;
+    }
+    this.inFlight++;
+    this.engine.schedule(delay / 1000, (s, c) => this.onInsertCommit(s, c), size, client);
+  }
+
+  partitionForInsert() {
+    if (!this.cfg.partition_seconds) return 0;
+    const key = this.currentPartition;
+    if (this.cfg.late_insert_fraction && this.rng.partition.random() < this.cfg.late_insert_fraction) {
+      if (this.partitions.has(key - 1) && !this.pendingDrops.has(key - 1)) return key - 1;
+    }
+    return key;
+  }
+
+  onInsertCommit(size, client) {
+    this.inFlight--;
+    this.lastBlock++;
+    const key = this.partitionForInsert();
+    if (!this.partitions.has(key)) this.addPartition(key);
+    const part = { id: this.nextId++, minBlock: this.lastBlock, maxBlock: this.lastBlock, level: 0, size, createdAt: this.engine.now,
+                   partition: key, blocks: 1, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
+    this.partitions.get(key).push(part);
+    this.partitionBytes.set(key, this.partitionBytes.get(key) + size);
+    this.partCount++;
+    this.insertedBytes += size;
+    this.emit("insert", part);
+    this.trigger();  // MergeTreeSink wakes the assignee after every insert
+    if (client !== null) this.thinkThen(client);
+  }
+
+  addPartition(key) {
+    // keys stay ascending: a new key is the largest one, a late insert goes to an existing key
+    const entries = [...this.partitions.entries(), [key, []]].sort((a, b) => a[0] - b[0]);
+    this.partitions = new Map(entries);
+    this.partitionBytes.set(key, 0);
+  }
+
+  // assignee
+
+  trigger() {
+    this.noWorkCount = Math.floor(this.noWorkCount / 2);
+    if (this.assigneeAt > this.engine.now) this.scheduleAssignee(0.0);
+  }
+
+  postpone() {
+    this.noWorkCount++;
+    const delay = Math.min(600.0, 0.1 * Math.pow(1.1, this.noWorkCount)) + this.rng.assignee.uniform(0, 1);
+    this.scheduleAssignee(delay);
+    this.emit("sleep", delay);
+  }
+
+  scheduleAssignee(delay) {
+    this.assigneeToken++;
+    this.assigneeAt = this.engine.now + delay;
+    this.engine.schedule(delay, token => this.onAssigneeRun(token), this.assigneeToken);
+  }
+
+  onAssigneeRun(token) {
+    if (token !== this.assigneeToken) return;
+    this.assigneeAt = Infinity;
+    if (this.tryAssignMerge()) this.trigger();
+    else this.postpone();
+  }
+
+  tryAssignMerge() {
+    // a full pool rejects the task, so the selection would be discarded anyway
+    if (!this.pool.hasCapacity()) {
+      this.lastSelection = { at: this.engine.now, outcome: "pool_full" };
+      return false;
+    }
+    this.selectorRuns++;
+    const maxBytes = maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg);
+    if (maxBytes === 0) {
+      this.lastSelection = { at: this.engine.now, outcome: "disabled" };
+      return false;
+    }
+    const stats = { considered: 0, allowed: 0 };
+    const found = selectAcross(this.partitions, this.engine.now, maxBytes, this.cfg, this.cfg.selector, stats);
+    if (found === null) {
+      this.lastSelection = { at: this.engine.now, outcome: "nothing", maxBytes, ...stats };
+      return false;
+    }
+    const sources = this.partitions.get(found.key).slice(found.begin, found.end);
+    let size = 0;
+    for (const p of sources) {
+      p.merging = true;
+      p.pickedAt = this.engine.now;
+      size += p.size;
+    }
+    const noise = lognormal(this.rng.merge, 1.0, this.cfg.merge_noise_cv);
+    const baseSize = size / this.auxStorage;
+    const work = (this.cfg.merge_fixed_seconds + baseSize / this.cfg.merge_bytes_per_second) * noise * this.auxTime;
+    const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0 };
+    this.pool.add(task);
+    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes,
+                                            freeEntries: this.pool.maxTasks - this.pool.tasks.length + 1, ...stats, ...found, work };
+    this.emit("assign", task, found);
+    return true;
+  }
+
+  // merges
+
+  onMergeDone(task) {
+    const sources = task.payload;
+    const key = sources[0].partition;
+    const parts = this.partitions.get(key);
+    const begin = parts.indexOf(sources[0]);
+    let level = 0, blocks = 0;
+    for (const p of sources) { if (p.level > level) level = p.level; blocks += p.blocks; }
+    level += 1;
+    const merged = { id: task.id, minBlock: sources[0].minBlock, maxBlock: sources[sources.length - 1].maxBlock, level, size: task.priority,
+                     createdAt: this.engine.now, partition: key, blocks, merging: false, pickedAt: null, removedAt: null, dropped: false,
+                     origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
+    parts.splice(begin, sources.length, merged);
+    this.partCount -= sources.length - 1;
+    for (const p of sources) p.removedAt = this.engine.now;
+    this.mergedBytes += task.priority;
+    this.mergesDone++;
+    this.emit("merged", task, merged);
+    if (this.pendingDrops.has(key)) this.tryDrop(key);
+  }
+
+  // partitions
+
+  scheduleRotation() {
+    this.rotationToken++;
+    this.engine.schedule(this.cfg.partition_seconds, token => { if (token === this.rotationToken) this.onPartitionRotate(); }, this.rotationToken);
+  }
+
+  onPartitionRotate() {
+    this.scheduleRotation();
+    this.currentPartition++;
+    this.emit("rotate", this.currentPartition);
+    if (this.cfg.retention_partitions) this.applyRetention();
+  }
+
+  applyRetention() {
+    for (const key of [...this.partitions.keys()]) {
+      if (key <= this.currentPartition - this.cfg.retention_partitions) {
+        this.pendingDrops.add(key);
+        this.tryDrop(key);
+      }
+    }
+  }
+
+  tryDrop(key) {
+    // DROP PARTITION, once no merge of this partition is running
+    const parts = this.partitions.get(key);
+    if (!parts || parts.some(p => p.merging)) return false;
+    for (const p of parts) {
+      p.removedAt = this.engine.now;
+      p.dropped = true;
+      this.droppedBytes += p.size;
+      this.droppedBlocks += p.blocks;
+    }
+    this.partCount -= parts.length;
+    this.partitions.delete(key);
+    this.partitionBytes.delete(key);
+    if (!this.partitions.size) this.addPartition(key + 1);
+    this.pendingDrops.delete(key);
+    this.droppedPartitions.push([key, this.engine.now]);
+    this.emit("drop", key, parts.length);
+    return true;
+  }
+
+  // live changes from the UI; each takes effect from the current model time
+
+  configure(changes) {
+    const cfg = this.cfg, old = { ...cfg };
+    Object.assign(cfg, changes);
+    this.updateDerived();
+    if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes) && cfg.arrivals === "open") this.restartArrivals();
+    if ("arrivals" in changes && changes.arrivals !== old.arrivals) {
+      this.arrivalToken++;
+      if (cfg.arrivals === "open") this.scheduleArrival();
+      else for (let c = 0; c < this.activeClients; c++) this.thinkThen(c);
+    }
+    if ("clients" in changes) this.setClients(cfg.clients);
+    if (["threads", "concurrency_ratio", "scheduling_policy"].some(k => k in changes)) {
+      this.pool.configure({ threads: cfg.threads, maxTasks: cfg.threads * cfg.concurrency_ratio, policy: cfg.scheduling_policy });
+    }
+    if ("partition_seconds" in changes && changes.partition_seconds !== old.partition_seconds) {
+      this.rotationToken++;
+      if (cfg.partition_seconds) this.scheduleRotation();
+    }
+    if ("retention_partitions" in changes && cfg.retention_partitions) this.applyRetention();
+    this.trigger();  // new selector settings may allow a merge right away
+  }
+
+  restartArrivals() {
+    this.arrivalToken++;
+    this.scheduleArrival();
+  }
+
+  setClients(n) {
+    const before = this.activeClients;
+    while (this.think.length < n) this.think.push(this.clientRng(this.think.length));
+    this.activeClients = n;
+    if (this.cfg.arrivals === "closed" && !this.insertsPaused) for (let c = before; c < n; c++) this.thinkThen(c);
+  }
+
+  setInsertsPaused(paused) {
+    if (paused === this.insertsPaused) return;
+    this.insertsPaused = paused;
+    if (paused) { this.arrivalToken++; return; }
+    if (this.cfg.arrivals === "open") this.restartArrivals();
+    else for (let c = 0; c < this.activeClients; c++) this.thinkThen(c);
+  }
+
+  burst(factor, duration) {
+    this.configure({ burst: [this.engine.now, duration, factor] });
+  }
+
+  newPartitionNow() {
+    if (!this.cfg.partition_seconds) return;
+    this.rotationToken++;
+    this.onPartitionRotate();
+  }
+
+  dropOldestPartition() {
+    const keys = [...this.partitions.keys()];
+    if (keys.length < 2) return false;
+    this.pendingDrops.add(keys[0]);
+    return this.tryDrop(keys[0]);
+  }
+
+  // checks of RFC section 7
+  checkInvariants() {
+    const parts = this.parts;
+    let size = 0, blocks = 0, merging = 0;
+    for (const p of parts) { size += p.size; blocks += p.blocks; if (p.merging) merging++; }
+    assert(size === this.insertedBytes - this.droppedBytes, "byte balance");
+    assert(blocks === this.lastBlock - this.droppedBlocks, "block balance");
+    assert(parts.length === this.partCount, "part count");
+    let prevKey = -Infinity;
+    for (const [key, ps] of this.partitions) {
+      assert(key > prevKey, "partition keys ascending");
+      prevKey = key;
+      let bytes = 0;
+      ps.forEach((p, i) => {
+        bytes += p.size;
+        assert(p.partition === key && p.maxBlock >= p.minBlock && !p.dropped, "part fields");
+        if (i) assert(ps[i - 1].maxBlock < p.minBlock, "parts ordered and disjoint");
+      });
+      assert(bytes === this.partitionBytes.get(key), "partition bytes");
+    }
+    // the pool size is not checked: a pool shrunk from the UI keeps its running tasks, and Pool.add refuses new ones
+    assert(this.pool.busyThreads() <= this.pool.threads + 1e-9, "busy threads");
+    let sources = 0;
+    for (const t of this.pool.tasks) {
+      const ps = this.partitions.get(t.payload[0].partition);
+      const first = ps.indexOf(t.payload[0]);
+      t.payload.forEach((p, j) => assert(p.merging && ps[first + j] === p, "sources adjacent"));
+      sources += t.payload.length;
+    }
+    assert(sources === merging, "merging flags");
+  }
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error("invariant: " + message);
+}
+
+return { DEFAULTS, Table };
+})();
+
+// ---- src/data/calibration.js
+const __module_6 = (() => {
+// generated by tools/export_data.py from calibration.json
+const CALIBRATED = {
+  "merge_fixed_seconds": 0.0027020177578470582,
+  "merge_bytes_per_second": 244504578.58316943,
+  "merge_noise_cv": 0.12290395761261506,
+  "insert_bytes_mean": 3607962.8763336567,
+  "insert_bytes_cv": 0.3514333577709221
+};
+const AUX = {
+  "index": [
+    0.007155583071234206,
+    0.062429390588294886
+  ],
+  "projection": [
+    0.9912682104579509,
+    0.9304387282149285
+  ]
+};
+
+return { CALIBRATED, AUX };
+})();
+
+// ---- src/ui/dom.js
+const __module_7 = (() => {
+// DOM helpers, number formatting and the page-wide tooltip. Text always goes in through text nodes.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "style") node.style.cssText = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) if (c != null && c !== false) node.append(typeof c === "string" || typeof c === "number" ? document.createTextNode(String(c)) : c);
+  return node;
+}
+
+function sv(tag, attrs = {}, text) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+const NUM = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 1 });
+const NUM2 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 2 });
+const NUM3 = new Intl.NumberFormat("uk-UA", { maximumSignificantDigits: 3 });
+const INT = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const PCT = new Intl.NumberFormat("uk-UA", { style: "percent", maximumFractionDigits: 1 });
+
+function bytes(b) {
+  if (b >= 1e12) return NUM.format(b / 1e12) + " ТБ";
+  if (b >= 1e9) return NUM.format(b / 1e9) + " ГБ";
+  if (b >= 1e6) return NUM.format(b / 1e6) + " МБ";
+  if (b >= 1e3) return NUM.format(b / 1e3) + " КБ";
+  return INT.format(b) + " Б";
+}
+
+function clock(seconds) {
+  const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = Math.floor(seconds % 60);
+  const mm = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  return h ? h + ":" + mm : mm;
+}
+
+function duration(seconds) {
+  if (!isFinite(seconds)) return "∞";
+  if (seconds < 1) return INT.format(seconds * 1000) + " мс";
+  if (seconds < 60) return NUM.format(seconds) + " с";
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    return m + " хв " + Math.round(seconds - 60 * m) + " с";
+  }
+  return NUM.format(seconds / 3600) + " год";
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+const partsText = n => `${INT.format(n)} ${plural(n, "кусок", "куски", "кусків")}`;
+
+const tooltip = {
+  node: null,
+  show(x, y, title, rows) {
+    const n = this.node || (this.node = document.getElementById("tooltip"));
+    n.replaceChildren();
+    if (title) n.append(el("div", { class: "title" }, title));
+    for (const r of rows) {
+      const name = el("span", { class: "name" });
+      if (r.color) name.append(el("i", { style: "background:" + r.color }));
+      name.append(r.name);
+      n.append(el("div", { class: "row" }, name, el("strong", {}, r.value)));
+    }
+    n.hidden = false;
+    const w = n.offsetWidth, h = n.offsetHeight;
+    let left = x + 14, top = y + 14;
+    if (left + w > window.innerWidth - 8) left = x - w - 14;
+    if (top + h > window.innerHeight - 8) top = y - h - 14;
+    n.style.left = Math.max(8, left) + "px";
+    n.style.top = Math.max(8, top) + "px";
+  },
+  hide() { if (this.node) this.node.hidden = true; },
+};
+
+return { el, sv, cssVar, NUM, NUM2, NUM3, INT, PCT, bytes, clock, duration, plural, partsText, tooltip };
+})();
+
+// ---- src/ui/charts.js
+const __module_8 = (() => {
+// SVG charts: line and scatter charts with a crosshair tooltip, horizontal bars, tables and cards.
+// Marks follow the dataviz rules: 2px lines, hairline grid, one axis, legend for two or more series,
+// direct end labels only when they do not collide, values in tooltips and in table views.
+
+const { el, sv, tooltip, NUM3, INT } = __module_7;
+const S = i => `var(--series-${i})`;
+
+function niceStep(min, max, count = 5) {
+  const span = max - min, step0 = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  return [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= count) || 10 * mag;
+}
+
+function niceTicks(min, max, count = 5) {
+  if (!(max > min)) return [min];
+  const step = niceStep(min, max, count);
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function logTicks(min, max) {
+  const ticks = [];
+  for (let e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++) {
+    for (const m of (Math.log10(max / min) < 2.2 ? [1, 2, 5] : [1])) {
+      const v = m * Math.pow(10, e);
+      if (v >= min * 0.999 && v <= max * 1.001) ticks.push(v);
+    }
+  }
+  return ticks;
+}
+
+class Chart {
+  // options: height, x{label, log, min, max, format}, y{log, min, max, format}, series[{name, short, color, points, band, labels,
+  // labelOffset, markers, connect}], thresholds[{y, label}], mode "line" | "scatter", onClick(x), playhead,
+  // tooltipTitle(x), valueFormat(v), scatterRows(series, i)
+  constructor(container, options) {
+    this.container = container;
+    this.o = options;
+    container.replaceChildren();
+    this.legend = el("div", { class: "legend" });
+    this.svg = sv("svg", { class: "chart", role: "img", "aria-label": options.ariaLabel || "" });
+    container.append(this.legend, this.svg);
+    this.renderLegend();
+    this.render();
+    new ResizeObserver(() => this.render()).observe(container);
+  }
+
+  setSeries(series, extra = {}) {
+    const names = s => s.map(x => x.name).join("|");
+    const legendChanged = names(series) !== names(this.o.series);
+    Object.assign(this.o, extra, { series });
+    if (legendChanged) this.renderLegend();
+    this.render();
+  }
+
+  renderLegend() {
+    const o = this.o;
+    this.legend.replaceChildren();
+    this.legend.hidden = o.series.length < 2;
+    for (const s of o.series) {
+      const key = o.mode === "scatter" ? el("span", { class: "swatch", style: "border-radius:50%;background:" + s.color })
+                                       : el("span", { class: "line", style: "background:" + s.color });
+      this.legend.append(el("span", { class: "key" }, key, s.name));
+    }
+  }
+
+  scale(axis, lo, hi, a, b) {
+    if (axis.log) {
+      const l0 = Math.log10(lo), l1 = Math.log10(hi);
+      const f = v => a + (Math.log10(Math.max(v, lo * 1e-6)) - l0) / (l1 - l0 || 1) * (b - a);
+      f.invert = p => Math.pow(10, l0 + (p - a) / (b - a) * (l1 - l0));
+      return f;
+    }
+    const f = v => a + (v - lo) / (hi - lo || 1) * (b - a);
+    f.invert = p => lo + (p - a) / (b - a) * (hi - lo);
+    return f;
+  }
+
+  extent(axis, values, pad) {
+    if (!values.length) return [axis.min ?? 0, axis.max ?? 1];
+    let lo = axis.min != null ? axis.min : Math.min(...values);
+    let hi = axis.max != null ? axis.max : Math.max(...values);
+    if (axis.log) {
+      if (axis.min == null) lo = Math.pow(10, Math.floor(Math.log10(lo) * 4) / 4);
+      if (axis.max == null) hi = Math.pow(10, Math.ceil(Math.log10(hi) * 4) / 4);
+      return [lo, hi];
+    }
+    if (!(hi > lo)) hi = lo + 1;
+    if (axis.max == null && pad) {
+      const step = niceStep(lo, hi * 1.04);
+      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick is at or above the largest value
+    }
+    return [lo, hi];
+  }
+
+  yValues() {
+    const o = this.o, ys = [];
+    for (const s of o.series) for (const p of s.points) if (p[1] != null && isFinite(p[1])) ys.push(p[1]);
+    for (const s of o.series) if (s.band) for (const b of s.band) if (isFinite(b[2])) ys.push(b[2]);
+    const top = ys.length ? Math.max(...ys) : 1;
+    for (const t of o.thresholds || []) if (t.y <= top * 1.5) ys.push(t.y);
+    return ys;
+  }
+
+  render() {
+    const o = this.o, svg = this.svg;
+    const width = Math.max(260, this.container.clientWidth);
+    const height = o.height || 220;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("height", height);
+    svg.replaceChildren();
+    const xs = [];
+    for (const s of o.series) for (const p of s.points) if (p[1] != null && isFinite(p[1])) xs.push(p[0]);
+    const [x0, x1] = this.extent(o.x, xs, false);
+    const [y0, y1] = this.extent(o.y, this.yValues(), true);
+    const direct = this.directLabels(width, y0, y1, height);
+    const m = { l: 52, r: direct ? 104 : 16, t: 10, b: 38 };
+    const X = this.scale(o.x, x0, x1, m.l, width - m.r);
+    const Y = this.scale(o.y, y0, y1, height - m.b, m.t);
+    Object.assign(this, { X, Y, m, width, height });
+
+    const fmtX = o.x.format || (v => NUM3.format(v));
+    const fmtY = o.y.format || (v => NUM3.format(v));
+    for (const v of (o.y.log ? logTicks(y0, y1) : niceTicks(y0, y1))) {
+      const y = Math.round(Y(v)) + 0.5;
+      svg.append(sv("line", { class: "grid-line", x1: m.l, x2: width - m.r, y1: y, y2: y }));
+      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, fmtY(v)));
+    }
+    for (const v of (o.x.log ? logTicks(x0, x1) : niceTicks(x0, x1, Math.max(3, Math.floor((width - m.l - m.r) / 64))))) {
+      const x = Math.round(X(v)) + 0.5;
+      if (x < m.l - 1 || x > width - m.r + 1) continue;
+      svg.append(sv("text", { class: "tick", x, y: height - m.b + 16, "text-anchor": "middle" }, fmtX(v)));
+    }
+    const base = Math.round(Y(y0)) + 0.5;
+    svg.append(sv("line", { class: "base-line", x1: m.l, x2: width - m.r, y1: base, y2: base }));
+    if (o.x.label) svg.append(sv("text", { class: "axis-label", x: (m.l + width - m.r) / 2, y: height - 4, "text-anchor": "middle" }, o.x.label));
+
+    for (const t of o.thresholds || []) {
+      if (t.y < y0 || t.y > y1) continue;
+      const y = Math.round(Y(t.y)) + 0.5;
+      svg.append(sv("line", { class: "threshold", x1: m.l, x2: width - m.r, y1: y, y2: y }));
+      svg.append(sv("text", { class: "threshold-label", x: m.l + 4, y: y - 4 }, t.label));
+    }
+
+    const clampY = v => Y(Math.min(y1, Math.max(v, o.y.log ? y0 : -Infinity)));
+    for (const s of o.series) {
+      if (s.band && s.band.length) {
+        const top = s.band.map(b => `${X(b[0])},${clampY(b[2])}`);
+        const bottom = s.band.slice().reverse().map(b => `${X(b[0])},${clampY(b[1])}`);
+        svg.append(sv("polygon", { points: top.concat(bottom).join(" "), style: `fill:${s.color};opacity:0.12` }));
+      }
+      const pts = s.points.filter(p => p[1] != null && isFinite(p[1]));
+      if (!pts.length) continue;
+      if (o.mode !== "scatter" || s.connect) {
+        const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1)).join("");
+        svg.append(sv("path", { d, style: `fill:none;stroke:${s.color};stroke-width:2;stroke-linejoin:round;stroke-linecap:round` }));
+      }
+      if (o.mode === "scatter" || s.markers) {
+        for (const p of pts) svg.append(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4.5, style: `fill:${s.color};stroke:var(--surface-1);stroke-width:2` }));
+      }
+      if (s.labels) {
+        const [dx, dy] = s.labelOffset || [7, -6];
+        pts.forEach((p, i) => { if (s.labels[i] != null) svg.append(sv("text", { class: "point-label", x: X(p[0]) + dx, y: Y(p[1]) + dy }, s.labels[i])); });
+      }
+    }
+    if (direct) for (const d of direct) svg.append(sv("text", { class: "end-label", x: width - m.r + 8, y: d.y + 4 }, d.name));
+
+    this.playheadLine = sv("line", { class: "playhead", y1: m.t, y2: height - m.b, x1: -10, x2: -10 });
+    if (o.playhead) svg.append(this.playheadLine);
+    this.cross = sv("line", { class: "crosshair", y1: m.t, y2: height - m.b, x1: -10, x2: -10, visibility: "hidden" });
+    svg.append(this.cross);
+    const hit = sv("rect", { class: "hit", x: m.l, y: m.t, width: Math.max(0, width - m.l - m.r), height: Math.max(0, height - m.t - m.b) });
+    svg.append(hit);
+    hit.addEventListener("pointermove", e => this.hover(e));
+    hit.addEventListener("pointerleave", () => { tooltip.hide(); this.cross.setAttribute("visibility", "hidden"); });
+    if (o.onClick) hit.addEventListener("click", e => o.onClick(this.X.invert(this.localX(e))));
+    if (this.playheadAt != null) this.setPlayhead(this.playheadAt);
+  }
+
+  directLabels(width, y0, y1, height) {
+    const o = this.o;
+    if (o.mode === "scatter" || o.series.length < 2 || o.series.length > 4 || width < 420) return null;
+    const Y = this.scale(o.y, y0, y1, height - 38, 10);
+    const ends = [];
+    for (const s of o.series) {
+      const pts = s.points.filter(p => p[1] != null && isFinite(p[1]));
+      if (!pts.length) return null;
+      ends.push({ name: s.short || s.name, y: Y(pts[pts.length - 1][1]) });
+    }
+    ends.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) return null;  // they collide: legend and tooltip only
+    return ends;
+  }
+
+  localX(e) {
+    const r = this.svg.getBoundingClientRect();
+    return (e.clientX - r.left) * this.width / r.width;
+  }
+
+  hover(e) {
+    const o = this.o, px = this.localX(e);
+    const r = this.svg.getBoundingClientRect();
+    const py = (e.clientY - r.top) * this.height / r.height;
+    const fmt = o.valueFormat || (v => NUM3.format(v));
+    if (o.mode === "scatter") {
+      let best = null;
+      o.series.forEach(s => s.points.forEach((p, i) => {
+        const d = Math.hypot(this.X(p[0]) - px, this.Y(p[1]) - py);
+        if (d < 28 && (!best || d < best.d)) best = { d, s, i };
+      }));
+      if (!best) { tooltip.hide(); return; }
+      tooltip.show(e.clientX, e.clientY, best.s.name + (best.s.labels ? ", " + best.s.labels[best.i] : ""), o.scatterRows(best.s, best.i));
+      return;
+    }
+    let snap = null;
+    const rows = [];
+    for (const s of o.series) {
+      let bi = -1, bd = Infinity;
+      s.points.forEach((p, i) => { const d = Math.abs(this.X(p[0]) - px); if (d < bd && p[1] != null) { bd = d; bi = i; } });
+      if (bi < 0) continue;
+      const p = s.points[bi];
+      if (snap == null) snap = p[0];
+      rows.push({ name: s.name, color: s.color, value: fmt(p[1], s, bi) });
+    }
+    if (snap == null) return;
+    const x = this.X(snap);
+    this.cross.setAttribute("x1", x); this.cross.setAttribute("x2", x); this.cross.setAttribute("visibility", "visible");
+    tooltip.show(e.clientX, e.clientY, o.tooltipTitle ? o.tooltipTitle(snap) : (o.x.format || NUM3.format)(snap), rows);
+  }
+
+  setPlayhead(x) {
+    this.playheadAt = x;
+    if (!this.X) return;
+    const px = this.X(x);
+    this.playheadLine.setAttribute("x1", px);
+    this.playheadLine.setAttribute("x2", px);
+  }
+}
+
+class Bars {
+  // horizontal bars from zero, rounded at the data end
+  constructor(container, options) {
+    this.container = container;
+    this.o = options;
+    container.replaceChildren();
+    this.svg = sv("svg", { class: "chart" });
+    container.append(this.svg);
+    this.render();
+    new ResizeObserver(() => this.render()).observe(container);
+  }
+
+  render() {
+    const o = this.o, svg = this.svg;
+    const width = Math.max(200, this.container.clientWidth);
+    const band = 30, m = { l: o.labelWidth || 150, r: 44, t: 6, b: 24 };
+    const height = m.t + m.b + band * o.values.length;
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("height", height);
+    svg.replaceChildren();
+    const lo0 = Math.min(0, ...o.values), hi0 = Math.max(0, ...o.values), pad = 0.22 * (hi0 - lo0 || 1);
+    const lo = lo0 < 0 ? lo0 - pad : 0, hi = hi0 > 0 ? hi0 + pad * 0.3 : 0;
+    const X = v => m.l + (v - lo) / (hi - lo || 1) * (width - m.l - m.r);
+    for (const v of niceTicks(lo, hi, 4)) {
+      const x = Math.round(X(v)) + 0.5;
+      svg.append(sv("line", { class: "grid-line", x1: x, x2: x, y1: m.t, y2: height - m.b }));
+      svg.append(sv("text", { class: "tick", x, y: height - 6, "text-anchor": "middle" }, NUM3.format(v)));
+    }
+    o.values.forEach((v, i) => {
+      const y = m.t + i * band + (band - 18) / 2;
+      const x0 = X(Math.min(0, v)), x1 = X(Math.max(0, v));
+      const w = Math.max(1, x1 - x0), r = Math.min(4, w);
+      const d = v >= 0
+        ? `M${x0},${y} H${x1 - r} Q${x1},${y} ${x1},${y + r} V${y + 18 - r} Q${x1},${y + 18} ${x1 - r},${y + 18} H${x0} Z`
+        : `M${x1},${y} H${x0 + r} Q${x0},${y} ${x0},${y + r} V${y + 18 - r} Q${x0},${y + 18} ${x0 + r},${y + 18} H${x1} Z`;
+      svg.append(sv("path", { d, style: `fill:${o.color}` }));
+      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 13, "text-anchor": "end", style: "fill:var(--text-secondary);font-size:12px" }, o.labels[i]));
+      svg.append(sv("text", { class: "end-label", x: v >= 0 ? x1 + 6 : x0 - 6, y: y + 13, "text-anchor": v >= 0 ? "start" : "end" }, (v > 0 ? "+" : "") + NUM3.format(v)));
+      const hit = sv("rect", { class: "hit", x: m.l, y: y - 6, width: Math.max(0, width - m.l - m.r), height: 30 });
+      hit.addEventListener("pointermove", e => tooltip.show(e.clientX, e.clientY, o.labels[i], [{ name: o.name, value: (v > 0 ? "+" : "") + NUM3.format(v) }]));
+      hit.addEventListener("pointerleave", () => tooltip.hide());
+      svg.append(hit);
+    });
+    const zero = Math.round(X(0)) + 0.5;
+    svg.append(sv("line", { class: "base-line", x1: zero, x2: zero, y1: m.t, y2: height - m.b }));
+  }
+}
+
+function table(columns, rows) {
+  const t = el("table", { class: "data" });
+  t.append(el("thead", {}, el("tr", {}, ...columns.map(c => el("th", {}, c)))));
+  const body = el("tbody");
+  for (const r of rows) body.append(el("tr", {}, ...r.map(v => el("td", {}, String(v)))));
+  t.append(body);
+  return el("div", { class: "table-wrap" }, t);
+}
+
+function card(title, sub, { tableView, wide } = {}) {
+  const body = el("div");
+  const head = el("div", { class: "card-head" }, el("div", {}, el("h2", {}, title), sub ? el("p", { class: "sub" }, sub) : null));
+  const c = el("div", { class: "card", style: wide ? "grid-column: 1 / -1" : "" }, head, body);
+  if (tableView) {
+    const holder = el("div", { hidden: true });
+    const button = el("button", { class: "toggle-table", type: "button" }, "Таблиця");
+    button.addEventListener("click", () => {
+      if (!holder.childNodes.length) holder.append(tableView());
+      holder.hidden = !holder.hidden;
+      button.textContent = holder.hidden ? "Таблиця" : "Сховати таблицю";
+    });
+    head.append(button);
+    c.append(holder);
+  }
+  return { card: c, body };
+}
+
+const ci = ([mean, half]) => (half ? `${NUM3.format(mean)} ± ${NUM3.format(half)}` : NUM3.format(mean));
+const intFormat = v => INT.format(v);
+
+return { S, niceTicks, Chart, Bars, table, card, ci, intFormat };
+})();
+
+// ---- src/ui/controls.js
+const __module_9 = (() => {
+// The parameter panel: every control writes to the running model at once, and presets restart it.
+
+const { el, bytes, INT, NUM, NUM2 } = __module_7;
+const { AUX } = __module_6;
+const MB = 1e6, MIB = 1024 * 1024, GIB = 1024 * MIB;
+
+const PRESETS = {
+  normal: { title: "Звичайна робота", text: "100 вставок по 3.6 МБ за секунду, пул 16 потоків. Злиття встигають: кусків близько сотні, пул зайнятий наполовину.",
+            config: { insert_rate: 100 } },
+  saturated: { title: "Насичений пул", text: "260 вставок/с. Усі 16 потоків зайняті, кусків стає більше, а злиття ширшими: система обмінює кількість кусків на менше підсилення записів.",
+               config: { insert_rate: 260 } },
+  burst: { title: "Сплеск ×3", text: "150 вставок/с, а на другій хвилині потік утричі зростає на 3 хвилини. Під час сплеску кусків стає в рази більше, вмикається гальмування, а після сплеску система довго розбирає хвіст.",
+           config: { insert_rate: 150 }, actions: [[120, "burst", 3, 180]] },
+  feedback: { title: "Гальмування як зворотний зв'язок", text: "35 замкнених клієнтів пропонують 350 вставок/с, більше за пропускну здатність злиттів. Пороги знижено до 300 і 900, обмеження за середнім розміром куска вимкнене. Затримки сповільнюють клієнтів, і кусків стає рівно стільки, скільки дозволяє поріг.",
+              config: { arrivals: "closed", clients: 35, think_time: 0.1, parts_to_delay_insert: 300, parts_to_throw_insert: 900, max_avg_part_size_for_too_many_parts: 0 } },
+  small: { title: "Дрібні вставки, малий пул", text: "600 вставок по 0.29 МБ за секунду і лише 4 потоки. Той самий потік даних, що й у звичайній роботі, але дрібними пакетами: пул насичується, кусків у кілька разів більше.",
+           config: { insert_rate: 600, insert_bytes_mean: 0.29 * MB, threads: 4 } },
+  partitions: { title: "Ротація партицій", text: "150 вставок/с, нова партиція кожні 2 модельні хвилини, зберігаються 3 найновіші, 10% вставок запізнюються в попередню партицію. Злиття не перетинають межу партиції, старі партиції видаляються цілком.",
+                 config: { insert_rate: 150, partition_seconds: 120, retention_partitions: 3, late_insert_fraction: 0.1 } },
+  tiered: { title: "Деградація tiered-селектора", text: "Базовий tiered-селектор з base 2 зливає лише сусідні куски одного рівня. Куски різних рівнів перемішуються і блокують одне одного: пул майже простоює, а кусків стає дедалі більше.",
+            config: { insert_rate: 150, selector: "tiered", base: 2 } },
+  projection: { title: "Проєкція", text: "100 вставок/с у таблицю з проєкцією: кожен кусок на диску вдвічі більший, а злиття вдвічі довше. Порівняйте зайнятість пулу зі звичайною роботою.",
+                config: { insert_rate: 100, aux: [AUX.projection] } },
+  stopped: { title: "Без злиттів", text: "Злиття вимкнені (max_bytes_to_merge_at_max_space_in_pool = 0), пороги гальмування знижено до 200 і 400: кусків стає дедалі більше, поки вставки спершу гальмуються, а потім відхиляються.",
+             config: { insert_rate: 50, max_bytes_at_max_space: 0, parts_to_delay_insert: 200, parts_to_throw_insert: 400 } },
+};
+
+const log = (min, max) => ({
+  toSlider: v => Math.log(v / min) / Math.log(max / min) * 1000,
+  fromSlider: s => min * Math.pow(max / min, s / 1000),
+});
+const lin = (min, max) => ({ toSlider: v => (v - min) / (max - min) * 1000, fromSlider: s => min + (max - min) * s / 1000 });
+
+const FIELDS = [
+  { group: "Вхідний потік" },
+  { key: "arrivals", label: "Тип входу", type: "seg", options: [["open", "відкритий"], ["closed", "замкнений"]],
+    hint: "Відкритий: вставки приходять незалежно від стану системи. Замкнений: N клієнтів, кожен чекає завершення своєї вставки." },
+  { key: "insert_rate", label: "Інтенсивність", type: "range", ...log(1, 2000), round: v => (v < 10 ? Math.round(v * 10) / 10 : Math.round(v)),
+    format: v => `${NUM.format(v)} вставок/с`, visible: c => c.arrivals === "open" },
+  { key: "clients", label: "Клієнти N", type: "range", ...lin(1, 200), round: Math.round, format: v => INT.format(v), visible: c => c.arrivals === "closed" },
+  { key: "think_time", label: "Час думання Z", type: "range", ...log(0.01, 10), round: v => Math.round(v * 1000) / 1000, format: v => `${NUM2.format(v)} с`,
+    visible: c => c.arrivals === "closed" },
+  { key: "insert_bytes_mean", label: "Розмір вставки", type: "range", ...log(0.05 * MB, 500 * MB), round: v => Math.round(v / 1e4) * 1e4, format: v => bytes(v) },
+  { key: "insert_bytes_cv", label: "Розкид розміру (cv)", type: "range", ...lin(0, 2), round: v => Math.round(v * 20) / 20, format: v => NUM2.format(v) },
+  { actions: [["burst", "Сплеск"], ["pause", "Зупинити вставки"]] },
+
+  { group: "Пул фонових задач" },
+  { key: "threads", label: "Потоки (background_pool_size)", type: "range", ...lin(1, 64), round: Math.round, format: v => INT.format(v) },
+  { key: "concurrency_ratio", label: "Задач на потік", type: "range", ...lin(1, 4), round: Math.round, format: v => INT.format(v),
+    hint: "background_merges_mutations_concurrency_ratio: місць у пулі = потоки × це число." },
+  { key: "scheduling_policy", label: "Планувальник", type: "seg", options: [["round_robin", "round_robin"], ["shortest_task_first", "STF"]],
+    hint: "round_robin ділить потоки порівну, shortest_task_first віддає їх найменшим злиттям." },
+
+  { group: "Селектор злиттів" },
+  { key: "selector", label: "Алгоритм", type: "seg", options: [["simple", "SimpleMergeSelector"], ["tiered", "tiered"]] },
+  { key: "base", label: "merge_selector_base", type: "range", ...lin(1.5, 20), round: v => Math.round(v * 2) / 2, format: v => NUM.format(v),
+    hint: "Скільки однакових кусків зливати щонайменше. Більше: менше підсилення записів, більше кусків." },
+  { key: "max_parts_to_merge_at_once", label: "Найбільше кусків за раз", type: "range", ...log(2, 300), round: Math.round, format: v => INT.format(v) },
+  { key: "max_bytes_at_max_space", label: "Межа розміру злиття", type: "range", ...log(16 * MIB, 150 * GIB), round: v => Math.round(v / MIB) * MIB, format: v => bytes(v),
+    hint: "max_bytes_to_merge_at_max_space_in_pool; коли пул майже повний, межа падає до 1 МБ.", disabledWhen: c => c.max_bytes_at_max_space === 0 },
+  { key: "merges_off", label: "Вимкнути злиття", type: "toggle", get: c => c.max_bytes_at_max_space === 0,
+    set: on => ({ max_bytes_at_max_space: on ? 0 : 150 * GIB }) },
+
+  { group: "Гальмування вставок" },
+  { key: "parts_to_delay_insert", label: "parts_to_delay_insert", type: "range", ...log(10, 10000), round: Math.round, format: v => INT.format(v) },
+  { key: "parts_to_throw_insert", label: "parts_to_throw_insert", type: "range", ...log(20, 20000), round: Math.round, format: v => INT.format(v) },
+  { key: "max_delay_to_insert", label: "max_delay_to_insert", type: "range", ...lin(1, 10), round: Math.round, format: v => `${INT.format(v)} с` },
+  { key: "guard", label: "Обмеження за середнім розміром (1 ГіБ)", type: "toggle", get: c => c.max_avg_part_size_for_too_many_parts > 0,
+    set: on => ({ max_avg_part_size_for_too_many_parts: on ? GIB : 0 }),
+    hint: "Якщо середній кусок більший за 1 ГіБ, гальмування і відхилення вимикаються." },
+
+  { group: "Партиції" },
+  { key: "partition_seconds", label: "Нова партиція кожні", type: "select", options: [[0, "ніколи"], [30, "30 с"], [60, "1 хв"], [120, "2 хв"], [300, "5 хв"], [600, "10 хв"]] },
+  { key: "retention_partitions", label: "Зберігати партицій", type: "range", ...lin(0, 10), round: Math.round, format: v => (v ? INT.format(v) : "усі"),
+    visible: c => c.partition_seconds > 0 },
+  { key: "late_insert_fraction", label: "Запізнілі вставки", type: "range", ...lin(0, 0.5), round: v => Math.round(v * 100) / 100, format: v => `${INT.format(v * 100)}%`,
+    visible: c => c.partition_seconds > 0 },
+  { actions: [["rotate", "Нова партиція зараз"], ["drop", "Видалити найстарішу"]], visible: c => c.partition_seconds > 0 },
+
+  { group: "Вартість злиття" },
+  { key: "merge_bytes_per_second", label: "Швидкість злиття", type: "range", ...log(20 * MB, 2000 * MB), round: v => Math.round(v / 1e5) * 1e5, format: v => `${NUM.format(v / MB)} МБ/с на потік` },
+  { key: "merge_fixed_seconds", label: "Фіксована вартість", type: "range", ...lin(0, 0.2), round: v => Math.round(v * 10000) / 10000, format: v => `${NUM.format(v * 1000)} мс` },
+  { key: "merge_noise_cv", label: "Шум тривалості (cv)", type: "range", ...lin(0, 1), round: v => Math.round(v * 100) / 100, format: v => NUM2.format(v) },
+  { key: "aux_index", label: "Індекс bloom_filter", type: "toggle", get: c => c.aux.some(a => a === AUX.index), set: (on, c) => ({ aux: toggle(c.aux, AUX.index, on) }) },
+  { key: "aux_projection", label: "Проєкція", type: "toggle", get: c => c.aux.some(a => a === AUX.projection), set: (on, c) => ({ aux: toggle(c.aux, AUX.projection, on) }) },
+];
+
+function toggle(list, item, on) {
+  const rest = list.filter(a => a !== item);
+  return on ? [...rest, item] : rest;
+}
+
+class Controls {
+  // lab: { config(), configure(changes), action(name), load(presetKey) }
+  constructor(root, lab) {
+    this.root = root;
+    this.lab = lab;
+    this.inputs = [];
+    const presetSelect = el("select", { id: "preset", "aria-label": "Сценарій" }, ...Object.entries(PRESETS).map(([k, p]) => el("option", { value: k }, p.title)));
+    presetSelect.addEventListener("change", () => lab.load(presetSelect.value));
+    this.presetSelect = presetSelect;
+    this.presetText = el("p", { class: "preset-text" });
+    root.append(el("div", { class: "field" }, el("label", { class: "field-label", for: "preset" }, "Сценарій"), presetSelect), this.presetText);
+    let group = null;
+    for (const f of FIELDS) {
+      if (f.group) {
+        group = el("details", { class: "group", open: true }, el("summary", {}, f.group));
+        root.append(group);
+        continue;
+      }
+      if (f.actions) {
+        const row = el("div", { class: "actions" });
+        for (const [name, label] of f.actions) {
+          const b = el("button", { class: "btn small", type: "button", "data-action": name }, label);
+          b.addEventListener("click", () => lab.action(name));
+          row.append(b);
+        }
+        if (f.actions.some(([n]) => n === "burst")) {
+          this.burstFactor = el("select", { "aria-label": "Множник сплеску" }, ...[2, 3, 5].map(v => el("option", { value: v, selected: v === 3 }, `×${v}`)));
+          this.burstLength = el("select", { "aria-label": "Тривалість сплеску" }, ...[[30, "30 с"], [60, "1 хв"], [180, "3 хв"]].map(([v, t]) => el("option", { value: v, selected: v === 60 }, t)));
+          row.insertBefore(el("span", { class: "burst" }, this.burstFactor, this.burstLength), row.children[1]);
+        }
+        group.append(row);
+        this.inputs.push({ f, node: row });
+        continue;
+      }
+      const id = "f-" + f.key;
+      const value = el("span", { class: "field-value" });
+      let input;
+      if (f.type === "range") {
+        input = el("input", { type: "range", id, min: 0, max: 1000, step: 1 });
+        input.addEventListener("input", () => {
+          const v = f.round(f.fromSlider(+input.value));
+          value.textContent = f.format(v);
+          this.apply(f, v);
+        });
+      } else if (f.type === "seg") {
+        input = el("div", { class: "seg", role: "group", id }, ...f.options.map(([v, t]) => el("button", { type: "button", "data-value": v }, t)));
+        for (const b of input.children) b.addEventListener("click", () => this.apply(f, b.dataset.value));
+      } else if (f.type === "select") {
+        input = el("select", { id }, ...f.options.map(([v, t]) => el("option", { value: v }, t)));
+        input.addEventListener("change", () => this.apply(f, +input.value));
+      } else if (f.type === "toggle") {
+        input = el("input", { type: "checkbox", id });
+        input.addEventListener("change", () => this.lab.configure(f.set(input.checked, this.lab.config())));
+      }
+      const head = el("div", { class: "field-head" }, el("label", { class: "field-label", for: id }, f.label), value);
+      const node = f.type === "toggle" ? el("label", { class: "field toggle" }, input, el("span", {}, f.label)) : el("div", { class: "field" }, head, input);
+      if (f.hint) node.append(el("p", { class: "hint" }, f.hint));
+      group.append(node);
+      this.inputs.push({ f, node, input, value });
+    }
+  }
+
+  apply(f, v) {
+    const changes = { [f.key]: v };
+    const c = this.lab.config();
+    // parts_to_throw_insert stays above parts_to_delay_insert, as the server requires
+    if (f.key === "parts_to_delay_insert" && v >= c.parts_to_throw_insert) changes.parts_to_throw_insert = v + 1;
+    if (f.key === "parts_to_throw_insert" && v <= c.parts_to_delay_insert) changes.parts_to_delay_insert = Math.max(1, v - 1);
+    this.lab.configure(changes);
+  }
+
+  // shows the current configuration
+  sync(presetKey) {
+    const c = this.lab.config();
+    if (presetKey) {
+      this.presetSelect.value = presetKey;
+      this.presetText.textContent = PRESETS[presetKey].text;
+    }
+    for (const { f, node, input, value } of this.inputs) {
+      node.hidden = f.visible ? !f.visible(c) : false;
+      if (!input) continue;
+      if (f.type === "range") {
+        if (document.activeElement !== input) input.value = f.toSlider(c[f.key]);
+        value.textContent = f.format(c[f.key]);
+        input.disabled = f.disabledWhen ? f.disabledWhen(c) : false;
+      } else if (f.type === "seg") {
+        for (const b of input.children) b.setAttribute("aria-pressed", String(b.dataset.value === String(c[f.key])));
+      } else if (f.type === "select") {
+        input.value = String(c[f.key]);
+      } else if (f.type === "toggle") {
+        input.checked = f.get(c);
+      }
+    }
+  }
+
+  burstSettings() {
+    return [+this.burstFactor.value, +this.burstLength.value];
+  }
+
+  setPaused(paused) {
+    const b = this.root.querySelector('[data-action="pause"]');
+    if (b) b.textContent = paused ? "Відновити вставки" : "Зупинити вставки";
+  }
+}
+
+return { PRESETS, Controls };
+})();
+
+// ---- src/ui/eventlog.js
+const __module_10 = (() => {
+// The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
+// of delayed inserts is one line, not thousands.
+
+const { el, bytes, clock, duration, INT, NUM2, partsText } = __module_7;
+const KINDS = {
+  merge: "злиття",
+  throttle: "гальмування",
+  partition: "партиції",
+  assignee: "призначувач",
+  insert: "вставки",
+};
+
+class EventLog {
+  constructor(root, onPick) {
+    this.root = root;
+    this.onPick = onPick;
+    this.entries = [];
+    this.enabled = new Set(["merge", "throttle", "partition"]);
+    this.throttleSecond = null;
+    this.dirty = true;
+    const filters = el("div", { class: "log-filters" });
+    for (const [kind, name] of Object.entries(KINDS)) {
+      const box = el("input", { type: "checkbox", checked: this.enabled.has(kind) });
+      box.addEventListener("change", () => { box.checked ? this.enabled.add(kind) : this.enabled.delete(kind); this.dirty = true; this.render(); });
+      filters.append(el("label", { class: "check" }, box, name));
+    }
+    this.list = el("ol", { class: "log", "aria-live": "off" });
+    root.append(filters, this.list);
+  }
+
+  clear() {
+    this.entries = [];
+    this.throttleSecond = null;
+    this.dirty = true;
+  }
+
+  push(t, kind, text, ref = null) {
+    this.entries.push({ t, kind, text, ref });
+    if (this.entries.length > 400) this.entries.shift();
+    this.dirty = true;
+  }
+
+  observe(type, t, ...data) {
+    if (type === "assign") {
+      const [task, found] = data;
+      const sizes = task.payload.map(p => p.level);
+      const lo = Math.min(...sizes), hi = Math.max(...sizes);
+      const why = found.tiered ? `${found.count} сусідніх кусків одного рівня` : `base′ = ${NUM2.format(found.loweredBase)}, оцінка ${bytes(found.score)}`;
+      this.push(t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} рівнів ${lo === hi ? lo : lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
+    } else if (type === "merged") {
+      const [task, part] = data;
+      this.push(t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
+    } else if (type === "arrival") {
+      const delay = data[0];
+      if (delay === null || delay > 0) {
+        const second = Math.floor(t);
+        let e = this.throttleSecond;
+        if (!e || e.second !== second) {
+          e = this.throttleSecond = { second, delayed: 0, rejected: 0, maxDelay: 0, entry: null };
+          e.entry = { t, kind: "throttle", text: "", ref: null };
+          this.entries.push(e.entry);
+          if (this.entries.length > 400) this.entries.shift();
+        }
+        if (delay === null) e.rejected++;
+        else { e.delayed++; e.maxDelay = Math.max(e.maxDelay, delay); }
+        const parts = [];
+        if (e.delayed) parts.push(`затримано ${INT.format(e.delayed)} (до ${INT.format(e.maxDelay)} мс)`);
+        if (e.rejected) parts.push(`відхилено ${INT.format(e.rejected)} з TOO_MANY_PARTS`);
+        e.entry.text = "Вставки за секунду: " + parts.join(", ");
+        this.dirty = true;
+      }
+    } else if (type === "insert") {
+      const part = data[0];
+      this.push(t, "insert", `Вставка: новий кусок ${bytes(part.size)} у партиції ${part.partition}`, { part: part.id });
+    } else if (type === "sleep") {
+      this.push(t, "assignee", `Призначувач не знайшов злиття і заснув на ${duration(data[0])}`);
+    } else if (type === "rotate") {
+      this.push(t, "partition", `Почалась партиція ${data[0]}`);
+    } else if (type === "drop") {
+      this.push(t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}`);
+    }
+  }
+
+  render() {
+    if (!this.dirty) return;
+    this.dirty = false;
+    const shown = [];
+    for (let i = this.entries.length - 1; i >= 0 && shown.length < 120; i--) {
+      const e = this.entries[i];
+      if (this.enabled.has(e.kind)) shown.push(e);
+    }
+    this.list.replaceChildren(...shown.map(e => {
+      const item = el("li", { class: "log-" + e.kind }, el("span", { class: "log-time" }, clock(e.t)), el("span", { class: "log-kind" }, KINDS[e.kind]), el("span", {}, e.text));
+      if (e.ref) {
+        item.classList.add("pick");
+        item.addEventListener("click", () => this.onPick(e.ref));
+      }
+      return item;
+    }));
+  }
+}
+
+return { KINDS, EventLog };
+})();
+
+// ---- src/ui/inspector.js
+const __module_11 = (() => {
+// What is selected (a part or a merge task) and why the selector chose the last merge.
+
+const { el, bytes, clock, duration, INT, NUM2, NUM3, PCT, partsText } = __module_7;
+const MIB = 1024 * 1024;
+
+function rows(list) {
+  return el("dl", { class: "kv" }, ...list.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
+}
+
+function findPart(table, id) {
+  for (const parts of table.partitions.values()) for (const p of parts) if (p.id === id) return p;
+  return null;
+}
+
+class Inspector {
+  constructor(root, explainRoot, onPick) {
+    this.onPick = onPick;
+    this.root = root;
+    this.explainRoot = explainRoot;
+    this.selection = null;
+    this.lastExplainKey = null;
+  }
+
+  select(selection) {
+    this.selection = selection;
+  }
+
+  draw(table) {
+    const s = this.selection, now = table.engine.now;
+    if (!s) {
+      this.root.replaceChildren(el("p", { class: "empty" }, "Клацніть на кусок у дереві або на задачу в пулі, щоб побачити подробиці. Записи журналу теж клікабельні."));
+    } else if (s.part != null) {
+      const p = findPart(table, s.part);
+      if (!p) {
+        this.root.replaceChildren(el("p", { class: "empty" }, `Куска №${s.part} вже немає: його поглинуло злиття або видалено партицію.`));
+      } else {
+        const task = p.merging ? table.pool.tasks.find(t => t.payload.includes(p)) : null;
+        const list = [
+          ["кусок", `№${p.id}, партиція ${p.partition}`],
+          ["рівень злиття", String(p.level)],
+          ["розмір", bytes(p.size)],
+          ["вставок у куску", `${INT.format(p.blocks)} (блоки ${INT.format(p.minBlock)}–${INT.format(p.maxBlock)})`],
+          ["створено", `${duration(now - p.createdAt)} тому`],
+          ["стан", task ? `зливається в задачі №${task.id}` : "вільний, чекає селектора"],
+        ];
+        if (p.origin) list.push(["походження", `злиття ${partsText(p.origin.sources)} рівнів ${[...new Set(p.origin.levels)].sort((a, b) => a - b).join(", ")}, ${duration(p.createdAt - p.origin.assignedAt)}`]);
+        else list.push(["походження", "одна вставка"]);
+        const body = [el("h3", {}, "Кусок даних"), rows(list)];
+        if (task) body.push(el("button", { class: "btn small", type: "button", onclick: () => this.onPick({ task: task.id }) }, `Показати задачу №${task.id}`));
+        this.root.replaceChildren(...body);
+      }
+    } else if (s.task != null) {
+      const task = table.pool.tasks.find(t => t.id === s.task);
+      if (!task) {
+        this.root.replaceChildren(el("p", { class: "empty" }, `Злиття №${s.task} вже завершилось.`));
+      } else {
+        const remaining = table.pool.remainingNow(task);
+        const done = 1 - remaining / task.work;
+        const levels = task.payload.map(p => p.level);
+        this.root.replaceChildren(el("h3", {}, `Злиття №${task.id}`), rows([
+          ["джерела", `${partsText(task.payload.length)}, рівні ${Math.min(...levels)}–${Math.max(...levels)}`],
+          ["обсяг", bytes(task.priority)],
+          ["робота", `${duration(task.work)} часу потоку`],
+          ["виконано", PCT.format(Math.max(0, Math.min(1, done)))],
+          ["швидкість", task.rate > 0 ? `${NUM2.format(task.rate)} потоку` : "чекає вільного потоку"],
+          ["триває", duration(now - task.createdAt)],
+          ["залишилось", task.rate > 0 ? `≈ ${duration(remaining / task.rate)} при поточному розподілі` : "невідомо, задача стоїть"],
+        ]), el("p", { class: "note" }, "Джерела виділені в дереві, решту кусків приглушено."));
+      }
+    }
+    this.drawExplain(table);
+  }
+
+  drawExplain(table) {
+    const x = table.lastSelection, m = table.lastMerge;
+    const key = `${x ? x.at + x.outcome : ""}|${m ? m.task : ""}`;
+    if (key === this.lastExplainKey) return;
+    this.lastExplainKey = key;
+    const root = this.explainRoot;
+    const status = !x ? "Селектор ще не запускався."
+      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті, вибір пропущено.`
+      : x.outcome === "disabled" ? `Останній запуск (${clock(x.at)}): злиття вимкнені, max_bytes_to_merge_at_max_space_in_pool = 0.`
+      : x.outcome === "nothing" && !x.considered ? `Останній запуск (${clock(x.at)}): немає двох сусідніх вільних кусків у межах розміру злиття; призначувач засинає.`
+      : x.outcome === "nothing" ? `Останній запуск (${clock(x.at)}): перевірено ${INT.format(x.considered)} діапазонів, жоден не пройшов умову допуску; призначувач засинає.`
+      : `Останній запуск (${clock(x.at)}) призначив злиття №${x.task}.`;
+    const out = [el("p", { class: "status-line" }, status)];
+    if (!m) { root.replaceChildren(...out); return; }
+    out.push(el("h3", {}, `Злиття №${m.task}, ${clock(m.at)}`));
+    if (m.tiered) {
+      out.push(el("p", {}, `Tiered: перший ряд із ${m.count} сусідніх вільних кусків одного рівня, ${bytes(m.sumSize)}.`));
+      root.replaceChildren(...out);
+      return;
+    }
+    const lhs = (m.sumSize + m.count * 5 * MIB) / (m.maxSize + 5 * MIB);
+    out.push(el("p", {}, `${partsText(m.count)} у партиції ${m.key}, позиції ${m.begin}–${m.end - 1}, разом ${bytes(m.sumSize)}.`), rows([
+      ["умова допуску", `(Σ + k·5 МБ)/(max + 5 МБ) = ${NUM2.format(lhs)} ≥ base′ = ${NUM2.format(m.loweredBase)}`],
+      ["base′", `з ${NUM2.format(table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
+      ["оцінка", `(Σ + 5 МБ·k)/(k − 1.9) = ${bytes(m.score)}${m.aligned ? ", знижена за вирівнювання з лівим сусідом" : ""}`],
+      ["відкинуто дрібних справа", String(m.trimmed || 0)],
+      ["кандидатів", `${INT.format(m.allowed)} допустимих з ${INT.format(m.considered)}`],
+      ["межа розміру злиття", `${bytes(m.maxBytes)}, вільних місць у пулі ${m.freeEntries}`],
+      ["ліміт довжини діапазону", String(m.maxParts)],
+      ["робота злиття", `${NUM3.format(m.work)} с часу потоку`],
+    ]));
+    root.replaceChildren(...out);
+  }
+}
+
+return { findPart, Inspector };
+})();
+
+// ---- src/ui/poolview.js
+const __module_12 = (() => {
+// The background pool: every task slot with the merge in it and how much of its work is done.
+// A task keeps its slot until it finishes, so the picture does not jump.
+
+const { el, bytes, PCT, partsText } = __module_7;
+const MAX_SHOWN = 64;
+
+class PoolView {
+  constructor(root, { onPick }) {
+    this.root = root;
+    this.onPick = onPick;
+    this.slotOf = new Map();
+    this.slots = [];
+    this.nodes = [];
+    this.more = el("div", { class: "pool-more", hidden: true });
+    this.grid = el("div", { class: "pool" });
+    root.append(this.grid, this.more);
+    this.selected = null;
+  }
+
+  reset() {
+    this.slotOf.clear();
+    this.slots = [];
+    this.selected = null;
+  }
+
+  // keeps the task -> slot map in step with the pool
+  sync(pool) {
+    const live = new Set(pool.tasks.map(t => t.id));
+    for (const [id, slot] of this.slotOf) if (!live.has(id)) { this.slotOf.delete(id); this.slots[slot] = null; }
+    for (const t of pool.tasks) {
+      if (this.slotOf.has(t.id)) continue;
+      let slot = this.slots.indexOf(null);
+      if (slot < 0) slot = this.slots.length;
+      this.slots[slot] = t.id;
+      this.slotOf.set(t.id, slot);
+    }
+    // trailing free slots above the current capacity disappear
+    while (this.slots.length > pool.maxTasks && this.slots[this.slots.length - 1] == null) this.slots.pop();
+  }
+
+  draw(pool) {
+    this.sync(pool);
+    const count = Math.max(pool.maxTasks, this.slots.length);
+    const shown = Math.min(count, MAX_SHOWN);
+    while (this.nodes.length < shown) {
+      const i = this.nodes.length;
+      const node = el("button", { class: "slot free", type: "button" }, el("span", { class: "meta" }, el("span", {}, "вільно"), el("span", {}, "")), el("span", { class: "bar" }, el("span", { style: "width:0" })));
+      node.addEventListener("click", () => { const id = this.slots[i]; if (id != null) this.onPick({ task: id }); });
+      this.nodes.push(node);
+      this.grid.append(node);
+    }
+    this.nodes.forEach((n, i) => { n.hidden = i >= shown; if (n.hidden) n.className = "slot free"; });
+    const byId = new Map(pool.tasks.map(t => [t.id, t]));
+    for (let i = 0; i < shown; i++) {
+      const node = this.nodes[i], id = this.slots[i], task = id != null ? byId.get(id) : null;
+      const [label, pct] = node.firstElementChild.children;
+      const fill = node.lastElementChild.firstElementChild;
+      if (!task) {
+        node.className = "slot free" + (i >= pool.maxTasks ? " over" : "");
+        label.textContent = "вільно";
+        pct.textContent = "";
+        fill.style.width = "0";
+        node.disabled = true;
+        continue;
+      }
+      node.disabled = false;
+      const done = Math.max(0, Math.min(1, 1 - pool.remainingNow(task) / task.work));
+      node.className = "slot" + (task.rate > 0 ? "" : " waiting") + (task.id === this.selected ? " selected" : "");
+      label.textContent = `${task.payload.length} шт · ${bytes(task.priority)}`;
+      node.title = `Злиття №${task.id}: ${partsText(task.payload.length)}, ${bytes(task.priority)}`;
+      pct.textContent = PCT.format(done);
+      fill.style.width = (100 * done) + "%";
+    }
+    const hidden = pool.tasks.filter(t => this.slotOf.get(t.id) >= shown).length;
+    this.more.hidden = count <= shown;
+    this.more.textContent = `Показано ${shown} з ${count} місць; ще ${hidden} задач не вмістились.`;
+  }
+}
+
+return { PoolView };
+})();
+
+// ---- src/ui/sampler.js
+const __module_13 = (() => {
+// Time series of a running model: one sample per second of model time, from an engine event that draws no
+// random numbers, so sampling does not change the model's trajectory.
+
+class Sampler {
+  constructor(table, capacity = 7200) {
+    this.table = table;
+    this.capacity = capacity;
+    this.samples = [];
+    this.counts = { accepted: 0, delayed: 0, rejected: 0, maxDelay: 0, mergeTime: 0, merges: 0 };
+    this.prevInserted = 0;
+    this.prevMerged = 0;
+    table.engine.schedule(1, () => this.sample());
+  }
+
+  // called by the lab for every model event
+  observe(type, t, ...data) {
+    const c = this.counts;
+    if (type === "arrival") {
+      const delay = data[0];
+      if (delay === null) c.rejected++;
+      else if (delay > 0) { c.delayed++; c.maxDelay = Math.max(c.maxDelay, delay); }
+    } else if (type === "insert") c.accepted++;
+    else if (type === "merged") { c.merges++; c.mergeTime += t - data[0].createdAt; }
+  }
+
+  sample() {
+    const tb = this.table;
+    tb.engine.schedule(1, () => this.sample());
+    let largest = 0, fresh = 0, maxLevel = 0;
+    for (const parts of tb.partitions.values()) {
+      if (parts.length > largest) largest = parts.length;
+      for (const p of parts) { if (p.level === 0) fresh++; if (p.level > maxLevel) maxLevel = p.level; }
+    }
+    const c = this.counts;
+    const s = {
+      t: tb.engine.now, parts: tb.partCount, largest, fresh, maxLevel, partitions: tb.partitions.size,
+      busy: tb.pool.busyThreads(), tasks: tb.pool.tasks.length, threads: tb.pool.threads,
+      accepted: c.accepted, delayed: c.delayed, rejected: c.rejected, maxDelay: c.maxDelay,
+      inserted: tb.insertedBytes - this.prevInserted, merged: tb.mergedBytes - this.prevMerged,
+      merges: c.merges, mergeTime: c.mergeTime,
+    };
+    this.prevInserted = tb.insertedBytes;
+    this.prevMerged = tb.mergedBytes;
+    this.counts = { accepted: 0, delayed: 0, rejected: 0, maxDelay: 0, mergeTime: 0, merges: 0 };
+    this.samples.push(s);
+    if (this.samples.length > this.capacity) this.samples.shift();
+  }
+
+  // the last `seconds` samples
+  window(seconds) {
+    const n = this.samples.length;
+    if (!n) return [];
+    const from = this.samples[n - 1].t - seconds;
+    let i = n - 1;
+    while (i > 0 && this.samples[i - 1].t > from) i--;
+    return this.samples.slice(i);
+  }
+
+  // sums over the last `seconds` of model time
+  totals(seconds) {
+    const out = { accepted: 0, delayed: 0, rejected: 0, inserted: 0, merged: 0, merges: 0, mergeTime: 0, span: 0 };
+    for (const s of this.window(seconds)) {
+      for (const k of ["accepted", "delayed", "rejected", "inserted", "merged", "merges", "mergeTime"]) out[k] += s[k];
+      out.span++;
+    }
+    return out;
+  }
+}
+
+return { Sampler };
+})();
+
+// ---- src/ui/tree.js
+const __module_14 = (() => {
+// The parts of every partition as rectangles: the row is the merge level, the horizontal position is which
+// inserts a part holds, on a log scale from the newest inserts at the right to the oldest at the left.
+
+const { cssVar, tooltip, bytes, duration, INT } = __module_7;
+class PartsTree {
+  constructor(canvas, { onPick }) {
+    this.canvas = canvas;
+    this.onPick = onPick;
+    this.rects = [];
+    this.selectedPart = null;
+    this.highlightTask = null;
+    this.maxBands = 1;
+    this.maxLevel = 4;
+    canvas.addEventListener("pointermove", e => this.hover(e));
+    canvas.addEventListener("pointerleave", () => tooltip.hide());
+    canvas.addEventListener("click", e => {
+      const hit = this.hit(e);
+      this.onPick(hit ? { part: hit.p.id } : null);
+    });
+  }
+
+  reset() {
+    this.maxBands = 1;
+    this.maxLevel = 4;
+    this.selectedPart = null;
+    this.highlightTask = null;
+  }
+
+  layout(width, table) {
+    this.maxBands = Math.max(this.maxBands, table.partitions.size);
+    for (const parts of table.partitions.values()) for (const p of parts) if (p.level > this.maxLevel) this.maxLevel = p.level;
+    const levels = Math.min(this.maxLevel, 11) + 1;
+    const bands = this.maxBands, gap = 3, bandPad = 18;
+    const rowH = Math.max(9, Math.min(26, Math.floor((340 - bands * bandPad) / (bands * levels) - gap)));
+    const bandH = levels * (rowH + gap) + bandPad;
+    return { left: 96, right: width - 12, top: 6, rowH, gap, levels, bandH, bands, height: 6 + bands * bandH + 30 };
+  }
+
+  draw(table) {
+    const canvas = this.canvas;
+    const width = canvas.parentElement.clientWidth - 36;
+    if (width <= 0) return;
+    const L = this.layout(width, table);
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(L.height * dpr)) {
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(L.height * dpr);
+      canvas.style.height = L.height + "px";
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, L.height);
+    const colors = [0, 1, 2, 3, 4].map(i => cssVar(`--level-${i}`));
+    const active = cssVar("--series-2"), ink = cssVar("--text-primary"), muted = cssVar("--text-muted");
+    const grid = cssVar("--grid"), secondary = cssVar("--text-secondary");
+    const last = table.lastBlock, maxAge = Math.max(10, last);
+    const lg = Math.log10(1 + maxAge);
+    const X = age => L.left + (L.right - L.left) * (1 - Math.log10(1 + age) / lg);
+    const task = this.highlightTask != null ? table.pool.tasks.find(t => t.id === this.highlightTask) : null;
+    const sources = task ? new Set(task.payload) : null;
+    this.rects = [];
+    ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle";
+    const keys = [...table.partitions.keys()].sort((a, b) => b - a);  // newest on top
+    keys.forEach((key, b) => {
+      const top = L.top + b * L.bandH;
+      const bottom = top + L.levels * (L.rowH + L.gap);
+      const parts = table.partitions.get(key);
+      ctx.fillStyle = secondary;
+      ctx.textAlign = "left";
+      ctx.fillText(table.cfg.partition_seconds || table.partitions.size > 1 ? `партиція ${key}` : "таблиця", 0, top + 7);
+      ctx.fillStyle = muted;
+      ctx.fillText(`${INT.format(parts.length)} шт.`, 0, top + 21);
+      if (table.pendingDrops.has(key)) { ctx.fillStyle = active; ctx.fillText("видаляється", 0, top + 35); }
+      ctx.textAlign = "right";
+      ctx.fillStyle = muted;
+      for (let lv = 0; lv < L.levels; lv++) {
+        const y = bottom - (lv + 1) * (L.rowH + L.gap) + L.gap;
+        if (L.rowH >= 9) ctx.fillText(lv === L.levels - 1 && this.maxLevel > 11 ? `${lv}+` : String(lv), L.left - 8, y + L.rowH / 2);
+      }
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(L.left, Math.round(bottom) + 0.5);
+      ctx.lineTo(L.right, Math.round(bottom) + 0.5);
+      ctx.stroke();
+      for (const p of parts) {
+        const lv = Math.min(p.level, L.levels - 1);
+        const y = bottom - (lv + 1) * (L.rowH + L.gap) + L.gap;
+        const x0 = X(last - p.minBlock + 1), x1 = X(last - p.maxBlock);
+        const w = x1 - x0;
+        const drawW = w > 3 ? w - 1 : Math.max(w, 0.8);  // 1px surface gap between neighbours
+        ctx.globalAlpha = sources && !sources.has(p) ? 0.28 : 1;
+        ctx.fillStyle = colors[Math.min(p.level, 4)];
+        ctx.fillRect(x0, y, drawW, L.rowH);
+        if (p.merging) {
+          ctx.strokeStyle = active;
+          ctx.lineWidth = sources && sources.has(p) ? 2.5 : 1.5;
+          ctx.strokeRect(x0 + 0.75, y + 0.75, Math.max(0.5, drawW - 1.5), L.rowH - 1.5);
+        }
+        if (p.id === this.selectedPart) {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x0 - 1.5, y - 1.5, Math.max(3, drawW + 3), L.rowH + 3);
+        }
+        this.rects.push({ x0, x1: x0 + Math.max(drawW, 4), y, h: L.rowH, p });
+      }
+      ctx.globalAlpha = 1;
+    });
+    const axisY = L.top + L.bands * L.bandH + 4;
+    ctx.fillStyle = muted;
+    ctx.textBaseline = "top";
+    ctx.textAlign = "center";
+    for (const age of [0, 10, 100, 1000, 10000, 100000, 1000000]) {
+      if (age > maxAge) break;
+      ctx.fillText(age === 0 ? "щойно" : INT.format(age), Math.min(L.right - 14, Math.max(L.left + 10, X(age))), axisY);
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = secondary;
+    ctx.fillText("вставок тому", L.left, axisY + 14);
+    this.table = table;
+  }
+
+  hit(e) {
+    const r = this.canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    let best = null;
+    for (const q of this.rects) {
+      if (y < q.y - 1 || y > q.y + q.h + 1) continue;
+      if (x >= q.x0 - 2 && x <= q.x1 + 2) {
+        const d = Math.abs(x - (q.x0 + q.x1) / 2);
+        if (!best || d < best.d) best = { ...q, d };
+      }
+    }
+    return best;
+  }
+
+  hover(e) {
+    const hit = this.hit(e);
+    if (!hit) { tooltip.hide(); this.canvas.style.cursor = "default"; return; }
+    this.canvas.style.cursor = "pointer";
+    const p = hit.p, now = this.table.engine.now;
+    tooltip.show(e.clientX, e.clientY, `Кусок №${p.id}, рівень ${p.level}`, [
+      { name: "розмір", value: bytes(p.size) },
+      { name: "вставок у куску", value: INT.format(p.blocks) },
+      { name: "вік", value: duration(Math.max(0, now - p.createdAt)) },
+      { name: "стан", value: p.merging ? "зливається" : "вільний" },
+      { name: "", value: "клацніть, щоб дослідити" },
+    ]);
+  }
+}
+
+return { PartsTree };
+})();
+
+// ---- src/ui/lab.js
+const __module_15 = (() => {
+// The laboratory: a live model in the page. The model runs in the animation loop with a time budget per frame,
+// so the page stays responsive; when the model cannot keep up, the real speed is shown next to the requested one.
+
+const { Table } = __module_5;
+const { CALIBRATED } = __module_6;
+const { el, sv, bytes, clock, INT, NUM, NUM2, PCT, plural } = __module_7;
+const { Chart, S } = __module_8;
+const { Controls, PRESETS } = __module_9;
+const { EventLog } = __module_10;
+const { Inspector, findPart } = __module_11;
+const { PoolView } = __module_12;
+const { Sampler } = __module_13;
+const { PartsTree } = __module_14;
+const FRAME_BUDGET_MS = 14;
+const SIGNIFICANT = new Set(["insert", "assign", "merged", "drop", "rotate", "arrival"]);
+
+class Lab {
+  constructor() {
+    this.playing = false;
+    this.speed = 10;
+    this.realSpeed = 0;
+    this.window = 600;
+    this.presetKey = "normal";
+    this.seed = 1;
+    this.$ = id => document.getElementById(id);
+    this.tree = new PartsTree(this.$("tree"), { onPick: s => this.pick(s) });
+    this.pool = new PoolView(this.$("pool"), { onPick: s => this.pick(s) });
+    this.inspector = new Inspector(this.$("inspector"), this.$("explain"), s => this.pick(s));
+    this.log = new EventLog(this.$("log"), ref => this.pick(ref));
+    this.controls = new Controls(this.$("params"), this);
+    this.bindToolbar();
+    this.buildCharts();
+    this.load("normal");
+    let last = null;
+    const frame = ts => {
+      this.frame(last == null ? 0 : Math.min(0.25, (ts - last) / 1000));
+      last = ts;
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    setInterval(() => this.slowUpdate(), 400);
+  }
+
+  // the API of the parameter panel
+  config() { return this.table.cfg; }
+
+  configure(changes) {
+    this.table.configure(changes);
+    this.controls.sync();
+    this.drawAll();
+  }
+
+  load(presetKey) {
+    this.presetKey = presetKey;
+    const preset = PRESETS[presetKey];
+    this.table = new Table({ ...CALIBRATED, seed: this.seed, ...preset.config });
+    this.sampler = new Sampler(this.table);
+    this.log.clear();
+    this.tree.reset();
+    this.pool.reset();
+    this.inspector.select(null);
+    this.table.observer = (type, t, ...data) => {
+      this.sampler.observe(type, t, ...data);
+      this.log.observe(type, t, ...data);
+      if (SIGNIFICANT.has(type) && (type !== "arrival" || data[0] !== 0)) this.lastSignificant = type;
+    };
+    for (const [at, name, ...args] of preset.actions || []) {
+      this.table.engine.schedule(at, () => {
+        if (name === "burst") {
+          this.table.burst(...args);
+          this.log.push(this.table.engine.now, "throttle", `Сплеск: потік ×${args[0]} на ${args[1]} с`);
+        }
+      });
+    }
+    this.table.start();
+    this.paused = false;
+    this.controls.sync(presetKey);
+    this.controls.setPaused(false);
+    this.drawAll();
+    this.slowUpdate();
+    if (!this.playing) this.toggle();  // start right away: the point is to watch it run
+  }
+
+  action(name) {
+    const tb = this.table, now = tb.engine.now;
+    if (name === "burst") {
+      const [factor, length] = this.controls.burstSettings();
+      tb.burst(factor, length);
+      this.log.push(now, "throttle", `Сплеск: потік ×${factor} на ${length} с`);
+    } else if (name === "pause") {
+      this.paused = !this.paused;
+      tb.setInsertsPaused(this.paused);
+      this.controls.setPaused(this.paused);
+      this.log.push(now, "insert", this.paused ? "Вставки зупинено" : "Вставки відновлено");
+    } else if (name === "rotate") {
+      tb.newPartitionNow();
+    } else if (name === "drop") {
+      if (!tb.dropOldestPartition()) this.log.push(now, "partition", "Найстарішу партицію не видалено: у ній ще йдуть злиття, її видалять після них");
+    }
+    this.controls.sync();
+    this.drawAll();
+  }
+
+  bindToolbar() {
+    this.$("play").addEventListener("click", () => this.toggle());
+    this.$("step").addEventListener("click", () => this.step());
+    this.$("speed").addEventListener("change", e => { this.speed = +e.target.value; });
+    this.$("reset").addEventListener("click", () => this.load(this.presetKey));
+    this.$("seed").addEventListener("change", e => { this.seed = Math.max(1, Math.round(+e.target.value) || 1); e.target.value = this.seed; this.load(this.presetKey); });
+    this.$("window").addEventListener("change", e => { this.window = +e.target.value; this.updateCharts(); });
+    document.addEventListener("keydown", e => {
+      if (this.$("tab-lab").hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      if (e.code === "Space") { e.preventDefault(); this.toggle(); }
+      if (e.code === "ArrowRight") { e.preventDefault(); this.step(); }
+    });
+  }
+
+  toggle() {
+    this.playing = !this.playing;
+    this.$("play").textContent = this.playing ? "⏸ Пауза" : "▶ Пуск";
+  }
+
+  pause() {
+    if (this.playing) this.toggle();
+  }
+
+  // to the next event that changes something visible
+  step() {
+    this.pause();
+    this.lastSignificant = null;
+    for (let i = 0; i < 100000 && !this.lastSignificant; i++) if (!this.table.engine.step()) break;
+    this.drawAll();
+    this.slowUpdate();
+  }
+
+  frame(dt) {
+    if (!this.playing) return;
+    const engine = this.table.engine;
+    const target = engine.now + dt * this.speed;
+    const started = performance.now(), from = engine.now;
+    while (engine.peekTime() <= target) {
+      engine.step();
+      if (performance.now() - started > FRAME_BUDGET_MS) break;
+    }
+    if (engine.peekTime() > target) engine.now = target;
+    if (dt > 0) this.realSpeed = 0.9 * this.realSpeed + 0.1 * ((engine.now - from) / dt);
+    this.drawAll();
+  }
+
+  pick(selection) {
+    if (selection && selection.task != null && !this.table.pool.tasks.some(t => t.id === selection.task)) {
+      // a finished merge: show the part it made, if it still exists
+      const part = findPart(this.table, selection.task);
+      selection = part ? { part: part.id } : selection;
+    }
+    this.inspector.select(selection);
+    this.tree.selectedPart = selection && selection.part != null ? selection.part : null;
+    this.tree.highlightTask = selection && selection.task != null ? selection.task : null;
+    this.pool.selected = this.tree.highlightTask;
+    this.drawAll();
+  }
+
+  drawAll() {
+    const tb = this.table;
+    if (this.inspector.selection && this.inspector.selection.task != null) {
+      this.tree.highlightTask = this.inspector.selection.task;
+      this.pool.selected = this.inspector.selection.task;
+    }
+    this.tree.draw(tb);
+    this.pool.draw(tb.pool);
+    this.tiles();
+    this.inspector.draw(tb);
+    this.$("clock").textContent = clock(tb.engine.now);
+    const real = this.playing && this.realSpeed < this.speed * 0.8 ? ` (фактично ×${NUM.format(this.realSpeed)})` : "";
+    this.$("speed-real").textContent = real;
+  }
+
+  // things that need not change at frame rate
+  slowUpdate() {
+    this.log.render();
+    this.updateCharts();
+    if (!this.$("tab-model").hidden) this.updateDiagram();
+  }
+
+  // live numbers on the model diagram
+  updateDiagram() {
+    const tb = this.table, cfg = tb.cfg, set = (id, text) => { this.$(id).textContent = text; };
+    const w = this.sampler.totals(10), span = Math.max(1, w.span);
+    set("live-clients", cfg.arrivals === "open" ? `${NUM.format(cfg.insert_rate)} вставок/с` : `${INT.format(tb.activeClients)} клієнтів`);
+    let n = 0;
+    for (const parts of tb.partitions.values()) n = Math.max(n, parts.length);
+    set("live-check", n >= cfg.parts_to_throw_insert ? `n = ${INT.format(n)}: відхилення`
+      : n >= cfg.parts_to_delay_insert ? `n = ${INT.format(n)}: затримка` : `n = ${INT.format(n)}: без затримки`);
+    set("live-parts", `${INT.format(tb.partCount)} шт`);
+    set("live-assignee", tb.assigneeAt === Infinity || tb.assigneeAt <= tb.engine.now ? `${INT.format(w.merges / span * 60)} злиттів/хв` : `спить ${NUM.format(tb.assigneeAt - tb.engine.now)} с`);
+    const m = tb.lastMerge;
+    set("live-selector", m ? (m.tiered ? `${m.count} шт` : `${m.count} шт, base′ ${NUM2.format(m.loweredBase)}`) : "—");
+    set("live-pool", `${NUM.format(tb.pool.busyThreads())} з ${tb.pool.threads} потоків`);
+    // the newest partition as a row of parts: width by the logarithm of the size, colour by level
+    const parts = [...tb.partitions.values()].pop() || [];
+    const shown = parts.slice(-40);
+    const weights = shown.map(p => Math.log10(Math.max(10, p.size / 1e5)));
+    const total = weights.reduce((a, b) => a + b, 0) || 1;
+    const g = this.$("model-parts");
+    g.replaceChildren();
+    let x = 898;
+    shown.forEach((p, i) => {
+      const w = 270 * weights[i] / total;
+      g.append(sv("rect", { x, y: 164, width: Math.max(0.5, w - 1.5), height: 16, rx: 2,
+                            style: `fill:var(--level-${Math.min(4, p.level)})${p.merging ? ";stroke:var(--series-2);stroke-width:1.5" : ""}` }));
+      x += w;
+    });
+  }
+
+  tiles() {
+    const tb = this.table, cfg = tb.cfg;
+    let largest = 0;
+    for (const parts of tb.partitions.values()) largest = Math.max(largest, parts.length);
+    this.$("v-parts").textContent = INT.format(tb.partCount);
+    const n = tb.partitions.size;
+    this.$("d-parts").textContent = n > 1 || cfg.partition_seconds
+      ? `${n} ${plural(n, "партиція", "партиції", "партицій")}, найбільша ${INT.format(largest)}`
+      : largest >= cfg.parts_to_throw_insert ? `≥ ${INT.format(cfg.parts_to_throw_insert)}: вставки відхиляються`
+      : largest >= cfg.parts_to_delay_insert ? `≥ ${INT.format(cfg.parts_to_delay_insert)}: вставки гальмуються`
+      : `гальмування з ${INT.format(cfg.parts_to_delay_insert)}`;
+    const busy = tb.pool.busyThreads(), threads = tb.pool.threads;
+    this.$("v-busy").replaceChildren(NUM.format(busy), el("small", {}, "з " + threads));
+    const mb = this.$("m-busy");
+    mb.firstElementChild.style.width = Math.min(100, 100 * busy / threads) + "%";
+    mb.classList.toggle("full", busy >= threads - 1e-9);
+    this.$("v-tasks").replaceChildren(INT.format(tb.pool.tasks.length), el("small", {}, "з " + tb.pool.maxTasks));
+    this.$("m-tasks").firstElementChild.style.width = Math.min(100, 100 * tb.pool.tasks.length / tb.pool.maxTasks) + "%";
+    const w = this.sampler.totals(60);
+    this.$("v-wa").textContent = w.inserted ? NUM2.format(w.merged / w.inserted) : "—";
+    this.$("d-wa").textContent = tb.insertedBytes ? `з початку ${NUM2.format(tb.mergedBytes / tb.insertedBytes)}` : "";
+    const span = Math.max(1, w.span), arrivals = w.accepted + w.rejected;
+    this.$("v-rate").replaceChildren(INT.format(w.accepted / span), el("small", {}, "/с прийнято"));
+    const d = this.$("d-rate");
+    d.replaceChildren(el("span", { class: "status warning" }, el("span", { class: "icon" }, "▲"), `затримано ${arrivals ? PCT.format(w.delayed / arrivals) : "0%"}`), "  ",
+                      el("span", { class: "status critical" }, el("span", { class: "icon" }, "✕"), `відхилено ${arrivals ? PCT.format(w.rejected / arrivals) : "0%"}`));
+    this.$("v-merge").textContent = w.merges ? NUM.format(w.mergeTime / w.merges) + " с" : "—";
+    this.$("d-merge").textContent = `${INT.format(w.merges / span * 60)} злиттів за хвилину · ${bytes(w.merged / span)}/с`;
+  }
+
+  buildCharts() {
+    const minutes = v => clock(v * 60);
+    const title = x => "момент " + clock(x * 60);
+    const opts = extra => ({ height: 190, x: { format: minutes }, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [], ...extra });
+    this.charts = {
+      parts: new Chart(this.$("c-parts"), opts({ valueFormat: v => INT.format(v) })),
+      busy: new Chart(this.$("c-busy"), opts({ valueFormat: v => NUM.format(v) })),
+      inserts: new Chart(this.$("c-inserts"), opts({ valueFormat: v => NUM.format(v) + "/с" })),
+      wa: new Chart(this.$("c-wa"), opts({ y: { min: 0, format: v => NUM.format(v) }, valueFormat: v => NUM2.format(v) })),
+    };
+  }
+
+  updateCharts() {
+    const tb = this.table, cfg = tb.cfg;
+    const w = this.sampler.window(this.window);
+    const T = w.map(s => s.t / 60);
+    const smooth = (key, k = 5) => w.map((_, i) => { let sum = 0, n = 0; for (let j = Math.max(0, i - k + 1); j <= i; j++) { sum += w[j][key]; n++; } return sum / n; });
+    const pts = arr => T.map((t, i) => [t, arr[i]]);
+    const partsSeries = [{ name: "усі куски", short: "усі", color: S(1), points: pts(w.map(s => s.parts)) }];
+    if (w.some(s => s.partitions > 1)) partsSeries.push({ name: "найбільша партиція", short: "найбільша", color: S(2), points: pts(w.map(s => s.largest)) });
+    partsSeries.push({ name: "свіжі куски (рівень 0)", short: "свіжі", color: S(3), points: pts(w.map(s => s.fresh)) });
+    this.charts.parts.setSeries(partsSeries, { thresholds: [{ y: cfg.parts_to_delay_insert, label: "parts_to_delay_insert" }, { y: cfg.parts_to_throw_insert, label: "parts_to_throw_insert" }] });
+    this.charts.busy.setSeries([
+      { name: "зайняті потоки", short: "потоки", color: S(1), points: pts(smooth("busy")) },
+      { name: "задачі в пулі", short: "задачі", color: S(2), points: pts(smooth("tasks")) },
+    ], { thresholds: [{ y: tb.pool.threads, label: "потоків у пулі" }] });
+    const accepted = smooth("accepted"), delayed = smooth("delayed"), rejected = smooth("rejected");
+    this.charts.inserts.setSeries([
+      { name: "прийняті без затримки", short: "без затримки", color: S(1), points: pts(accepted.map((v, i) => Math.max(0, v - delayed[i]))) },
+      { name: "затримані", short: "затримані", color: "var(--warning)", points: pts(delayed) },
+      { name: "відхилені", short: "відхилені", color: "var(--critical)", points: pts(rejected) },
+    ]);
+    const merged = smooth("merged", 60), inserted = smooth("inserted", 60);
+    this.charts.wa.setSeries([{ name: "підсилення записів за хвилину", color: S(1), points: pts(merged.map((m, i) => (inserted[i] ? m / inserted[i] : null))) }]);
+  }
+}
+
+return { Lab };
+})();
+
+// ---- src/data/results.js
+const __module_16 = (() => {
+// generated by tools/export_data.py from results/*.json and runs/validation_*.json
+const RESULTS = {"e1":{"rates":[25,50,100,150,200,225,250,275,300],"metrics":{"parts_mean":[[28.367259,0.103116],[48.455839,0.429975],[85.801717,0.636033],[111.659083,0.366292],[155.169932,2.524201],[281.831116,5.727119],[484.739521,10.668644],[664.144274,8.166479],[909.757373,11.882412]],"parts_quantiles_0.99":[[43.2,0.301621],[66.8,0.812139],[110.1,1.448487],[138.3,1.120979],[220.6,10.739358],[419.4,16.919027],[630.1,18.996883],[880.2,15.834382],[1283.1,16.710216]],"busy_threads_mean":[[2.025915,0.019595],[4.011072,0.043805],[7.633537,0.075143],[11.724626,0.082179],[15.43885,0.051924],[15.999682,0.000375],[16.0,0.0],[16.0,0.0],[16.0,0.0]],"all_threads_busy":[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.004275,0.002107],[0.68888,0.025421],[0.999731,0.000317],[1.0,0.0],[1.0,0.0],[1.0,0.0]],"write_amplification":[[5.447931,0.051952],[5.339883,0.056392],[5.080915,0.052669],[5.200636,0.05267],[5.120821,0.028806],[4.742771,0.034793],[4.325775,0.020987],[3.935326,0.019877],[3.585619,0.005306]],"fresh_waiting_mean":[[0.102526,0.000408],[0.053408,0.000188],[0.027633,6.1e-05],[0.018652,3.5e-05],[0.014077,3.5e-05],[0.017173,0.000752],[0.038038,0.001324],[0.042601,0.000366],[0.044379,0.000559]],"fresh_waiting_quantiles_0.99":[[0.398013,0.002648],[0.20061,0.001099],[0.10147,0.000313],[0.070054,0.000168],[0.052974,0.000195],[0.169387,0.027247],[0.475668,0.015186],[0.523896,0.006958],[0.551488,0.007638]],"merge_duration_mean":[[0.458402,0.005666],[0.4633,0.006812],[0.421012,0.003804],[0.42409,0.004572],[0.468987,0.011503],[0.667472,0.007167],[0.735508,0.003242],[0.68622,0.003072],[0.631206,0.001034]],"merge_duration_quantiles_0.99":[[2.990477,0.036521],[3.385244,0.035308],[4.028105,0.011472],[4.293212,0.018305],[4.962472,0.112699],[7.782581,0.055875],[8.726115,0.040897],[9.034944,0.08343],[9.137336,0.06553]],"fresh_lifetime_mean":[[0.254274,0.000823],[0.193783,0.000268],[0.137549,0.000253],[0.11944,8.1e-05],[0.126826,0.002334],[0.197865,0.00374],[0.281513,0.003621],[0.297044,0.000881],[0.303932,0.001162]]},"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"series":{"25":[0.0,19.5,25.6,23.4,25.0,24.2,26.1,21.1,25.9,23.6,27.3,27.2,27.2,31.6,28.5,25.5,28.9,23.1,24.4,24.8,23.0,26.4,27.5,28.8,27.4,31.2,25.6,27.4,27.8,31.1,28.3,26.3,27.1,27.1,27.7,34.3,30.8,29.4,29.4,25.3,27.3,26.0,28.8,30.2,30.7,33.5,30.3,33.0,27.6,27.2,27.2,28.2,28.7,27.1,29.7,31.3,29.2,29.0,30.5,33.4,31.1],"50":[0.0,32.2,38.5,39.6,41.4,39.0,41.9,39.0,39.5,44.8,41.6,47.1,42.4,43.9,46.6,46.9,52.3,46.3,48.6,48.6,42.7,40.4,47.6,45.2,50.6,50.8,48.4,49.2,48.0,46.2,46.8,49.1,44.2,44.2,54.6,46.1,50.4,50.9,46.7,49.7,49.5,44.8,54.0,51.8,51.5,48.7,47.3,52.6,52.5,50.2,52.3,49.2,50.3,51.2,48.3,47.3,52.4,53.2,49.7,51.3,52.0],"100":[0.0,55.3,61.9,69.2,70.5,72.1,70.7,69.5,69.8,65.5,69.3,75.2,74.2,73.4,74.7,71.2,76.6,77.9,76.1,78.6,77.0,79.3,79.6,79.0,81.8,81.0,78.8,84.6,85.4,80.8,86.1,84.9,83.3,84.4,85.3,89.4,85.7,83.9,87.0,88.9,87.0,87.1,92.6,91.6,92.5,89.1,94.6,89.8,93.1,91.6,94.8,93.7,94.5,98.6,99.2,97.0,95.8,94.4,94.5,91.9,94.4],"150":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,97.5,98.0,93.1,97.9,96.1,96.8,96.9,96.5,99.7,104.0,104.2,102.9,103.8,106.3,107.1,105.9,107.9,107.2,108.9,106.1,112.4,109.1,110.7,116.1,113.1,116.6,115.2,114.9,117.3,117.2,116.4,116.8,118.4,118.3,114.9,118.3,118.6,124.5,126.6,122.6,123.3,124.8,123.5,124.7,127.3,121.8,121.0,125.6,124.6,125.3],"200":[0.0,90.3,103.8,108.5,113.4,110.0,116.0,119.8,120.7,124.6,123.6,123.4,123.1,123.0,122.9,127.5,125.6,126.7,132.5,130.3,127.8,132.8,135.3,131.6,131.2,136.0,135.6,140.3,139.4,144.7,144.9,144.7,148.9,153.7,154.9,157.1,159.6,159.7,165.9,162.8,159.1,164.5,162.0,170.4,169.2,172.8,168.0,172.0,170.9,168.6,172.2,177.3,177.3,180.1,185.9,192.6,180.0,199.4,200.7,189.7,204.0],"225":[0.0,105.2,114.6,117.2,134.8,158.8,155.1,146.1,173.8,169.6,181.6,202.6,196.2,191.1,195.6,202.9,217.3,220.1,222.3,242.7,243.8,251.7,236.7,252.6,254.1,243.4,237.6,253.4,254.4,257.8,251.7,259.5,258.4,270.9,268.4,276.2,288.9,289.9,300.4,297.4,291.0,332.8,315.1,323.9,323.4,333.7,325.6,302.8,310.3,339.0,336.0,354.8,355.5,360.0,360.8,344.1,363.1,351.0,343.7,355.5,353.1],"250":[0.0,118.9,138.1,150.7,197.5,247.8,263.5,284.5,296.6,334.8,354.8,371.0,380.6,387.9,388.8,397.2,402.4,404.9,405.8,405.4,405.0,423.0,437.2,421.8,439.5,420.5,436.1,438.7,464.1,461.7,480.8,477.6,478.8,502.4,527.0,497.0,510.6,498.4,520.5,500.6,490.6,511.8,522.8,523.5,549.0,565.7,538.5,537.7,545.9,535.7,546.9,550.6,557.7,551.4,535.6,550.5,573.3,554.4,563.5,559.1,568.1],"275":[0.0,142.9,182.5,234.8,307.5,371.4,404.4,436.6,470.7,486.3,497.0,498.1,487.9,498.6,515.9,513.2,531.0,509.3,518.3,541.9,570.9,587.0,591.4,564.4,581.6,592.5,602.6,604.4,594.6,618.7,627.0,641.9,644.6,640.0,646.4,667.5,669.8,718.3,693.7,700.6,712.8,690.9,724.8,745.5,723.9,726.7,734.2,737.5,769.9,780.6,783.1,776.0,780.5,782.7,785.0,795.8,814.5,803.8,831.4,833.7,858.1],"300":[0.0,196.2,306.2,363.7,429.3,465.4,497.6,544.9,531.2,572.5,580.0,564.2,609.3,584.2,613.5,618.7,637.1,656.0,677.6,695.4,696.8,713.4,720.3,724.6,736.0,751.1,770.8,794.5,801.7,821.7,828.0,865.4,886.0,879.7,877.9,931.7,928.1,933.5,949.1,957.4,983.9,1018.4,1013.1,1031.2,1027.9,1059.2,1079.2,1075.6,1089.9,1105.3,1108.6,1124.6,1146.8,1148.5,1180.7,1188.8,1192.9,1217.0,1255.1,1241.1,1266.2]}},"e2":{"sizes":[0.29,0.9,3.6,14.4],"pools":[4,16],"metrics":{"parts_mean":[[[234.787945,4.290658],[92.58336,2.833473],[63.516987,2.02575],[52.23336,2.199104]],[[63.986554,0.835787],[55.574149,0.533398],[48.365416,0.394325],[43.611317,0.402207]]],"write_amplification":[[[5.011436,0.01029],[5.153005,0.054915],[4.849341,0.050328],[4.254215,0.028073]],[[6.751387,0.080843],[6.118105,0.050412],[5.359602,0.039358],[4.462517,0.05906]]],"busy_threads_mean":[[[3.990093,0.00066],[3.89408,0.011507],[3.612082,0.016577],[3.189092,0.042901]],[[5.348522,0.054505],[4.622386,0.037893],[3.979538,0.02309],[3.365435,0.026027]]]}},"e3":{"variants":[{"name":"pool 16","points":[[0.9,1023.7625031626621,1055.6276124521103,921.386252846396],[3.6,317.1902926897708,327.06299589084284,1141.8850536831749],[14.4,103.38367448954561,107.96086080044233,1488.7249126494567]]},{"name":"pool 4","points":[[0.9,298.3299407807328,307.61560629194776,268.4969467026595],[3.6,90.78390083479722,94.80324750826895,326.82204300527],[14.4,29.43303838201997,30.73615031952324,423.83575270108753]]},{"name":"pool 16 + projection","points":[[0.9,581.4036658183329,599.5001396541629,523.2632992364996],[3.6,188.110401035613,196.4387600033973,677.1974437282067],[14.4,63.687388509750576,66.50707009200146,917.0983945404082]]}],"until":1800.0},"e4":{"rate":150,"selectors":[{"name":"SimpleMergeSelector","bases":[2,3,5,8,12,20],"wa":[[7.055977,0.017871],[6.952262,0.036161],[5.200636,0.05267],[4.14249,0.038297],[3.967603,0.019639],[3.281294,0.043337]],"parts":[[165.214797,1.893173],[93.939883,0.946835],[111.659083,0.366292],[140.161673,0.359614],[163.841758,0.785928],[220.292933,0.966179]],"busy":[[16.0,0.0],[15.521429,0.059641],[11.724626,0.082179],[9.305375,0.081337],[8.807682,0.055788],[7.498387,0.075678]]},{"name":"tiered","bases":[2,3,4,6,8,12],"wa":[[6.433701,0.084776],[6.58741,0.041315],[6.838194,0.034737],[4.999015,0.007333],[4.989498,0.02698],[3.989886,0.017687]],"parts":[[3000.311755,1.844216],[914.753118,24.941276],[133.39705,11.912785],[116.843501,0.179495],[113.628932,0.381316],[141.34755,0.690954]],"busy":[[0.361493,0.054823],[14.799723,0.077885],[15.288922,0.050567],[11.12747,0.028199],[11.16606,0.052849],[8.915798,0.059606]]}]},"e5":{"rates":[200,250],"differences":{"200":{"parts_mean":[-9.803850182312289,2.837657916706659],"fresh_waiting_mean":[-3.146067699276913e-05,2.4333948276030872e-05],"merge_duration_mean":[-0.03950737765948399,0.011209320134862689],"write_amplification":[-0.014815465937913785,0.03991975918762882],"merge_duration_p99":[-0.5583287818901324,0.12245379832770112]},"250":{"parts_mean":[-135.27646682638542,9.864039475854703],"fresh_waiting_mean":[-0.021530111524527162,0.0011496295264674333],"merge_duration_mean":[-0.2837359477136057,0.015006500649415144],"write_amplification":[-0.012514994899688858,0.01897079742263167],"merge_duration_p99":[-3.922798105909181,0.04997815742607187]}},"runs":[{"rate":200,"policy":"round_robin","parts":[155.169932,2.524201],"merge_p99":[4.962472,0.112699],"wa":[5.120821,0.028806]},{"rate":200,"policy":"shortest_task_first","parts":[145.366082,0.766475],"merge_p99":[4.404143,0.019178],"wa":[5.106006,0.023473]},{"rate":250,"policy":"round_robin","parts":[484.739521,10.668644],"merge_p99":[8.726115,0.040897],"wa":[4.325775,0.020987]},{"rate":250,"policy":"shortest_task_first","parts":[349.463054,8.277091],"merge_p99":[4.803317,0.028742],"wa":[4.31326,0.011033]}]},"e6":{"offered":350,"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"open, guard","parts":[0.0,367.8,474.4,524.0,609.1,648.1,674.1,749.0,795.7,835.0,898.3,977.3,1009.1,1071.1,1120.7,1172.4,1229.0,1260.9,1311.0,1376.1,1429.5,1487.8,1528.3,1571.6,1647.5,1698.9,1752.3,1804.0,1845.4,1915.6,1945.7,2024.1,2033.8,2103.1,2159.8,2199.0,2257.6,2315.2,2379.8,2387.4,2451.4,2504.5,2580.8,2622.7,2680.6,2710.7,2781.1,2863.5,2930.0,3040.2,3302.7,3510.8,3624.3,3703.8,3756.5,3808.4,3864.9,3915.0,3966.4,4014.9,4067.5],"rate":[349.9994,0.261663],"rejected":[0.046452,0.006381],"delayed":[0.186753,0.020502],"parts_mean":[2322.238175,20.003616]},{"name":"closed, guard","parts":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,965.4,986.2,1008.2,1014.6,1036.5,1075.1,1120.1,1190.5,1214.7,1274.9,1334.4,1397.4,1431.3,1472.9,1534.7,1597.0,1646.0,1690.5,1731.4,1798.8,1844.7,1912.6,1964.0,2020.5,2063.2,2135.7,2175.4,2233.9,2253.4,2299.0,2387.5,2415.4,2472.0,2515.9,2573.9,2633.1,2679.4,2749.9,2802.3,2850.0,2914.9,3004.9,3374.2,3687.4,3824.1,3895.6,3953.2,4009.5,4062.9,4115.7],"rate":[347.1245,0.428779],"rejected":[0.0245,0.002973],"delayed":[0.044346,0.005702],"parts_mean":[2177.27212,12.741224]},{"name":"open, no guard","parts":[0.0,367.8,474.4,524.0,609.1,648.1,674.1,749.0,795.7,835.0,898.3,977.3,1009.1,1071.1,1120.7,1172.4,1229.6,1265.6,1309.0,1403.8,1449.5,1479.1,1556.5,1575.0,1650.0,1688.0,1757.5,1776.7,1825.6,1891.2,1948.3,2001.4,2035.0,2131.0,2157.3,2223.5,2251.2,2330.9,2364.2,2404.1,2479.1,2511.0,2560.9,2622.3,2668.1,2716.6,2785.7,2843.5,2893.1,2909.8,2954.3,2975.4,2971.6,2982.0,2969.6,2962.8,2965.4,2987.1,2974.8,2954.6,2974.4],"rate":[349.9994,0.261663],"rejected":[0.039887,0.002019],"delayed":[0.925494,0.004528],"parts_mean":[2152.707182,16.531859]},{"name":"closed, no guard","parts":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,965.4,986.2,1008.2,1014.6,1031.1,1033.2,1031.6,1040.0,1034.5,1046.0,1038.0,1042.3,1040.6,1048.4,1034.4,1029.4,1033.8,1048.7,1045.5,1046.3,1040.6,1041.0,1050.5,1056.6,1050.5,1056.7,1054.1,1048.2,1056.5,1049.5,1052.9,1060.3,1049.5,1058.6,1051.4,1060.4,1055.1,1054.5,1063.0,1066.8,1069.0,1065.8,1071.4,1064.4,1068.4,1063.5,1072.1,1069.3,1074.0,1076.7],"rate":[284.221367,0.534121],"rejected":[0.0,0.0],"delayed":[0.921099,0.006457],"parts_mean":[1045.017619,0.979939]}]},"e7":{"burst":[1800.0,300.0],"grid":[0.0,30.0,60.0,90.0,120.0,150.0,180.0,210.0,240.0,270.0,300.0,330.0,360.0,390.0,420.0,450.0,480.0,510.0,540.0,570.0,600.0,630.0,660.0,690.0,720.0,750.0,780.0,810.0,840.0,870.0,900.0,930.0,960.0,990.0,1020.0,1050.0,1080.0,1110.0,1140.0,1170.0,1200.0,1230.0,1260.0,1290.0,1320.0,1350.0,1380.0,1410.0,1440.0,1470.0,1500.0,1530.0,1560.0,1590.0,1620.0,1650.0,1680.0,1710.0,1740.0,1770.0,1800.0,1830.0,1860.0,1890.0,1920.0,1950.0,1980.0,2010.0,2040.0,2070.0,2100.0,2130.0,2160.0,2190.0,2220.0,2250.0,2280.0,2310.0,2340.0,2370.0,2400.0,2430.0,2460.0,2490.0,2520.0,2550.0,2580.0,2610.0,2640.0,2670.0,2700.0,2730.0,2760.0,2790.0,2820.0,2850.0,2880.0,2910.0,2940.0,2970.0,3000.0,3030.0,3060.0,3090.0,3120.0,3150.0,3180.0,3210.0,3240.0,3270.0,3300.0,3330.0,3360.0,3390.0,3420.0,3450.0,3480.0,3510.0,3540.0,3570.0,3600.0,3630.0,3660.0,3690.0,3720.0,3750.0,3780.0,3810.0,3840.0,3870.0,3900.0,3930.0,3960.0,3990.0,4020.0,4050.0,4080.0,4110.0,4140.0,4170.0,4200.0,4230.0,4260.0,4290.0,4320.0,4350.0,4380.0,4410.0,4440.0,4470.0,4500.0,4530.0,4560.0,4590.0,4620.0,4650.0,4680.0,4710.0,4740.0,4770.0,4800.0,4830.0,4860.0,4890.0,4920.0,4950.0,4980.0,5010.0,5040.0,5070.0,5100.0,5130.0,5160.0,5190.0,5220.0,5250.0,5280.0,5310.0,5340.0,5370.0,5400.0],"runs":[{"factor":1.0,"series":[0.0,64.9,69.9,73.1,77.4,81.2,82.4,83.3,86.1,84.4,90.1,83.7,86.3,86.0,88.8,90.3,88.6,97.2,86.0,91.5,92.2,91.6,97.5,94.1,98.0,92.1,93.1,95.7,97.9,98.7,96.1,97.0,96.8,94.5,96.9,99.8,96.5,100.8,99.7,102.4,104.0,101.1,104.2,101.4,102.9,103.1,103.8,107.0,106.3,107.0,107.1,106.7,105.9,109.7,107.9,109.9,107.2,105.6,108.9,108.8,106.1,112.1,112.4,109.6,109.1,106.6,110.7,110.0,116.1,116.1,113.1,119.0,116.6,113.2,115.2,116.6,114.9,116.6,117.3,116.5,117.2,121.2,116.4,117.8,116.8,115.5,118.4,123.0,118.3,118.3,114.9,116.8,118.3,118.0,118.6,118.0,124.5,121.0,126.6,120.2,122.6,118.6,123.3,120.8,124.8,123.0,123.5,121.4,124.7,121.4,127.3,124.9,121.8,127.7,121.0,125.3,125.6,126.0,124.6,133.5,125.3,129.6,127.4,122.7,125.6,126.5,127.6,131.0,128.0,133.0,130.4,132.2,127.5,129.4,131.3,133.0,127.6,131.9,134.4,131.3,133.7,130.5,130.6,132.4,136.2,134.4,134.4,131.4,136.5,135.5,136.5,135.8,129.3,133.0,134.2,134.8,136.6,131.8,137.9,132.1,136.9,134.4,136.1,137.8,138.4,131.2,133.9,135.9,134.8,137.1,138.0,139.4,136.3,130.1,137.2,138.3,135.4,134.7,134.5,137.5,139.3],"peak":157.2,"recovery":[0.0,0.0]},{"factor":1.5,"series":[0.0,67.7,69.2,74.3,77.8,82.9,78.4,83.5,86.6,89.5,88.6,88.5,86.7,87.8,88.6,87.1,91.2,89.6,93.2,91.4,94.3,90.0,90.8,89.4,92.0,95.5,97.6,92.5,98.1,94.4,94.5,96.5,98.1,95.6,98.9,94.4,98.1,101.8,98.7,103.8,102.7,101.8,100.2,100.4,100.6,102.6,105.7,104.4,105.5,107.0,107.3,105.5,105.7,108.7,105.3,106.5,105.4,113.1,108.2,110.1,108.6,135.2,140.3,151.9,161.3,165.1,165.1,171.7,184.4,192.7,198.7,137.0,128.9,127.6,130.4,123.7,123.6,126.1,121.2,118.8,119.1,116.5,116.6,119.5,121.1,120.1,118.7,119.8,117.9,115.8,125.1,119.9,123.4,122.7,120.5,120.5,124.3,127.6,123.6,122.6,123.9,127.4,124.4,120.2,121.8,126.6,124.4,125.2,123.5,124.8,127.2,124.6,121.7,128.5,124.6,123.9,125.4,125.8,126.4,132.3,129.4,129.9,129.2,130.9,129.2,127.0,128.7,130.8,132.8,131.4,130.3,135.2,130.7,133.6,125.8,127.7,125.2,130.9,128.5,130.9,128.5,134.1,136.9,133.3,130.8,129.0,133.6,137.0,133.8,128.4,131.7,131.3,129.9,134.6,131.4,128.4,132.7,135.2,133.9,136.3,132.5,134.6,135.2,139.1,137.5,133.9,137.8,133.2,138.1,134.2,135.5,138.0,133.9,139.2,140.1,139.4,133.2,138.8,135.1,139.2,135.2],"peak":214.3,"recovery":[43.0,18.5]},{"factor":2.0,"series":[0.0,64.6,68.5,71.1,77.1,80.5,83.0,82.0,90.2,85.3,87.1,87.9,90.8,86.0,92.3,90.1,92.8,96.4,93.1,93.6,92.8,95.3,91.9,95.1,93.5,97.4,93.9,93.9,96.6,97.3,96.0,99.4,96.0,100.3,99.5,96.4,100.4,97.4,97.8,100.2,98.7,96.3,98.9,100.9,107.3,102.8,102.5,105.3,104.4,102.6,105.0,103.0,112.5,106.1,107.7,105.4,105.7,106.0,106.7,108.0,107.6,237.7,313.7,379.8,425.3,429.5,463.7,469.2,508.5,531.2,527.5,311.6,232.9,208.0,195.1,188.7,174.1,163.3,148.8,146.5,141.0,136.5,136.0,133.9,134.4,133.9,132.7,131.1,137.5,134.6,137.6,134.6,137.7,137.5,134.5,133.3,134.0,129.7,126.0,131.3,131.9,133.1,125.1,129.5,130.4,130.2,133.3,135.9,129.5,131.2,135.0,132.4,126.6,131.3,134.2,134.6,135.4,136.5,131.9,131.6,130.8,128.9,126.2,135.9,129.7,134.2,131.8,128.8,132.3,136.9,131.5,134.7,131.8,135.4,129.3,128.1,131.7,129.9,130.6,134.5,132.8,134.2,135.1,136.6,127.9,130.6,133.4,132.1,136.2,132.6,131.9,138.8,134.4,134.5,135.8,133.7,134.3,134.7,138.1,135.8,136.5,134.3,135.4,131.1,137.4,137.1,137.1,135.8,134.5,138.9,135.7,134.0,137.6,132.2,139.9,139.9,138.4,140.1,138.6,141.9,139.8],"peak":564.5,"recovery":[309.0,31.2]},{"factor":3.0,"series":[0.0,69.4,73.2,74.4,81.6,81.8,81.1,84.7,92.7,82.9,91.7,87.3,89.7,92.1,92.0,89.8,87.8,90.0,91.0,94.2,93.3,90.4,92.7,93.7,94.8,95.6,94.1,94.1,96.9,94.8,95.8,96.0,94.3,100.7,99.9,96.5,99.6,102.8,101.8,101.5,101.6,100.3,101.3,97.8,97.6,105.7,105.7,103.1,103.5,102.0,103.8,108.5,101.4,108.2,103.7,110.1,108.2,106.5,108.1,108.8,108.8,612.7,807.2,1000.9,1189.2,1375.5,1544.4,1731.8,1859.7,2000.6,2142.3,1639.4,1329.1,1093.5,881.9,746.9,694.4,643.4,586.0,525.0,478.3,433.5,405.5,376.1,342.7,362.3,359.8,350.9,360.1,318.1,280.2,253.5,224.7,212.0,197.0,188.2,182.9,180.3,176.3,169.9,159.8,159.6,158.8,158.2,155.3,155.3,160.0,158.0,158.8,157.3,150.2,155.1,150.5,152.4,154.1,150.9,142.6,146.7,143.5,146.3,143.2,139.0,141.7,139.9,142.8,141.4,140.6,143.2,142.1,141.9,140.6,141.5,138.7,142.3,140.7,142.0,145.1,140.3,141.3,143.8,142.3,142.1,142.1,142.4,142.8,143.4,141.6,139.2,140.3,140.9,138.7,141.2,142.6,142.4,141.3,139.7,137.2,138.5,142.1,137.5,141.3,141.8,144.6,141.7,141.7,139.3,141.0,139.1,141.2,141.9,138.2,138.9,143.2,143.7,143.0,142.6,140.2,138.3,139.4,141.8,140.4],"peak":2146.2,"recovery":[1088.0,116.5]}]},"e8":{"variants":["none","bloom_filter index","projection","projection + index"],"runs":[{"parts_mean":[85.801717,0.636033],"busy_threads_mean":[7.633537,0.075143],"merge_duration_mean":[0.421012,0.003804],"write_amplification":[5.080915,0.052669]},{"parts_mean":[87.609401,0.433866],"busy_threads_mean":[8.105966,0.03087],"merge_duration_mean":[0.443752,0.003729],"write_amplification":[5.049705,0.044378]},{"parts_mean":[126.564852,0.563352],"busy_threads_mean":[14.232618,0.066259],"merge_duration_mean":[0.844076,0.005964],"write_amplification":[4.943735,0.026035]},{"parts_mean":[130.393862,0.418862],"busy_threads_mean":[14.633092,0.035554],"merge_duration_mean":[0.877618,0.00564],"write_amplification":[4.961178,0.025812]}]},"e9":{"factors":["insert size","threads","base","scheduling_policy","projection"],"responses":["parts_mean","write_amplification","fresh_lifetime_mean","busy_threads_mean"],"effects":{"parts_mean":{"main":{"insert size":-13.242520978044006,"threads":-10.102284104173673,"base":17.74966188792527,"scheduling_policy":-1.9968266851698466,"projection":37.1094600099393},"interactions":{"insert size x threads":5.429819217243043,"insert size x base":4.108434731919686,"insert size x scheduling_policy":0.032039457232753144,"insert size x projection":-7.041805091762508,"threads x base":10.210900618156145,"threads x scheduling_policy":2.001290036185422,"threads x projection":-10.053748174282234,"base x scheduling_policy":2.0587306952137645,"base x projection":-4.581269707129682,"scheduling_policy x projection":-1.9348068574209023}},"write_amplification":{"main":{"insert size":-0.7240283055502776,"threads":0.340677946733125,"base":-2.0237052998710086,"scheduling_policy":0.008977780757621456,"projection":-0.6827909153429195},"interactions":{"insert size x threads":-0.1271736596422608,"insert size x base":-0.0014599245037275055,"insert size x scheduling_policy":0.003265208918660667,"insert size x projection":0.09939789686122186,"threads x base":-0.33570871692290516,"threads x scheduling_policy":-0.00886039863313759,"threads x projection":0.2723633358243749,"base x scheduling_policy":-0.013871073655136623,"base x projection":0.23324611841452914,"scheduling_policy x projection":-0.02003612871920657}},"fresh_lifetime_mean":{"main":{"insert size":0.21106162473853535,"threads":-0.00820442403713632,"base":0.1422222490278217,"scheduling_policy":-0.007877326175462225,"projection":0.0751299640489555},"interactions":{"insert size x threads":-0.002837123132341899,"insert size x base":0.1001779679307031,"insert size x scheduling_policy":-0.002848554170119137,"insert size x projection":0.047983373817825865,"threads x base":0.00783315647446203,"threads x scheduling_policy":0.007877446680784644,"threads x projection":-0.008176302151145478,"base x scheduling_policy":0.0075030083214781065,"base x projection":0.028926157997937706,"scheduling_policy x projection":-0.0078547122247156}},"busy_threads_mean":{"main":{"insert size":-0.9135878339144423,"threads":0.4602648280820801,"base":-2.1846921246494944,"scheduling_policy":0.0015693826397931154,"projection":3.095851236000539},"interactions":{"insert size x threads":-0.19741940327735397,"insert size x base":-0.06053858404821316,"insert size x scheduling_policy":0.0014901248520521326,"insert size x projection":-0.14545207087032413,"threads x base":-0.44935207345965217,"threads x scheduling_policy":-0.0010962488050783592,"threads x projection":0.46325756512968846,"base x scheduling_policy":-0.004397494453716622,"base x projection":-0.511625723960403,"scheduling_policy x projection":-0.006817747375015726}},"delayed_fraction":{"main":{"insert size":0.0,"threads":0.0,"base":0.0,"scheduling_policy":0.0,"projection":0.0},"interactions":{"insert size x threads":0.0,"insert size x base":0.0,"insert size x scheduling_policy":0.0,"insert size x projection":0.0,"threads x base":0.0,"threads x scheduling_policy":0.0,"threads x projection":0.0,"base x scheduling_policy":0.0,"base x projection":0.0,"scheduling_policy x projection":0.0}}}},"e10":{"rotation":{"partition_seconds":600.0,"retention_partitions":3},"open":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0,3660.0,3720.0,3780.0,3840.0,3900.0,3960.0,4020.0,4080.0,4140.0,4200.0,4260.0,4320.0,4380.0,4440.0,4500.0,4560.0,4620.0,4680.0,4740.0,4800.0,4860.0,4920.0,4980.0,5040.0,5100.0,5160.0,5220.0,5280.0,5340.0,5400.0,5460.0,5520.0,5580.0,5640.0,5700.0,5760.0,5820.0,5880.0,5940.0,6000.0,6060.0,6120.0,6180.0,6240.0,6300.0,6360.0,6420.0,6480.0,6540.0,6600.0,6660.0,6720.0,6780.0,6840.0,6900.0,6960.0,7020.0,7080.0,7140.0,7200.0],"variants":[{"name":"one partition","parts":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,97.5,98.0,93.1,97.9,96.1,96.8,96.9,96.5,99.7,104.0,104.2,102.9,103.8,106.3,107.1,105.9,107.9,107.2,108.9,106.1,112.4,109.1,110.7,116.1,113.1,116.6,115.2,114.9,117.3,117.2,116.4,116.8,118.4,118.3,114.9,118.3,118.6,124.5,126.6,122.6,123.3,124.8,123.5,124.7,127.3,121.8,121.0,125.6,124.6,125.3,127.4,125.6,127.6,128.0,130.4,127.5,131.3,127.6,134.4,133.7,130.6,136.2,134.4,136.5,136.5,129.3,134.2,136.6,137.9,136.9,136.1,138.4,133.9,134.8,138.0,136.3,137.2,135.4,134.5,139.3,139.0,140.1,141.7,135.7,136.6,140.9,140.8,140.3,141.4,139.5,140.9,140.5,141.8,144.8,140.6,142.3,147.0,143.3,137.2,148.7,142.0,140.1,142.0,145.0,144.7,143.0,146.5,142.0,141.7,144.3],"largest":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,97.5,98.0,93.1,97.9,96.1,96.8,96.9,96.5,99.7,104.0,104.2,102.9,103.8,106.3,107.1,105.9,107.9,107.2,108.9,106.1,112.4,109.1,110.7,116.1,113.1,116.6,115.2,114.9,117.3,117.2,116.4,116.8,118.4,118.3,114.9,118.3,118.6,124.5,126.6,122.6,123.3,124.8,123.5,124.7,127.3,121.8,121.0,125.6,124.6,125.3,127.4,125.6,127.6,128.0,130.4,127.5,131.3,127.6,134.4,133.7,130.6,136.2,134.4,136.5,136.5,129.3,134.2,136.6,137.9,136.9,136.1,138.4,133.9,134.8,138.0,136.3,137.2,135.4,134.5,139.3,139.0,140.1,141.7,135.7,136.6,140.9,140.8,140.3,141.4,139.5,140.9,140.5,141.8,144.8,140.6,142.3,147.0,143.3,137.2,148.7,142.0,140.1,142.0,145.0,144.7,143.0,146.5,142.0,141.7,144.3],"stats":{"parts_mean":[125.79117,0.937938],"write_amplification":[5.576972,0.035428],"insert_rate":[149.984394,0.086371],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation","parts":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,100.6,101.9,95.4,104.2,100.8,101.6,101.3,101.0,102.4,106.1,113.7,112.4,113.5,114.5,119.0,118.1,123.3,119.1,119.6,109.2,113.0,110.8,114.5,117.1,121.4,118.7,118.8,119.3,117.2,105.6,112.8,111.0,114.0,118.0,116.5,116.1,119.8,121.4,120.3,107.7,113.2,114.6,113.7,118.1,120.5,114.9,119.0,120.6,120.3,103.5,114.2,111.2,114.1,118.0,119.8,117.9,122.5,118.0,127.0,107.4,112.6,112.7,115.0,121.5,115.3,118.8,119.8,121.1,124.4,105.8,108.7,115.0,113.8,111.9,118.8,112.4,117.6,117.0,116.8,106.6,110.1,114.5,112.6,116.2,114.5,116.8,118.1,120.4,122.7,106.4,112.4,114.5,111.8,116.5,112.6,116.2,124.8,118.7,116.7,108.7,113.2,109.6,110.8,115.7,116.3,116.5,116.8,117.4,120.6,107.5],"largest":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,75.2,81.6,81.2,90.4,87.6,88.9,88.6,88.3,89.7,93.4,74.4,77.7,83.7,85.9,90.4,89.5,94.7,90.5,91.0,93.3,72.7,75.6,83.7,86.8,91.7,89.0,89.1,89.6,87.5,91.8,71.4,75.1,82.0,89.1,87.6,87.2,90.9,92.5,91.4,92.6,70.1,77.4,82.2,87.1,90.2,84.6,88.7,90.3,90.0,88.3,74.7,76.9,82.5,87.0,88.8,86.9,91.5,87.0,96.0,91.6,72.4,76.3,83.4,91.7,85.5,89.0,90.0,91.3,94.6,91.8,69.3,79.7,83.8,83.5,90.4,84.0,89.2,88.6,88.4,92.2,69.9,80.1,82.1,86.1,84.4,86.7,88.0,90.3,92.6,90.7,71.1,77.3,81.9,87.1,83.2,86.8,95.4,89.3,87.3,95.0,74.7,75.7,82.8,87.7,88.3,88.5,88.8,89.4,92.6,93.7],"stats":{"parts_mean":[114.907937,0.867095],"write_amplification":[4.922148,0.016465],"insert_rate":[149.984394,0.086371],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation, 10% late inserts","parts":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,106.5,105.2,101.9,110.9,109.0,109.5,111.4,110.8,109.7,119.9,127.3,131.0,126.4,125.3,126.8,124.9,129.3,129.5,127.6,113.0,123.6,122.2,126.1,129.7,126.5,130.5,128.1,128.9,127.3,114.2,126.8,128.1,128.4,129.1,122.8,124.4,131.2,130.4,127.4,114.7,122.2,125.3,125.4,124.8,127.8,122.0,124.3,125.7,125.4,114.2,123.3,123.5,121.4,127.9,129.1,124.8,130.8,128.0,129.5,115.1,123.9,123.9,124.0,120.3,124.0,121.6,125.2,121.3,130.3,115.5,124.2,122.4,127.2,130.8,128.8,125.6,132.6,127.7,130.4,115.8,128.5,134.6,126.2,120.9,121.1,121.1,123.5,126.3,127.3,112.3,127.3,120.7,125.1,127.5,127.0,127.4,132.0,135.1,128.9,111.1,123.9,125.0,126.2,122.6,125.2,121.5,127.6,125.1,129.0,112.7],"largest":[0.0,69.9,77.4,82.4,86.1,90.1,86.3,88.8,88.6,86.0,92.2,67.8,71.5,74.5,84.5,79.5,81.1,82.4,81.5,81.3,88.9,66.2,73.3,76.8,80.7,80.7,80.6,84.6,83.7,80.8,85.7,67.1,68.5,77.7,83.7,83.7,83.9,81.9,82.8,82.0,84.2,69.2,72.8,78.7,81.7,78.0,79.6,84.1,86.7,85.2,82.4,65.6,68.9,75.4,82.5,83.1,78.6,78.8,84.8,82.0,86.0,67.0,71.7,75.6,81.1,84.2,79.3,84.4,79.8,86.0,83.5,66.7,68.8,79.2,78.1,81.6,79.8,79.9,79.4,85.8,82.2,64.2,67.5,75.5,82.0,83.2,80.0,83.3,80.2,84.0,82.8,67.7,77.8,80.4,77.0,79.6,78.3,78.6,80.7,83.6,84.4,69.3,67.4,75.0,81.3,81.8,80.1,84.4,87.4,81.8,84.3,67.1,69.6,78.3,80.0,80.3,80.2,82.6,80.7,81.2,85.0],"stats":{"parts_mean":[124.515191,0.703627],"write_amplification":[5.284908,0.011292],"insert_rate":[149.984394,0.086371],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}}]},"closed":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"one partition","parts":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,965.4,986.2,1008.2,1014.6,1036.5,1075.1,1120.1,1190.5,1214.7,1274.9,1334.4,1397.4,1431.3,1472.9,1534.7,1597.0,1646.0,1690.5,1731.4,1798.8,1844.7,1912.6,1964.0,2020.5,2063.2,2135.7,2175.4,2233.9,2253.4,2299.0,2387.5,2415.4,2472.0,2515.9,2573.9,2633.1,2679.4,2749.9,2802.3,2850.0,2914.9,3004.9,3374.2,3687.4,3824.1,3895.6,3953.2,4009.5,4062.9,4115.7],"largest":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,965.4,986.2,1008.2,1014.6,1036.5,1075.1,1120.1,1190.5,1214.7,1274.9,1334.4,1397.4,1431.3,1472.9,1534.7,1597.0,1646.0,1690.5,1731.4,1798.8,1844.7,1912.6,1964.0,2020.5,2063.2,2135.7,2175.4,2233.9,2253.4,2299.0,2387.5,2415.4,2472.0,2515.9,2573.9,2633.1,2679.4,2749.9,2802.3,2850.0,2914.9,3004.9,3374.2,3687.4,3824.1,3895.6,3953.2,4009.5,4062.9,4115.7],"stats":{"parts_mean":[2177.27212,12.741224],"write_amplification":[3.176485,0.010118],"insert_rate":[347.1245,0.428779],"delayed_fraction":[0.044346,0.005702],"rejected_fraction":[0.0245,0.002973]}},{"name":"rotation","parts":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,979.4,1010.8,1090.2,1123.7,1177.9,1213.1,1286.8,1333.7,1395.4,1428.4,1493.3,1579.4,1591.1,1619.9,1705.0,1738.3,1786.3,1865.2,1910.4,1471.2,1520.7,1573.0,1635.4,1670.6,1723.8,1766.7,1850.3,1866.9,1940.6,1460.5,1541.2,1564.3,1634.3,1671.6,1747.5,1778.2,1827.7,1900.0,1901.9,1515.0,1527.3,1591.5,1637.2,1698.0,1735.4,1804.5,1860.7,1898.9,1938.4,1466.7],"largest":[0.0,376.4,486.5,551.1,580.4,669.9,704.4,758.4,795.0,865.0,919.1,527.8,524.0,588.7,625.2,680.1,717.6,791.3,838.2,900.3,934.4,555.5,557.7,568.5,598.6,684.4,717.7,767.2,846.1,892.2,946.4,551.9,544.9,591.2,625.9,683.2,726.7,812.1,830.8,905.2,946.6,568.3,552.9,588.5,629.6,706.3,737.7,789.2,862.0,865.2,935.9,565.3,554.3,577.4,639.3,678.6,749.1,805.3,847.6,887.1,942.5],"stats":{"parts_mean":[1612.190115,14.631113],"write_amplification":[3.071604,0.003811],"insert_rate":[349.794767,0.208596],"delayed_fraction":[0.001736,0.000927],"rejected_fraction":[0.0,0.0]}}]}},"validation":[{"key":"open","title":"відкритий потік, 8 вставок/с","rows":[{"metric":"parts_mean","live":10.130597014925373,"live_half":0.1399614062599456,"model":10.36085880079672,"model_half":0.025960011454492147},{"metric":"busy_threads_mean","live":0.18781094527363185,"live_half":0.021406232487120754,"model":0.18599990629971255,"model_half":0.001906151912731927},{"metric":"fresh_waiting_mean","live":0.2613592524557908,"live_half":0.015094454939987682,"model":0.2528225561755978,"model_half":0.003379259834700265},{"metric":"fresh_lifetime_mean","live":0.31545133535773373,"live_half":0.01482815997889,"model":0.309334011279419,"model_half":0.00330293684674063},{"metric":"merge_duration_mean","live":0.11132891412107027,"live_half":0.0017258896932049802,"model":0.11225601041270103,"model_half":0.0011244982452227256},{"metric":"write_amplification","live":4.0042493905645875,"live_half":0.06385093435602403,"model":4.341860950754662,"model_half":0.024922277761965757},{"metric":"insert_rate","live":7.949382716049382,"live_half":0.09576194468031057,"model":7.970555555555556,"model_half":0.07213115330685983},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"closed","title":"8 замкнених клієнтів","rows":[{"metric":"parts_mean","live":12.322139303482587,"live_half":0.47673943353698045,"model":12.369104534221467,"model_half":0.039864801914426554},{"metric":"busy_threads_mean","live":0.3731343283582089,"live_half":0.033420469758830014,"model":0.3688268765553576,"model_half":0.004908371688233145},{"metric":"fresh_waiting_mean","live":0.12905897057807073,"live_half":0.004259712291433156,"model":0.12565755054472114,"model_half":0.0009142546147673333},{"metric":"fresh_lifetime_mean","live":0.18211987066660887,"live_half":0.004551331592654266,"model":0.18346524246204374,"model_half":0.0010162120473531928},{"metric":"merge_duration_mean","live":0.10957394907884428,"live_half":0.01635000097248151,"model":0.11107355263872667,"model_half":0.0012907935714845987},{"metric":"write_amplification","live":4.062745085979626,"live_half":0.37295361928263226,"model":4.36465388469894,"model_half":0.015074733762580917},{"metric":"insert_rate","live":15.765432098765432,"live_half":0.4834719936381366,"model":15.910555555555556,"model_half":0.12035204489860322},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"throttled","title":"40 вставок/с, низькі пороги","rows":[{"metric":"parts_mean","live":11.819651741293532,"live_half":0.06171717901844883,"model":11.965523323835853,"model_half":0.05385206749924722},{"metric":"busy_threads_mean","live":0.2611940298507463,"live_half":0.033420469758830014,"model":0.2654039381801697,"model_half":0.003093450155819554},{"metric":"fresh_waiting_mean","live":0.05043227929279095,"live_half":0.0017217626990454682,"model":0.04976170253923274,"model_half":0.00024393263071565804},{"metric":"fresh_lifetime_mean","live":0.06556254050929539,"live_half":0.0017290479326435412,"model":0.06432744962276171,"model_half":0.00023829574948993094},{"metric":"merge_duration_mean","live":0.030500006358904378,"live_half":0.0015324110438751629,"model":0.03065564391235507,"model_half":0.0002989337564476777},{"metric":"write_amplification","live":5.302200901797815,"live_half":0.14993738812838794,"model":5.603878296841537,"model_half":0.03165361573072305},{"metric":"insert_rate","live":40.39506172839506,"live_half":0.44859759781635455,"model":39.970555555555556,"model_half":0.1969764468303719},{"metric":"delayed_fraction","live":0.21063233312200194,"live_half":0.010013614089178238,"model":0.18236802087123477,"model_half":0.005964952529119037},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":15.62557378448898,"live_half":0.34780452457407174,"model":11.018964778634617,"model_half":0.5878499485166931}]}],"calibration":{"base":{"merge_fixed_seconds":1.9161701930021834e-06,"merge_bytes_per_second":235775162.1439831,"merge_noise_cv":0.10345845233389503,"checks":{"merges":376,"log_residual_sigma":0.10318320016045511,"residual_size_spearman":-0.05359547459686801,"log_residual_skew":-0.21665469844926297,"log_residual_excess_kurtosis":0.20590336317897462,"result_to_sources_size":0.9924331580222736,"source_mib_range":[14.869882583618164,2337.555914878845]},"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221},"index":{"merge_fixed_seconds":0.003595729817040614,"merge_bytes_per_second":223508755.50548258,"merge_noise_cv":0.08634494753483375,"checks":{"merges":376,"log_residual_sigma":0.08618465909784145,"residual_size_spearman":-0.09054836860377294,"log_residual_skew":-0.07074766446360602,"log_residual_excess_kurtosis":1.4442467897637146,"result_to_sources_size":0.9922136710316851,"source_mib_range":[14.976439476013184,1996.3367385864258]},"insert_bytes_mean":3633779.954413191,"insert_bytes_cv":0.35138285406492875},"projection":{"merge_fixed_seconds":4.407093743957217e-10,"merge_bytes_per_second":243204603.35305232,"merge_noise_cv":0.10432555069558312,"checks":{"merges":362,"log_residual_sigma":0.1040433468916645,"residual_size_spearman":0.37162339536161854,"log_residual_skew":0.7472187035298714,"log_residual_excess_kurtosis":2.860410578564392,"result_to_sources_size":0.9920643289968394,"source_mib_range":[29.526439666748047,3942.3284196853638]},"insert_bytes_mean":7184421.780155642,"insert_bytes_cv":0.3537193332356586,"projection_time_share":0.8770580296896087},"small":{"merge_fixed_seconds":0.0033462518187959904,"merge_bytes_per_second":259065659.38657644,"merge_noise_cv":0.14017975505680022,"checks":{"merges":295,"log_residual_sigma":0.13949834362610133,"residual_size_spearman":-0.03443865865173372,"log_residual_skew":-0.2823165883524914,"log_residual_excess_kurtosis":-0.7704246180447178,"result_to_sources_size":0.9757958293160882,"source_mib_range":[1.257950782775879,419.0453414916992]},"insert_bytes_mean":487879.82961072115,"insert_bytes_cv":0.5958613268903633},"base_and_small":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"checks":{"merges":671,"log_residual_sigma":0.1224435891334234,"residual_size_spearman":0.02252177964188716,"log_residual_skew":-0.1281665366174902,"log_residual_excess_kurtosis":-0.13304577153726527,"result_to_sources_size":0.9915019335341808,"source_mib_range":[1.257950782775879,2337.555914878845]}},"model":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221,"index_aux":[0.007155583071234206,0.062429390588294886],"projection_aux":[0.9912682104579509,0.9304387282149285]}}};
+
+return { RESULTS };
+})();
+
+// ---- src/ui/results.js
+const __module_17 = (() => {
+// The other tabs: the model diagram with the calibrated parameters, the experiment results and the validation,
+// drawn from the data the Python side exported (tools/export_data.py).
+
+const { RESULTS } = __module_16;
+const { el, sv, tooltip, clock, NUM, NUM2, NUM3, INT, PCT } = __module_7;
+const { Chart, Bars, table, card, ci, niceTicks, S } = __module_8;
+function results() {
+  const R = RESULTS, root = document.getElementById("tab-results");
+  const grid = el("div", { class: "grid two" });
+  root.append(grid);
+
+  if (R.e1) {
+    const metrics = {
+      parts: { name: "активні куски", keys: [["parts_mean", "середнє"], ["parts_quantiles_0.99", "99-й перцентиль"]], fmt: v => INT.format(v) },
+      busy: { name: "зайняті потоки", keys: [["busy_threads_mean", "середнє"]], fmt: v => NUM.format(v), max: 16 },
+      all: { name: "P(усі 16 зайняті)", keys: [["all_threads_busy", "імовірність"]], fmt: v => NUM2.format(v), max: 1 },
+      wa: { name: "підсилення записів", keys: [["write_amplification", "середнє"]], fmt: v => NUM2.format(v) },
+      wait: { name: "очікування свіжого куска, с", keys: [["fresh_waiting_mean", "середнє"], ["fresh_waiting_quantiles_0.99", "99-й перцентиль"]], fmt: v => NUM3.format(v) },
+      merge: { name: "тривалість злиття, с", keys: [["merge_duration_mean", "середнє"], ["merge_duration_quantiles_0.99", "99-й перцентиль"]], fmt: v => NUM3.format(v) },
+    };
+    const { card: c, body } = card("E1. Ймовірнісно-часові характеристики від навантаження",
+      "Вставки по 3.6 МБ, пул 16 потоків. Затінення: 95% довірчий інтервал.", { tableView: () => table(
+        ["вставок/с", "куски", "99-й перц.", "потоки", "P(усі зайняті)", "підсилення", "очікування, с", "злиття, с"],
+        R.e1.rates.map((rate, i) => [rate, ...["parts_mean", "parts_quantiles_0.99", "busy_threads_mean", "all_threads_busy", "write_amplification", "fresh_waiting_mean", "merge_duration_mean"]
+          .map(k => ci(R.e1.metrics[k][i]))])) });
+    const seg = el("div", { class: "seg", role: "group", "aria-label": "Характеристика" });
+    const holder = el("div");
+    const show = key => {
+      for (const b of seg.children) b.setAttribute("aria-pressed", String(b.dataset.key === key));
+      const m = metrics[key];
+      new Chart(holder, { height: 260, x: { label: "вставок за секунду" }, y: { min: 0, max: m.max }, valueFormat: v => m.fmt(v),
+        tooltipTitle: x => `${x} вставок/с`,
+        series: m.keys.map(([k, name], i) => ({ name, color: S(i + 1), markers: true,
+          points: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0]]),
+          band: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0] - R.e1.metrics[k][j][1], R.e1.metrics[k][j][0] + R.e1.metrics[k][j][1]]) })) });
+    };
+    for (const [key, m] of Object.entries(metrics)) seg.append(el("button", { type: "button", "data-key": key, onclick: () => show(key) }, m.name));
+    body.append(seg, el("div", { style: "height:10px" }), holder);
+    c.style.gridColumn = "1 / -1";
+    grid.append(c);
+    show("parts");
+  }
+
+  if (R.e3) {
+    const names = { "pool 16": "пул 16", "pool 4": "пул 4", "pool 16 + projection": "пул 16 + проєкція" };
+    const { card: c, body } = card("E3. Межа стійкості",
+      `Найбільший потік даних, за якого за ${R.e3.until / 60} хв не затримано жодної вставки в жодній з 6 реплік.`, { tableView: () => table(
+        ["варіант", "вставка, МБ", "вставок/с", "МБ/с"], R.e3.variants.flatMap(v => v.points.map(p => [names[v.name] || v.name, NUM.format(p[0]), `${INT.format(p[1])}–${INT.format(p[2])}`, INT.format(p[3])]))) });
+    new Chart(body, { height: 260, x: { label: "розмір вставки, МБ", log: true, format: v => NUM3.format(v) }, y: { min: 0, label: "МБ/с" },
+      valueFormat: v => INT.format(v) + " МБ/с", tooltipTitle: x => `вставки по ${NUM3.format(x)} МБ`,
+      series: R.e3.variants.map((v, i) => ({ name: names[v.name] || v.name, color: S(i + 1), markers: true, points: v.points.map(p => [p[0], p[3]]) })) });
+    grid.append(c);
+  }
+
+  if (R.e4) {
+    const { card: c, body } = card("E4. Компроміс селектора",
+      `${R.e4.rate} вставок/с. Підпис точки: значення merge_selector_base. Менше підсилення записів коштує більшої кількості кусків, а tiered при base 2 і 3 деградує.`, { tableView: () => table(
+        ["селектор", "base", "підсилення", "куски", "потоки"], R.e4.selectors.flatMap(s => s.bases.map((b, i) => [s.name, b, ci(s.wa[i]), ci(s.parts[i]), ci(s.busy[i])]))) });
+    new Chart(body, { height: 260, mode: "scatter", x: { label: "підсилення записів" }, y: { log: true, label: "куски" },
+      scatterRows: (s, i) => { const sel = R.e4.selectors.find(x => x.name === s.name); return [
+        { name: "підсилення записів", value: ci(sel.wa[i]) }, { name: "активні куски", value: ci(sel.parts[i]) }, { name: "зайняті потоки", value: ci(sel.busy[i]) }]; },
+      series: R.e4.selectors.map((s, i) => ({ name: s.name, color: S(i + 1), connect: true, labels: s.bases.map(b => String(b)), labelOffset: i ? [6, 14] : [-4, -9],
+        points: s.wa.map((w, j) => [w[0], s.parts[j][0]]) })) });
+    grid.append(c);
+  }
+
+  if (R.e6) {
+    const { card: c, body } = card("E6. Гальмування як зворотний зв'язок",
+      `Пропонований потік ${R.e6.offered} вставок/с, вище за межу стійкості. Без обмеження за середнім розміром куска замкнені клієнти самостабілізуються біля parts_to_delay_insert; з дефолтним обмеженням захист вимикається, коли середній кусок перевищує 1 ГіБ.`,
+      { wide: true, tableView: () => table(["варіант", "потік, вставок/с", "куски", "затримано", "відхилено"],
+        R.e6.variants.map(v => [v.name.replace("open", "відкритий").replace("closed", "замкнений").replace("no guard", "без обмеження").replace("guard", "обмеження"), ci(v.rate), ci(v.parts_mean), PCT.format(v.delayed[0]), PCT.format(v.rejected[0])])) });
+    const row = el("div", { class: "grid two" });
+    body.append(row);
+    for (const [guard, title] of [["guard", "з обмеженням (дефолт)"], ["no guard", "max_avg_part_size_for_too_many_parts = 0"]]) {
+      const holder = el("div");
+      row.append(el("div", {}, el("h3", {}, title), holder));
+      new Chart(holder, { height: 230, x: { label: "модельний час, хв", format: v => INT.format(v) }, y: { min: 0 }, valueFormat: v => INT.format(v),
+        thresholds: [{ y: 1000, label: "parts_to_delay_insert" }, { y: 3000, label: "parts_to_throw_insert" }], tooltipTitle: x => clock(x * 60),
+        series: ["open", "closed"].map((inp, i) => { const v = R.e6.variants.find(x => x.name === `${inp}, ${guard}`);
+          const short = inp === "open" ? "відкритий" : "замкнений";
+          return { name: `${short} вхід, ${INT.format(v.rate[0])}/с, відхилено ${PCT.format(v.rejected[0])}`, short, color: S(i + 1), points: R.e6.grid.map((t, j) => [t / 60, v.parts[j]]) }; }) });
+    }
+    grid.append(c);
+  }
+
+  if (R.e7) {
+    const { card: c, body } = card("E7. Відновлення після сплеску",
+      "150 вставок/с і 5-хвилинний сплеск. Відновлення: перший момент, коли кусків не більше ніж на 10% більше, ніж у прогоні з тими самими випадковими числами без сплеску.",
+      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв`])) });
+    const [start, length] = R.e7.burst;
+    const shown = R.e7.runs;
+    new Chart(body, { height: 260, x: { label: "модельний час, хв", format: v => INT.format(v) },
+      y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
+      series: shown.map((r, i) => ({ name: r.factor === 1 ? "без сплеску" : `сплеск ×${r.factor}`, color: r.factor === 1 ? "var(--axis)" : S(i),
+        points: R.e7.grid.map((t, j) => [t / 60, r.series[j]]).filter(p => p[0] >= start / 60 - 10 && p[0] <= start / 60 + 45) })) });
+    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${NUM.format(r.recovery[0] / 60)} хв`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
+    grid.append(c);
+  }
+
+  if (R.e10) {
+    const names = { "one partition": "одна партиція", "rotation": "ротація", "rotation, 10% late inserts": "ротація, 10% запізнілих вставок" };
+    const { card: c, body } = card("E10. Ротація партицій",
+      `Нова партиція кожні ${R.e10.rotation.partition_seconds / 60} модельних хвилин, зберігаються ${R.e10.rotation.retention_partitions} найновіші. Ротація робить кількість кусків стаціонарною.`,
+      { wide: true, tableView: () => table(["вхід", "варіант", "куски", "підсилення", "потік", "затримано", "відхилено"],
+        ["open", "closed"].flatMap(part => R.e10[part].variants.map(v => [part === "open" ? "150/с відкритий" : "35 замкнених клієнтів", names[v.name] || v.name,
+          ci(v.stats.parts_mean), ci(v.stats.write_amplification), ci(v.stats.insert_rate), PCT.format(v.stats.delayed_fraction[0]), PCT.format(v.stats.rejected_fraction[0])]))) });
+    const row = el("div", { class: "grid two" });
+    body.append(row);
+    for (const [part, title] of [["open", "150 вставок/с, відкритий вхід"], ["closed", "35 замкнених клієнтів, пропонують 350/с"]]) {
+      const holder = el("div");
+      row.append(el("div", {}, el("h3", {}, title), holder));
+      const d = R.e10[part];
+      new Chart(holder, { height: 230, x: { label: "модельний час, хв", format: v => INT.format(v) }, y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
+        thresholds: part === "closed" ? [{ y: 1000, label: "parts_to_delay_insert" }] : [],
+        series: d.variants.map((v, i) => ({ name: names[v.name] || v.name, short: v.name === "one partition" ? "одна" : v.name === "rotation" ? "ротація" : "запізнілі",
+          color: S(i + 1), points: d.grid.map((t, j) => [t / 60, v.parts[j]]) })) });
+    }
+    grid.append(c);
+  }
+
+  if (R.e5) {
+    const names = { parts_mean: "активні куски", fresh_waiting_mean: "очікування свіжого куска, с", merge_duration_mean: "тривалість злиття, с",
+                    merge_duration_p99: "99-й перцентиль злиття, с", write_amplification: "підсилення записів" };
+    const { card: c, body } = card("E5. shortest_task_first проти round_robin", "Парні різниці (STF мінус RR) на спільних випадкових числах, 95% довірчі інтервали.");
+    body.append(table(["характеристика", ...R.e5.rates.map(r => `${r} вставок/с`)],
+      Object.keys(names).map(k => [names[k], ...R.e5.rates.map(r => ci(R.e5.differences[r][k]))])));
+    grid.append(c);
+  }
+
+  if (R.e8) {
+    const names = { "none": "без структур", "bloom_filter index": "індекс bloom_filter", "projection": "проєкція", "projection + index": "проєкція + індекс" };
+    const { card: c, body } = card("E8. Вартість допоміжних структур", "100 вставок/с по 3.6 МБ.");
+    body.append(table(["варіант", "куски", "зайняті потоки", "злиття, с", "підсилення"],
+      R.e8.variants.map((v, i) => [names[v] || v, ci(R.e8.runs[i].parts_mean), ci(R.e8.runs[i].busy_threads_mean), ci(R.e8.runs[i].merge_duration_mean), ci(R.e8.runs[i].write_amplification)])));
+    grid.append(c);
+  }
+
+  if (R.e9) {
+    const factors = { "insert size": "вставка 0.9 → 3.6 МБ", "threads": "пул 8 → 16", "base": "base 3 → 8", "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією" };
+    const responses = { parts_mean: "активні куски", write_amplification: "підсилення записів", fresh_lifetime_mean: "час життя свіжого куска, с", busy_threads_mean: "зайняті потоки" };
+    const { card: c, body } = card("E9. Головні ефекти факторного плану 2⁵",
+      "180 МБ/с вставлених даних, 6 реплік на кожну з 32 конфігурацій. Ефект: зміна середнього при переході фактора з нижнього рівня на верхній.", { wide: true, tableView: () => table(
+        ["фактор", ...R.e9.responses.map(r => responses[r] || r)], R.e9.factors.map(f => [factors[f] || f, ...R.e9.responses.map(r => NUM3.format(R.e9.effects[r].main[f]))])) });
+    const row = el("div", { class: "grid two" });
+    body.append(row);
+    for (const r of R.e9.responses) {
+      const holder = el("div");
+      row.append(el("div", {}, el("h3", {}, responses[r] || r), holder));
+      new Bars(holder, { name: responses[r] || r, color: S(1), labels: R.e9.factors.map(f => factors[f] || f), values: R.e9.factors.map(f => R.e9.effects[r].main[f]) });
+    }
+    grid.append(c);
+  }
+}
+
+function validation() {
+  const root = document.getElementById("tab-validation");
+  const cases = RESULTS.validation;
+  if (!cases.length) { root.append(el("p", { class: "loading" }, "Немає даних валідації.")); return; }
+  const names = { parts_mean: "активні куски", busy_threads_mean: "зайняті потоки", fresh_waiting_mean: "очікування свіжого куска",
+                  fresh_lifetime_mean: "час життя свіжого куска", merge_duration_mean: "тривалість злиття", write_amplification: "підсилення записів",
+                  delayed_fraction: "частка затриманих вставок", delay_mean_ms: "середня затримка вставки" };
+  root.append(el("div", { class: "card prose", style: "margin-bottom:16px" },
+    el("h2", {}, "Модель проти живого сервера"),
+    el("p", {}, "Кожне навантаження проганялося 3 рази по 6 хвилин на окремому сервері ClickHouse 26.10 і 20 разів у моделі. Розміри вставок модель брала з подій NewPart самого прогону, а вартість злиття лише з калібрування на інших навантаженнях."),
+    el("p", {}, "Середні характеристики збігаються в межах 3.3%. Підсилення записів у моделі на 6–8% вище. Гальмування залежить від хвоста розподілу кількості кусків, а на сервері цей хвіст важчий, тому частку затриманих вставок модель недооцінює на 13%.")));
+  const grid = el("div", { class: "grid three" });
+  root.append(grid);
+  let lim = 10;
+  for (const cs of cases) for (const r of cs.rows) if (names[r.metric] && r.live) {
+    const v = (r.model / r.live - 1) * 100, h = 100 * r.model / r.live * Math.hypot(r.model ? r.model_half / r.model : 0, r.live_half / r.live);
+    lim = Math.max(lim, Math.abs(v) + h);
+  }
+  lim = Math.ceil(lim * 1.1 / 10) * 10;
+  for (const cs of cases) {
+    const rows = cs.rows.filter(r => names[r.metric] && r.live);
+    const { card: c, body } = card(cs.title, "Відхилення моделі від сервера, %. Риска: 95% довірчий інтервал. Шкала однакова для трьох навантажень.", { tableView: () => table(
+      ["характеристика", "сервер", "модель", "різниця"], rows.map(r => [names[r.metric], `${NUM3.format(r.live)} ± ${NUM3.format(r.live_half)}`, `${NUM3.format(r.model)} ± ${NUM3.format(r.model_half)}`, `${r.model >= r.live ? "+" : ""}${NUM.format((r.model / r.live - 1) * 100)}%`])) });
+    const values = rows.map(r => (r.model / r.live - 1) * 100);
+    const halves = rows.map(r => 100 * r.model / r.live * Math.hypot(r.model ? r.model_half / r.model : 0, r.live_half / r.live));
+    const svg = sv("svg", { class: "chart" });
+    body.append(svg);
+    const draw = () => {
+      const width = Math.max(260, body.clientWidth), band = 30, m = { l: 178, r: 14, t: 8, b: 26 };
+      const height = m.t + m.b + band * rows.length;
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("height", height);
+      svg.replaceChildren();
+      const X = v => m.l + (v + lim) / (2 * lim) * (width - m.l - m.r);
+      for (const v of niceTicks(-lim, lim, 4)) {
+        const x = Math.round(X(v)) + 0.5;
+        svg.append(sv("line", { class: "grid-line", x1: x, x2: x, y1: m.t, y2: height - m.b }));
+        svg.append(sv("text", { class: "tick", x, y: height - 6, "text-anchor": "middle" }, (v > 0 ? "+" : "") + NUM3.format(v)));
+      }
+      svg.append(sv("line", { class: "base-line", x1: Math.round(X(0)) + 0.5, x2: Math.round(X(0)) + 0.5, y1: m.t, y2: height - m.b }));
+      rows.forEach((r, i) => {
+        const y = m.t + i * band + band / 2;
+        svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end", style: "fill:var(--text-secondary);font-size:12px" }, names[r.metric]));
+        svg.append(sv("line", { x1: X(values[i] - halves[i]), x2: X(values[i] + halves[i]), y1: y, y2: y, style: `stroke:${S(1)};stroke-width:2;stroke-linecap:round` }));
+        svg.append(sv("circle", { cx: X(values[i]), cy: y, r: 4.5, style: `fill:${S(1)};stroke:var(--surface-1);stroke-width:2` }));
+        svg.append(sv("text", { class: "point-label", x: X(values[i]), y: y - 8, "text-anchor": "middle" }, (values[i] > 0 ? "+" : "") + NUM.format(values[i]) + "%"));
+        const hit = sv("rect", { class: "hit", x: 0, y: y - band / 2, width, height: band });
+        hit.addEventListener("pointermove", e => tooltip.show(e.clientX, e.clientY, names[r.metric], [
+          { name: "сервер", value: `${NUM3.format(r.live)} ± ${NUM3.format(r.live_half)}` },
+          { name: "модель", value: `${NUM3.format(r.model)} ± ${NUM3.format(r.model_half)}` },
+          { name: "різниця", value: (values[i] > 0 ? "+" : "") + NUM.format(values[i]) + "%" }]));
+        hit.addEventListener("pointerleave", () => tooltip.hide());
+        svg.append(hit);
+      });
+    };
+    grid.append(c);
+    new ResizeObserver(draw).observe(body);
+  }
+}
+
+function model() {
+  const c = RESULTS.calibration && RESULTS.calibration.model;
+  if (c) {
+    const kv = document.getElementById("calibration");
+    const add = (k, v) => kv.append(el("dt", {}, k), el("dd", {}, v));
+    add("фіксована вартість злиття c₀", NUM2.format(c.merge_fixed_seconds * 1000) + " мс");
+    add("швидкість злиття 1/c₁", NUM.format(c.merge_bytes_per_second / 1e6) + " МБ/с на потік");
+    add("коефіцієнт варіації шуму ε", NUM2.format(c.merge_noise_cv));
+    add("середня вставка", NUM2.format(c.insert_bytes_mean / 1e6) + " МБ, cv " + NUM2.format(c.insert_bytes_cv));
+    add("індекс bloom_filter (s, δ)", `${NUM3.format(c.index_aux[0])}, ${NUM3.format(c.index_aux[1])}`);
+    add("проєкція (s, δ)", `${NUM3.format(c.projection_aux[0])}, ${NUM3.format(c.projection_aux[1])}`);
+  }
+}
+
+
+return { results, validation, model };
+})();
+
+// ---- src/main.js
+const __module_18 = (() => {
+// Entry point: tabs, theme, and the laboratory.
+
+const { Lab } = __module_15;
+const { model, results, validation } = __module_17;
+const { tooltip } = __module_7;
+function tabs(lab) {
+  const buttons = [...document.querySelectorAll('nav.tabs [role="tab"]')];
+  const built = new Set();
+  const open = button => {
+    for (const b of buttons) {
+      const on = b === button;
+      b.setAttribute("aria-selected", String(on));
+      document.getElementById(b.getAttribute("aria-controls")).hidden = !on;
+    }
+    const id = button.getAttribute("aria-controls");
+    if (!built.has(id)) {
+      built.add(id);
+      if (id === "tab-results") results();
+      if (id === "tab-validation") validation();
+    }
+    if (id === "tab-results" || id === "tab-validation") lab.pause();  // the diagram tab shows the running model
+    tooltip.hide();
+    history.replaceState(null, "", "#" + id.slice(4));
+  };
+  buttons.forEach(b => b.addEventListener("click", () => open(b)));
+  const initial = buttons.find(b => b.getAttribute("aria-controls") === "tab-" + location.hash.slice(1));
+  if (initial) open(initial);
+}
+
+function theme(lab) {
+  const button = document.getElementById("theme");
+  const modes = ["auto", "light", "dark"], names = { auto: "авто", light: "світла", dark: "темна" };
+  let mode = "auto";
+  button.addEventListener("click", () => {
+    mode = modes[(modes.indexOf(mode) + 1) % modes.length];
+    if (mode === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", mode);
+    button.textContent = "Тема: " + names[mode];
+    lab.drawAll();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => lab.drawAll());
+}
+
+const lab = new Lab();
+window.lab = lab;  // for the browser tests and for curious readers in the console
+model();
+tabs(lab);
+theme(lab);
+
+return {  };
+})();
+
+</script>
+</body>
+</html>

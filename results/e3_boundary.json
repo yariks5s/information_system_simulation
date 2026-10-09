@@ -1,0 +1,934 @@
+{
+ "labels": [
+  [
+   "pool 16",
+   900000.0
+  ],
+  [
+   "pool 16",
+   3600000.0
+  ],
+  [
+   "pool 16",
+   14400000.0
+  ],
+  [
+   "pool 4",
+   900000.0
+  ],
+  [
+   "pool 4",
+   3600000.0
+  ],
+  [
+   "pool 4",
+   14400000.0
+  ],
+  [
+   "pool 16 + projection",
+   900000.0
+  ],
+  [
+   "pool 16 + projection",
+   3600000.0
+  ],
+  [
+   "pool 16 + projection",
+   14400000.0
+  ]
+ ],
+ "guess": [
+  869.349612740158,
+  217.3374031850395,
+  54.334350796259876,
+  217.3374031850395,
+  54.334350796259876,
+  13.583587699064969,
+  450.3378429130684,
+  112.5844607282671,
+  28.146115182066776
+ ],
+ "bounds": [
+  [
+   1023.7625031626621,
+   1055.6276124521103
+  ],
+  [
+   317.1902926897708,
+   327.06299589084284
+  ],
+  [
+   103.38367448954561,
+   107.96086080044233
+  ],
+  [
+   298.3299407807328,
+   307.61560629194776
+  ],
+  [
+   90.78390083479722,
+   94.80324750826895
+  ],
+  [
+   29.43303838201997,
+   30.73615031952324
+  ],
+  [
+   581.4036658183329,
+   599.5001396541629
+  ],
+  [
+   188.110401035613,
+   196.4387600033973
+  ],
+  [
+   63.687388509750576,
+   66.50707009200146
+  ]
+ ],
+ "history": [
+  [
+   {
+    "rate": 521.6097676440947,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 1390.9593803842529,
+    "stable": false,
+    "time_to_throttle": [
+     137.4532054866025,
+     137.2641493887783,
+     139.95356706614606,
+     137.80102680175884,
+     140.6944857985576,
+     132.20175097054482
+    ]
+   },
+   {
+    "rate": 851.7851837198181,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 1088.4845388738443,
+    "stable": false,
+    "time_to_throttle": [
+     854.2183305321477,
+     760.6871373070853,
+     845.3724876414277,
+     800.7587509990213,
+     905.9691618617036,
+     769.9706306809342
+    ]
+   },
+   {
+    "rate": 962.8888839948454,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 1023.7625031626621,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 1055.6276124521103,
+    "stable": false,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     1112.1957947425165,
+     Infinity,
+     1107.742224512538,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 130.4024419110237,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 347.7398450960632,
+    "stable": false,
+    "time_to_throttle": [
+     656.7703343860003,
+     582.8236686139718,
+     666.1490932422839,
+     609.7353721107512,
+     696.0218025427793,
+     521.0202650334452
+    ]
+   },
+   {
+    "rate": 212.94629592995452,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 272.12113471846106,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 307.61560629194776,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 327.06299589084284,
+    "stable": false,
+    "time_to_throttle": [
+     Infinity,
+     909.5394015400029,
+     892.191748190839,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 317.1902926897708,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 32.60061047775592,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 86.9349612740158,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 86.9349612740158,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 173.8699225480316,
+    "stable": false,
+    "time_to_throttle": [
+     70.0259866843482,
+     62.468869139383585,
+     67.6796248358961,
+     69.69367287992611,
+     60.07777966735125,
+     78.25423402911193
+    ]
+   },
+   {
+    "rate": 122.94460127809296,
+    "stable": false,
+    "time_to_throttle": [
+     335.856378698903,
+     346.2576745946014,
+     315.6690546654596,
+     343.08948260915554,
+     315.35741632418103,
+     322.76648033412687
+    ]
+   },
+   {
+    "rate": 103.38367448954561,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 112.74069646219743,
+    "stable": false,
+    "time_to_throttle": [
+     502.80642528742106,
+     494.8086048454835,
+     436.57478668293334,
+     459.34092278865955,
+     472.3316696529544,
+     495.9409903507427
+    ]
+   },
+   {
+    "rate": 107.96086080044233,
+    "stable": false,
+    "time_to_throttle": [
+     583.5799523385288,
+     594.6006353483144,
+     611.4227760600165,
+     548.587942140444,
+     Infinity,
+     624.8988634075562
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 130.4024419110237,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 347.7398450960632,
+    "stable": false,
+    "time_to_throttle": [
+     754.4700206457875,
+     748.0580686266948,
+     738.4185045624967,
+     726.3063623226707,
+     734.060089603828,
+     757.729974613039
+    ]
+   },
+   {
+    "rate": 212.94629592995452,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 272.12113471846106,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 307.61560629194776,
+    "stable": false,
+    "time_to_throttle": [
+     1530.2844174358722,
+     1535.3893413741641,
+     1606.9053864991974,
+     1554.5489620437434,
+     1579.415503892743,
+     1554.0847698346388
+    ]
+   },
+   {
+    "rate": 289.3245717896636,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 298.3299407807328,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 32.60061047775592,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 86.9349612740158,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 86.9349612740158,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 173.8699225480316,
+    "stable": false,
+    "time_to_throttle": [
+     85.53182531257441,
+     80.16347041196936,
+     80.58870356041761,
+     81.6434158942994,
+     78.52983912597037,
+     83.4271779940958
+    ]
+   },
+   {
+    "rate": 122.94460127809296,
+    "stable": false,
+    "time_to_throttle": [
+     415.10002321351675,
+     431.7788058327652,
+     400.7137144910747,
+     418.9973920858458,
+     406.0103560420559,
+     403.9801675570922
+    ]
+   },
+   {
+    "rate": 103.38367448954561,
+    "stable": false,
+    "time_to_throttle": [
+     988.177281206857,
+     979.1791448181604,
+     1001.2221223801355,
+     945.6632656277515,
+     1030.8269972751746,
+     989.2494523211411
+    ]
+   },
+   {
+    "rate": 94.80324750826895,
+    "stable": false,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     1701.995144061829,
+     Infinity,
+     1657.1589152788677
+    ]
+   },
+   {
+    "rate": 90.78390083479722,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 8.15015261943898,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 21.73374031850395,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 21.73374031850395,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 43.4674806370079,
+    "stable": false,
+    "time_to_throttle": [
+     340.5751756635776,
+     318.30696244098544,
+     344.63583916539255,
+     339.4640492963938,
+     321.7421336923594,
+     349.709640701333
+    ]
+   },
+   {
+    "rate": 30.73615031952324,
+    "stable": false,
+    "time_to_throttle": [
+     1651.3539004953216,
+     1661.5259939492287,
+     1566.7421547755425,
+     1645.8477878839874,
+     1663.8203441567864,
+     1645.2164374253061
+    ]
+   },
+   {
+    "rate": 25.845918622386403,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 28.18517411554936,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 29.43303838201997,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 270.20270574784104,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 720.5405486609095,
+    "stable": false,
+    "time_to_throttle": [
+     231.35813984285414,
+     235.25682433047558,
+     255.517352241726,
+     238.95825358537715,
+     248.15562967068487,
+     225.23877998819378
+    ]
+   },
+   {
+    "rate": 441.2391708010653,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 563.8534510133678,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 637.4004039514874,
+    "stable": false,
+    "time_to_throttle": [
+     564.4890162903797,
+     601.6639942609006,
+     529.8414067374113,
+     567.6302189470172,
+     562.8891414813176,
+     545.6314839437541
+    ]
+   },
+   {
+    "rate": 599.5001396541629,
+    "stable": false,
+    "time_to_throttle": [
+     950.4246766851433,
+     Infinity,
+     873.5776858675052,
+     963.1765139392966,
+     1038.0758193769038,
+     894.6647956853044
+    ]
+   },
+   {
+    "rate": 581.4036658183329,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 67.55067643696026,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 180.13513716522738,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 180.13513716522738,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 360.27027433045475,
+    "stable": false,
+    "time_to_throttle": [
+     34.2221618900485,
+     31.80394585019751,
+     34.377692239947855,
+     33.328269888259356,
+     29.233006315816027,
+     33.374801360346886
+    ]
+   },
+   {
+    "rate": 254.7495540390023,
+    "stable": false,
+    "time_to_throttle": [
+     141.387997012585,
+     169.9886363402486,
+     156.943895749338,
+     150.81776820123704,
+     148.81164244874526,
+     159.3672705356773
+    ]
+   },
+   {
+    "rate": 214.2179867788795,
+    "stable": false,
+    "time_to_throttle": [
+     372.5362839643755,
+     382.6055417606235,
+     369.80105397705586,
+     407.61359752161974,
+     447.88401812701636,
+     341.44356640368534
+    ]
+   },
+   {
+    "rate": 196.4387600033973,
+    "stable": false,
+    "time_to_throttle": [
+     634.9456681578072,
+     746.1056557326531,
+     718.5147351288423,
+     670.9810329545644,
+     743.252069321433,
+     590.148047829334
+    ]
+   },
+   {
+    "rate": 188.110401035613,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   }
+  ],
+  [
+   {
+    "rate": 16.887669109240065,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 45.033784291306844,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 45.033784291306844,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 90.06756858261369,
+    "stable": false,
+    "time_to_throttle": [
+     148.2049670136488,
+     136.234332950822,
+     140.6793335072362,
+     124.35310642546129,
+     132.57447769975855,
+     140.31665319410877
+    ]
+   },
+   {
+    "rate": 63.687388509750576,
+    "stable": true,
+    "time_to_throttle": [
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity,
+     Infinity
+    ]
+   },
+   {
+    "rate": 75.73749555173794,
+    "stable": false,
+    "time_to_throttle": [
+     344.18294934077284,
+     288.6655854676836,
+     310.2190091921761,
+     335.33634342526614,
+     312.4142002189526,
+     337.2687187352513
+    ]
+   },
+   {
+    "rate": 69.45158964313949,
+    "stable": false,
+    "time_to_throttle": [
+     499.8093868206115,
+     474.16933142463967,
+     464.96836414850816,
+     490.6164087086239,
+     413.8493786837688,
+     443.64249463750406
+    ]
+   },
+   {
+    "rate": 66.50707009200146,
+    "stable": false,
+    "time_to_throttle": [
+     530.3977439337993,
+     495.23785137674827,
+     529.265057235121,
+     Infinity,
+     558.2262921142444,
+     573.4484011515893
+    ]
+   }
+  ]
+ ],
+ "until": 1800.0,
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5
+ ]
+}

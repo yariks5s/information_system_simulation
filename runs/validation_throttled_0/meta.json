@@ -1,0 +1,13 @@
+{
+ "table": "default.val_throttled",
+ "duration": 360.0,
+ "rows": 2000,
+ "mode": "open",
+ "rate": 40,
+ "clients": 4,
+ "think": 1.0,
+ "seed": 0,
+ "extra": "",
+ "settings": "parts_to_delay_insert = 15, parts_to_throw_insert = 45",
+ "async_insert": false
+}

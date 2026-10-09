@@ -1,0 +1,2222 @@
+{
+ "rates": [
+  200,
+  250
+ ],
+ "policies": [
+  "round_robin",
+  "shortest_task_first"
+ ],
+ "runs": [
+  {
+   "stats": {
+    "parts_mean": [
+     155.16993182940593,
+     2.524201008421476
+    ],
+    "busy_threads_mean": [
+     15.438850274214175,
+     0.05192434600056952
+    ],
+    "all_threads_busy": [
+     0.6888804150477594,
+     0.025420725345551766
+    ],
+    "fresh_waiting_mean": [
+     0.014077199511462985,
+     3.530574432141041e-05
+    ],
+    "fresh_lifetime_mean": [
+     0.1268259406190889,
+     0.0023343346863610274
+    ],
+    "merge_duration_mean": [
+     0.4689866331525834,
+     0.011502549621877883
+    ],
+    "write_amplification": [
+     5.120821136337923,
+     0.028805703930700102
+    ],
+    "insert_rate": [
+     199.94383333333332,
+     0.21463056982649917
+    ],
+    "delayed_fraction": [
+     0.0,
+     0.0
+    ],
+    "rejected_fraction": [
+     0.0,
+     0.0
+    ],
+    "delay_mean_ms": [
+     0.0,
+     0.0
+    ],
+    "little_relative_error": [
+     6.682710937238052e-06,
+     4.583092730583081e-06
+    ],
+    "parts_quantiles_0.5": [
+     152.0,
+     2.132782226511834
+    ],
+    "parts_quantiles_0.9": [
+     193.2,
+     9.166002273354321
+    ],
+    "parts_quantiles_0.99": [
+     220.6,
+     10.739358009315627
+    ],
+    "fresh_waiting_quantiles_0.5": [
+     0.011287240462957015,
+     2.0559800591282637e-05
+    ],
+    "fresh_waiting_quantiles_0.9": [
+     0.03136434646997601,
+     4.6864724919715616e-05
+    ],
+    "fresh_waiting_quantiles_0.99": [
+     0.05297361117547139,
+     0.00019494030768992405
+    ],
+    "fresh_lifetime_quantiles_0.5": [
+     0.1209656534601379,
+     0.0019494244418224265
+    ],
+    "fresh_lifetime_quantiles_0.9": [
+     0.1687363939443276,
+     0.004376011761918934
+    ],
+    "fresh_lifetime_quantiles_0.99": [
+     0.22637925514475737,
+     0.009044273801970835
+    ],
+    "merge_duration_quantiles_0.5": [
+     0.11185174232769554,
+     0.0021567821645509682
+    ],
+    "merge_duration_quantiles_0.9": [
+     0.6495940582454958,
+     0.00933726249190033
+    ],
+    "merge_duration_quantiles_0.99": [
+     4.962472272452676,
+     0.11269903195763387
+    ],
+    "delay_quantiles_ms_0.5": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.9": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.99": [
+     0.0,
+     0.0
+    ]
+   },
+   "series": null,
+   "per_seed": [
+    {
+     "parts_mean": 152.0344138512176,
+     "parts_quantiles": {
+      "0.5": 152,
+      "0.9": 181,
+      "0.99": 205
+     },
+     "busy_threads_mean": 15.406129905366848,
+     "all_threads_busy": 0.6660520419936744,
+     "fresh_parts_mean": 24.700811065617273,
+     "fresh_lifetime_mean": 0.12335393326930988,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.11821721794524365,
+      "0.9": 0.16196242472169617,
+      "0.99": 0.21284418013853493
+     },
+     "fresh_waiting_mean": 0.01403165677791221,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011254638199034162,
+      "0.9": 0.031280781363739144,
+      "0.99": 0.05285766872644207
+     },
+     "fresh_rate": 200.244,
+     "merge_duration_mean": 0.45862301857276194,
+     "merge_duration_quantiles": {
+      "0.5": 0.10882287055596862,
+      "0.9": 0.6376746690713845,
+      "0.99": 4.8510470789526074
+     },
+     "write_amplification": 5.1481898255236205,
+     "insert_rate": 200.244,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.9937463274610623e-06
+    },
+    {
+     "parts_mean": 155.41722974311918,
+     "parts_quantiles": {
+      "0.5": 156,
+      "0.9": 187,
+      "0.99": 215
+     },
+     "busy_threads_mean": 15.48685321871018,
+     "all_threads_busy": 0.7223473668383203,
+     "fresh_parts_mean": 25.5684186946604,
+     "fresh_lifetime_mean": 0.1276336019382328,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.12206829437081979,
+      "0.9": 0.1692154257825678,
+      "0.99": 0.2253353662968948
+     },
+     "fresh_waiting_mean": 0.014039430535937442,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011260138930538233,
+      "0.9": 0.031318285182805994,
+      "0.99": 0.05275977388075738
+     },
+     "fresh_rate": 200.325,
+     "merge_duration_mean": 0.4767573785989306,
+     "merge_duration_quantiles": {
+      "0.5": 0.11306041347489781,
+      "0.9": 0.6566131033969902,
+      "0.99": 5.018851502088589
+     },
+     "write_amplification": 5.184991837611415,
+     "insert_rate": 200.325,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 8.502144247250818e-06
+    },
+    {
+     "parts_mean": 150.43635129440776,
+     "parts_quantiles": {
+      "0.5": 150,
+      "0.9": 176,
+      "0.99": 201
+     },
+     "busy_threads_mean": 15.464019112094253,
+     "all_threads_busy": 0.6824358045656399,
+     "fresh_parts_mean": 24.55440060359612,
+     "fresh_lifetime_mean": 0.12263593583118901,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.11773225131219078,
+      "0.9": 0.1605485986091253,
+      "0.99": 0.2109547390827902
+     },
+     "fresh_waiting_mean": 0.01403244143536162,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011271036736161477,
+      "0.9": 0.03132539120575757,
+      "0.99": 0.05254737680854732
+     },
+     "fresh_rate": 200.222,
+     "merge_duration_mean": 0.45306149536981427,
+     "merge_duration_quantiles": {
+      "0.5": 0.10824943903571693,
+      "0.9": 0.6350544166772353,
+      "0.99": 4.7598111573926305
+     },
+     "write_amplification": 5.158241296057103,
+     "insert_rate": 200.222,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 4.781381713689176e-07
+    },
+    {
+     "parts_mean": 159.276965607291,
+     "parts_quantiles": {
+      "0.5": 151,
+      "0.9": 220,
+      "0.99": 255
+     },
+     "busy_threads_mean": 15.487486599215865,
+     "all_threads_busy": 0.7042815489158041,
+     "fresh_parts_mean": 26.06177488395744,
+     "fresh_lifetime_mean": 0.13034075807559015,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.12220576317611176,
+      "0.9": 0.17724299635460739,
+      "0.99": 0.2539243676932301
+     },
+     "fresh_waiting_mean": 0.01419408166868397,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011346299328806708,
+      "0.9": 0.03143996288044949,
+      "0.99": 0.05358383851538747
+     },
+     "fresh_rate": 199.95033333333333,
+     "merge_duration_mean": 0.4789572854706884,
+     "merge_duration_quantiles": {
+      "0.5": 0.11324923656775354,
+      "0.9": 0.6497990949556426,
+      "0.99": 4.974973005320394
+     },
+     "write_amplification": 5.089024042206461,
+     "insert_rate": 199.95033333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.716547482363529e-06
+    },
+    {
+     "parts_mean": 158.0737366176365,
+     "parts_quantiles": {
+      "0.5": 153,
+      "0.9": 198,
+      "0.99": 221
+     },
+     "busy_threads_mean": 15.532696841989027,
+     "all_threads_busy": 0.7355747375226028,
+     "fresh_parts_mean": 26.04472492881755,
+     "fresh_lifetime_mean": 0.13044312778764253,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.12443548773126167,
+      "0.9": 0.17474772904861313,
+      "0.99": 0.2337347809231687
+     },
+     "fresh_waiting_mean": 0.014101495412876886,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011296997013459986,
+      "0.9": 0.0314662425373399,
+      "0.99": 0.05310254692874418
+     },
+     "fresh_rate": 199.66433333333333,
+     "merge_duration_mean": 0.4853394299926737,
+     "merge_duration_quantiles": {
+      "0.5": 0.11561953154273397,
+      "0.9": 0.666094563669958,
+      "0.99": 5.135744361186261
+     },
+     "write_amplification": 5.1459229687096855,
+     "insert_rate": 199.66433333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 4.423883040288475e-06
+    },
+    {
+     "parts_mean": 152.61066340527532,
+     "parts_quantiles": {
+      "0.5": 152,
+      "0.9": 184,
+      "0.99": 211
+     },
+     "busy_threads_mean": 15.460441160917064,
+     "all_threads_busy": 0.6897638839632868,
+     "fresh_parts_mean": 24.95336018263195,
+     "fresh_lifetime_mean": 0.12477534180690344,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.11944835932376918,
+      "0.9": 0.16462998688962216,
+      "0.99": 0.21819864470663788
+     },
+     "fresh_waiting_mean": 0.014062893705258053,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011277766760485974,
+      "0.9": 0.031289177885446405,
+      "0.99": 0.05295391066166301
+     },
+     "fresh_rate": 199.98866666666666,
+     "merge_duration_mean": 0.45691020866888143,
+     "merge_duration_quantiles": {
+      "0.5": 0.11006081940934109,
+      "0.9": 0.6443649643279514,
+      "0.99": 4.887508597214218
+     },
+     "write_amplification": 5.094897900121971,
+     "insert_rate": 199.98866666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.1784313058674896e-05
+    },
+    {
+     "parts_mean": 153.9737915144945,
+     "parts_quantiles": {
+      "0.5": 148,
+      "0.9": 192,
+      "0.99": 222
+     },
+     "busy_threads_mean": 15.36596551454627,
+     "all_threads_busy": 0.6506665069598383,
+     "fresh_parts_mean": 25.02601942198568,
+     "fresh_lifetime_mean": 0.12518514468560651,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.11949900910531142,
+      "0.9": 0.1661652021623013,
+      "0.99": 0.22164434981001271
+     },
+     "fresh_waiting_mean": 0.014059111908152821,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011283929922001334,
+      "0.9": 0.03135367159331966,
+      "0.99": 0.05301214942406192
+     },
+     "fresh_rate": 199.90766666666667,
+     "merge_duration_mean": 0.4588571064299444,
+     "merge_duration_quantiles": {
+      "0.5": 0.11033469215601599,
+      "0.9": 0.6420310629433743,
+      "0.99": 4.8776342960779235
+     },
+     "write_amplification": 5.0852814790261425,
+     "insert_rate": 199.90766666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.194702032923986e-05
+    },
+    {
+     "parts_mean": 161.72387447529226,
+     "parts_quantiles": {
+      "0.5": 157,
+      "0.9": 206,
+      "0.99": 229
+     },
+     "busy_threads_mean": 15.506986394648226,
+     "all_threads_busy": 0.7369364436316578,
+     "fresh_parts_mean": 26.41967833863095,
+     "fresh_lifetime_mean": 0.13237394632889135,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.12616465009330113,
+      "0.9": 0.1781111112288727,
+      "0.99": 0.23683875393539894
+     },
+     "fresh_waiting_mean": 0.014097775458049749,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011279180039309722,
+      "0.9": 0.03138309356370428,
+      "0.99": 0.05300701537264102
+     },
+     "fresh_rate": 199.583,
+     "merge_duration_mean": 0.5021972892129668,
+     "merge_duration_quantiles": {
+      "0.5": 0.11763497467427442,
+      "0.9": 0.6755171677095864,
+      "0.99": 5.305263527848588
+     },
+     "write_amplification": 5.148978918707426,
+     "insert_rate": 199.583,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.369021783087969e-06
+    },
+    {
+     "parts_mean": 154.82840202440946,
+     "parts_quantiles": {
+      "0.5": 153,
+      "0.9": 193,
+      "0.99": 222
+     },
+     "busy_threads_mean": 15.36946014588594,
+     "all_threads_busy": 0.6666318809204397,
+     "fresh_parts_mean": 25.226288412107106,
+     "fresh_lifetime_mean": 0.12605750440203917,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.12042140352633623,
+      "0.9": 0.16751100527269505,
+      "0.99": 0.22419659951498033
+     },
+     "fresh_waiting_mean": 0.014051950152884709,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011276357344058852,
+      "0.9": 0.03134817129721344,
+      "0.99": 0.0530879806544999
+     },
+     "fresh_rate": 200.11566666666667,
+     "merge_duration_mean": 0.4618627136004925,
+     "merge_duration_quantiles": {
+      "0.5": 0.11130635189692839,
+      "0.9": 0.6492788313978056,
+      "0.99": 4.9115104865868915
+     },
+     "write_amplification": 5.076620229018056,
+     "insert_rate": 200.11566666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 8.200982776034397e-06
+    },
+    {
+     "parts_mean": 153.3238897609156,
+     "parts_quantiles": {
+      "0.5": 148,
+      "0.9": 195,
+      "0.99": 225
+     },
+     "busy_threads_mean": 15.308463848768083,
+     "all_threads_busy": 0.63411393516633,
+     "fresh_parts_mean": 25.021436697020896,
+     "fresh_lifetime_mean": 0.1254601120654842,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.1194640980170334,
+      "0.9": 0.1672294593731749,
+      "0.99": 0.2261207693459255
+     },
+     "fresh_waiting_mean": 0.014101158059512408,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011326060355713707,
+      "0.9": 0.0314386871899842,
+      "0.99": 0.05282385078196967
+     },
+     "fresh_rate": 199.43766666666667,
+     "merge_duration_mean": 0.4573004056086798,
+     "merge_duration_quantiles": {
+      "0.5": 0.1101790939633247,
+      "0.9": 0.6395127083050284,
+      "0.99": 4.902378711858662
+     },
+     "write_amplification": 5.076062866397349,
+     "insert_rate": 199.43766666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.4113121566105958e-06
+    }
+   ]
+  },
+  {
+   "stats": {
+    "parts_mean": [
+     145.36608164709364,
+     0.7664752865527251
+    ],
+    "busy_threads_mean": [
+     15.3616136596464,
+     0.05003338835935296
+    ],
+    "all_threads_busy": [
+     0.6279164592741922,
+     0.028742755180595457
+    ],
+    "fresh_waiting_mean": [
+     0.01404573883447022,
+     1.913456744907306e-05
+    ],
+    "fresh_lifetime_mean": [
+     0.11383959062384201,
+     4.9442110628829846e-05
+    ],
+    "merge_duration_mean": [
+     0.4294792554930994,
+     0.0022237070197491005
+    ],
+    "write_amplification": [
+     5.106005670400009,
+     0.023473345157793618
+    ],
+    "insert_rate": [
+     199.94383333333332,
+     0.21463056982649917
+    ],
+    "delayed_fraction": [
+     0.0,
+     0.0
+    ],
+    "rejected_fraction": [
+     0.0,
+     0.0
+    ],
+    "delay_mean_ms": [
+     0.0,
+     0.0
+    ],
+    "little_relative_error": [
+     6.869332059757641e-06,
+     4.55549205633078e-06
+    ],
+    "parts_quantiles_0.5": [
+     146.1,
+     0.8564388794001122
+    ],
+    "parts_quantiles_0.9": [
+     166.3,
+     1.1706040994929023
+    ],
+    "parts_quantiles_0.99": [
+     179.5,
+     1.5175011575030732
+    ],
+    "fresh_waiting_quantiles_0.5": [
+     0.011284378581456167,
+     1.6635543603904006e-05
+    ],
+    "fresh_waiting_quantiles_0.9": [
+     0.03136087759988983,
+     4.40794119097682e-05
+    ],
+    "fresh_waiting_quantiles_0.99": [
+     0.052900749205148256,
+     0.00013590311142683438
+    ],
+    "fresh_lifetime_quantiles_0.5": [
+     0.10961501513852454,
+     4.242405854945766e-05
+    ],
+    "fresh_lifetime_quantiles_0.9": [
+     0.14740064986994866,
+     0.00010191382458793115
+    ],
+    "fresh_lifetime_quantiles_0.99": [
+     0.1895027634782036,
+     0.00025699174431319363
+    ],
+    "merge_duration_quantiles_0.5": [
+     0.09972673927578057,
+     5.4348900174701064e-05
+    ],
+    "merge_duration_quantiles_0.9": [
+     0.5939327224750832,
+     0.0006584839662778753
+    ],
+    "merge_duration_quantiles_0.99": [
+     4.404143490562545,
+     0.019178194463231994
+    ],
+    "delay_quantiles_ms_0.5": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.9": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.99": [
+     0.0,
+     0.0
+    ]
+   },
+   "series": null,
+   "per_seed": [
+    {
+     "parts_mean": 147.13619850316897,
+     "parts_quantiles": {
+      "0.5": 148,
+      "0.9": 169,
+      "0.99": 183
+     },
+     "busy_threads_mean": 15.500257925038856,
+     "all_threads_busy": 0.7094754141619181,
+     "fresh_parts_mean": 22.80282883012174,
+     "fresh_lifetime_mean": 0.11387632825661281,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10959411895532867,
+      "0.9": 0.14735263006939478,
+      "0.99": 0.18930571632217955
+     },
+     "fresh_waiting_mean": 0.01401115325557349,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011251637737586861,
+      "0.9": 0.03128423921889408,
+      "0.99": 0.05286107984748918
+     },
+     "fresh_rate": 200.244,
+     "merge_duration_mean": 0.42575682507566054,
+     "merge_duration_quantiles": {
+      "0.5": 0.09978105018399219,
+      "0.9": 0.5941294558354915,
+      "0.99": 4.399154796983021
+     },
+     "write_amplification": 5.040170810146501,
+     "insert_rate": 200.244,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 9.763933110937838e-06
+    },
+    {
+     "parts_mean": 146.7025587774104,
+     "parts_quantiles": {
+      "0.5": 147,
+      "0.9": 168,
+      "0.99": 182
+     },
+     "busy_threads_mean": 15.368612250056666,
+     "all_threads_busy": 0.635555258066174,
+     "fresh_parts_mean": 22.814448245571437,
+     "fresh_lifetime_mean": 0.11388633120347938,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10966736081240924,
+      "0.9": 0.14749276934330735,
+      "0.99": 0.18903834421499147
+     },
+     "fresh_waiting_mean": 0.014010058151925377,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01126246714466106,
+      "0.9": 0.03130866591391168,
+      "0.99": 0.05265970157579446
+     },
+     "fresh_rate": 200.325,
+     "merge_duration_mean": 0.43326018749509165,
+     "merge_duration_quantiles": {
+      "0.5": 0.09979442899953028,
+      "0.9": 0.5946009394400678,
+      "0.99": 4.358204006002542
+     },
+     "write_amplification": 5.096534847630424,
+     "insert_rate": 200.325,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 7.40527373764217e-06
+    },
+    {
+     "parts_mean": 145.23534626805184,
+     "parts_quantiles": {
+      "0.5": 146,
+      "0.9": 166,
+      "0.99": 179
+     },
+     "busy_threads_mean": 15.416889624259868,
+     "all_threads_busy": 0.6528572837281232,
+     "fresh_parts_mean": 22.795127723184073,
+     "fresh_lifetime_mean": 0.11384981282042102,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10964559755211667,
+      "0.9": 0.1471606084992345,
+      "0.99": 0.1893615275568663
+     },
+     "fresh_waiting_mean": 0.01402149100468947,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01126775569161964,
+      "0.9": 0.03132691005494053,
+      "0.99": 0.05252692656317316
+     },
+     "fresh_rate": 200.222,
+     "merge_duration_mean": 0.4277980009079685,
+     "merge_duration_quantiles": {
+      "0.5": 0.09976013926814176,
+      "0.9": 0.5936965796522601,
+      "0.99": 4.415675224924976
+     },
+     "write_amplification": 5.095013006051321,
+     "insert_rate": 200.222,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 4.803629424477363e-06
+    },
+    {
+     "parts_mean": 145.88984446489098,
+     "parts_quantiles": {
+      "0.5": 147,
+      "0.9": 167,
+      "0.99": 181
+     },
+     "busy_threads_mean": 15.399440597457755,
+     "all_threads_busy": 0.6493533309053096,
+     "fresh_parts_mean": 22.780575253215428,
+     "fresh_lifetime_mean": 0.11393148781789877,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10973933323498386,
+      "0.9": 0.14744174458223824,
+      "0.99": 0.18953919157504515
+     },
+     "fresh_waiting_mean": 0.014067529899268332,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011314077486758833,
+      "0.9": 0.031375936064796404,
+      "0.99": 0.053083006413180575
+     },
+     "fresh_rate": 199.95033333333333,
+     "merge_duration_mean": 0.43095313241929006,
+     "merge_duration_quantiles": {
+      "0.5": 0.0998718709415698,
+      "0.9": 0.5932380379369531,
+      "0.99": 4.425993683220089
+     },
+     "write_amplification": 5.124331212575025,
+     "insert_rate": 199.95033333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.796818575833666e-06
+    },
+    {
+     "parts_mean": 143.67701529709353,
+     "parts_quantiles": {
+      "0.5": 144,
+      "0.9": 164,
+      "0.99": 177
+     },
+     "busy_threads_mean": 15.318078491720415,
+     "all_threads_busy": 0.603897643444273,
+     "fresh_parts_mean": 22.730863681903838,
+     "fresh_lifetime_mean": 0.11384548535014144,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.1095675730059611,
+      "0.9": 0.1475166469326723,
+      "0.99": 0.18958400045630686
+     },
+     "fresh_waiting_mean": 0.014078868479788943,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011297870556518319,
+      "0.9": 0.031476340766755595,
+      "0.99": 0.053073100846827356
+     },
+     "fresh_rate": 199.66433333333333,
+     "merge_duration_mean": 0.42403344375402285,
+     "merge_duration_quantiles": {
+      "0.5": 0.09963747628739839,
+      "0.9": 0.5931115845704316,
+      "0.99": 4.409381402175461
+     },
+     "write_amplification": 5.122034839860713,
+     "insert_rate": 199.66433333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 8.470220132218818e-07
+    },
+    {
+     "parts_mean": 145.94788098404752,
+     "parts_quantiles": {
+      "0.5": 147,
+      "0.9": 168,
+      "0.99": 181
+     },
+     "busy_threads_mean": 15.335204490511405,
+     "all_threads_busy": 0.6192621545517956,
+     "fresh_parts_mean": 22.749030073691692,
+     "fresh_lifetime_mean": 0.11375269922436958,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.1095641248073207,
+      "0.9": 0.1471640346156846,
+      "0.99": 0.1895193863721433
+     },
+     "fresh_waiting_mean": 0.014048354770213968,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011276617477051332,
+      "0.9": 0.0313043444100913,
+      "0.99": 0.05295272191873663
+     },
+     "fresh_rate": 199.98866666666666,
+     "merge_duration_mean": 0.4289412749957437,
+     "merge_duration_quantiles": {
+      "0.5": 0.09968942160890037,
+      "0.9": 0.5948958177209762,
+      "0.99": 4.396092989000914
+     },
+     "write_amplification": 5.072378334324033,
+     "insert_rate": 199.98866666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 9.695970493270885e-06
+    },
+    {
+     "parts_mean": 144.5479261990544,
+     "parts_quantiles": {
+      "0.5": 145,
+      "0.9": 165,
+      "0.99": 178
+     },
+     "busy_threads_mean": 15.303755909637529,
+     "all_threads_busy": 0.5921466495633123,
+     "fresh_parts_mean": 22.771339531362415,
+     "fresh_lifetime_mean": 0.11390771325167058,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10961046431066279,
+      "0.9": 0.14754227729813466,
+      "0.99": 0.18993584955226653
+     },
+     "fresh_waiting_mean": 0.014043001418232686,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011286354731510073,
+      "0.9": 0.03135801459802679,
+      "0.99": 0.05302245412362009
+     },
+     "fresh_rate": 199.90766666666667,
+     "merge_duration_mean": 0.42946429908631695,
+     "merge_duration_quantiles": {
+      "0.5": 0.09968435487729721,
+      "0.9": 0.5919814462691648,
+      "0.99": 4.452020694456079
+     },
+     "write_amplification": 5.117247998086542,
+     "insert_rate": 199.90766666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.3805067759366937e-05
+    },
+    {
+     "parts_mean": 144.99991862219144,
+     "parts_quantiles": {
+      "0.5": 146,
+      "0.9": 165,
+      "0.99": 179
+     },
+     "busy_threads_mean": 15.34679368104095,
+     "all_threads_busy": 0.6121087063449567,
+     "fresh_parts_mean": 22.709787199322523,
+     "fresh_lifetime_mean": 0.11378621610512875,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10954266267094681,
+      "0.9": 0.14735651178903025,
+      "0.99": 0.19010761509372967
+     },
+     "fresh_waiting_mean": 0.014065484227676051,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01128003220219398,
+      "0.9": 0.03139075990493441,
+      "0.99": 0.053008134009587586
+     },
+     "fresh_rate": 199.583,
+     "merge_duration_mean": 0.4328206334700462,
+     "merge_duration_quantiles": {
+      "0.5": 0.09965796584924647,
+      "0.9": 0.5946702603160929,
+      "0.99": 4.374832526106372
+     },
+     "write_amplification": 5.16063302328229,
+     "insert_rate": 199.583,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.1570473667813593e-07
+    },
+    {
+     "parts_mean": 144.31667484134405,
+     "parts_quantiles": {
+      "0.5": 145,
+      "0.9": 165,
+      "0.99": 177
+     },
+     "busy_threads_mean": 15.382433800634974,
+     "all_threads_busy": 0.6425003424135415,
+     "fresh_parts_mean": 22.756374146502626,
+     "fresh_lifetime_mean": 0.11371391643038337,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.1095784052658928,
+      "0.9": 0.14743824974293604,
+      "0.99": 0.1889593954347401
+     },
+     "fresh_waiting_mean": 0.014031167782302447,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011279388602360996,
+      "0.9": 0.03134252465106329,
+      "0.99": 0.053039146947380766
+     },
+     "fresh_rate": 200.11566666666667,
+     "merge_duration_mean": 0.42878871865964563,
+     "merge_duration_quantiles": {
+      "0.5": 0.09974214289854899,
+      "0.9": 0.59447095168141,
+      "0.99": 4.389585279519013
+     },
+     "write_amplification": 5.108188621185335,
+     "insert_rate": 200.11566666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.924519064492966e-05
+    },
+    {
+     "parts_mean": 145.2074525136832,
+     "parts_quantiles": {
+      "0.5": 146,
+      "0.9": 166,
+      "0.99": 178
+     },
+     "busy_threads_mean": 15.244669826105593,
+     "all_threads_busy": 0.5620078095625174,
+     "fresh_parts_mean": 22.705163468361647,
+     "fresh_lifetime_mean": 0.11384591577831453,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10964051076962278,
+      "0.9": 0.1475410258268539,
+      "0.99": 0.18967660820376703
+     },
+     "fresh_waiting_mean": 0.014080279355031413,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.011327584184300576,
+      "0.9": 0.031441040415484185,
+      "0.99": 0.052781219805692677
+     },
+     "fresh_rate": 199.43766666666667,
+     "merge_duration_mean": 0.4329760390672079,
+     "merge_duration_quantiles": {
+      "0.5": 0.09964854184318028,
+      "0.9": 0.594532151327985,
+      "0.99": 4.420494303236976
+     },
+     "write_amplification": 5.123524010857908,
+     "insert_rate": 199.43766666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.4710101217879492e-08
+    }
+   ]
+  },
+  {
+   "stats": {
+    "parts_mean": [
+     484.7395211744614,
+     10.668644375767045
+    ],
+    "busy_threads_mean": [
+     16.0,
+     1.9867493165165653e-15
+    ],
+    "all_threads_busy": [
+     1.0,
+     1.2417183228228533e-16
+    ],
+    "fresh_waiting_mean": [
+     0.038038426872467924,
+     0.0013236689220891434
+    ],
+    "fresh_lifetime_mean": [
+     0.2815128426545669,
+     0.003620559251447991
+    ],
+    "merge_duration_mean": [
+     0.7355080122120109,
+     0.003241597176020676
+    ],
+    "write_amplification": [
+     4.325775238022229,
+     0.02098711675412996
+    ],
+    "insert_rate": [
+     249.9084666666667,
+     0.18635962995762378
+    ],
+    "delayed_fraction": [
+     0.0,
+     0.0
+    ],
+    "rejected_fraction": [
+     0.0,
+     0.0
+    ],
+    "delay_mean_ms": [
+     0.0,
+     0.0
+    ],
+    "little_relative_error": [
+     5.1949134424902565e-05,
+     2.009593490375058e-05
+    ],
+    "parts_quantiles_0.5": [
+     493.8,
+     11.666143320295925
+    ],
+    "parts_quantiles_0.9": [
+     575.7,
+     14.390551974165293
+    ],
+    "parts_quantiles_0.99": [
+     630.1,
+     18.99688297039562
+    ],
+    "fresh_waiting_quantiles_0.5": [
+     0.013265364526034773,
+     0.0002004327918111882
+    ],
+    "fresh_waiting_quantiles_0.9": [
+     0.056805859094340605,
+     0.00329323783141797
+    ],
+    "fresh_waiting_quantiles_0.99": [
+     0.47566838895152275,
+     0.015185831235014149
+    ],
+    "fresh_lifetime_quantiles_0.5": [
+     0.19831324653870866,
+     0.0009836488737667447
+    ],
+    "fresh_lifetime_quantiles_0.9": [
+     0.42890345546190367,
+     0.009032680071203199
+    ],
+    "fresh_lifetime_quantiles_0.99": [
+     1.6326178674302607,
+     0.031072954002642157
+    ],
+    "merge_duration_quantiles_0.5": [
+     0.1817628136796145,
+     0.0003934879273556037
+    ],
+    "merge_duration_quantiles_0.9": [
+     0.9325179090341669,
+     0.0055305804984461865
+    ],
+    "merge_duration_quantiles_0.99": [
+     8.726114813944642,
+     0.04089688961873022
+    ],
+    "delay_quantiles_ms_0.5": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.9": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.99": [
+     0.0,
+     0.0
+    ]
+   },
+   "series": null,
+   "per_seed": [
+    {
+     "parts_mean": 499.30996566137844,
+     "parts_quantiles": {
+      "0.5": 502,
+      "0.9": 595,
+      "0.99": 651
+     },
+     "busy_threads_mean": 16.000000000000004,
+     "all_threads_busy": 1.0000000000000002,
+     "fresh_parts_mean": 72.54029824650199,
+     "fresh_lifetime_mean": 0.2900114303235682,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.20044319987692916,
+      "0.9": 0.44909991737569044,
+      "0.99": 1.7028607891924576
+     },
+     "fresh_waiting_mean": 0.04128846549107113,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.013771489847840712,
+      "0.9": 0.06516217246652345,
+      "0.99": 0.5150285766831912
+     },
+     "fresh_rate": 250.11266666666666,
+     "merge_duration_mean": 0.7447442603579765,
+     "merge_duration_quantiles": {
+      "0.5": 0.18243383685029357,
+      "0.9": 0.9200101390387307,
+      "0.99": 8.722908523995612
+     },
+     "write_amplification": 4.333812205225722,
+     "insert_rate": 250.11266666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 6.57020246037456e-05
+    },
+    {
+     "parts_mean": 485.4330729829028,
+     "parts_quantiles": {
+      "0.5": 501,
+      "0.9": 572,
+      "0.99": 618
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 71.06424911732852,
+     "fresh_lifetime_mean": 0.28393334215436195,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19908658047324934,
+      "0.9": 0.43273786384097546,
+      "0.99": 1.6451929772642404
+     },
+     "fresh_waiting_mean": 0.038758535690683465,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01338335283435299,
+      "0.9": 0.05847383719110436,
+      "0.99": 0.48505267620245823
+     },
+     "fresh_rate": 250.276,
+     "merge_duration_mean": 0.7343786952133599,
+     "merge_duration_quantiles": {
+      "0.5": 0.1822106384270228,
+      "0.9": 0.9330522606028799,
+      "0.99": 8.805591960454475
+     },
+     "write_amplification": 4.3267796687587285,
+     "insert_rate": 250.276,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.585454479666208e-05
+    },
+    {
+     "parts_mean": 500.54265993965737,
+     "parts_quantiles": {
+      "0.5": 513,
+      "0.9": 596,
+      "0.99": 649
+     },
+     "busy_threads_mean": 16.000000000000007,
+     "all_threads_busy": 1.0000000000000004,
+     "fresh_parts_mean": 71.50869316865226,
+     "fresh_lifetime_mean": 0.28577826930597705,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19944246872569238,
+      "0.9": 0.44143313374252136,
+      "0.99": 1.663645515425096
+     },
+     "fresh_waiting_mean": 0.039501697499554546,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.013485520442259258,
+      "0.9": 0.0605473195877948,
+      "0.99": 0.48574949224498887
+     },
+     "fresh_rate": 250.19933333333333,
+     "merge_duration_mean": 0.7392939673028572,
+     "merge_duration_quantiles": {
+      "0.5": 0.18213653922987305,
+      "0.9": 0.92968448040574,
+      "0.99": 8.78718723717321
+     },
+     "write_amplification": 4.318748702082801,
+     "insert_rate": 250.19933333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 0.00010013757524714441
+    },
+    {
+     "parts_mean": 473.0578711281837,
+     "parts_quantiles": {
+      "0.5": 486,
+      "0.9": 550,
+      "0.99": 594
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 69.74171777277769,
+     "fresh_lifetime_mean": 0.2791019090814558,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19741375716796483,
+      "0.9": 0.4269314994099205,
+      "0.99": 1.6193970352829454
+     },
+     "fresh_waiting_mean": 0.037172034416227226,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.013106183663126103,
+      "0.9": 0.05470673051040653,
+      "0.99": 0.46729801286212547
+     },
+     "fresh_rate": 249.86333333333334,
+     "merge_duration_mean": 0.7310124290732197,
+     "merge_duration_quantiles": {
+      "0.5": 0.18138055324374136,
+      "0.9": 0.9330224512872068,
+      "0.99": 8.732687946045576
+     },
+     "write_amplification": 4.330812211338781,
+     "insert_rate": 249.86333333333334,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 6.286667619053007e-05
+    },
+    {
+     "parts_mean": 489.4892188810273,
+     "parts_quantiles": {
+      "0.5": 489,
+      "0.9": 588,
+      "0.99": 641
+     },
+     "busy_threads_mean": 15.999999999999998,
+     "all_threads_busy": 0.9999999999999999,
+     "fresh_parts_mean": 70.50946502826554,
+     "fresh_lifetime_mean": 0.2823053911757931,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19877382953609413,
+      "0.9": 0.43271049284569457,
+      "0.99": 1.6445557364077463
+     },
+     "fresh_waiting_mean": 0.037967425967147764,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.013293120473463205,
+      "0.9": 0.05762328024584351,
+      "0.99": 0.4759195737951665
+     },
+     "fresh_rate": 249.76966666666667,
+     "merge_duration_mean": 0.7351585140338829,
+     "merge_duration_quantiles": {
+      "0.5": 0.1819376239129724,
+      "0.9": 0.9331645401515077,
+      "0.99": 8.688915550749936
+     },
+     "write_amplification": 4.287720858533524,
+     "insert_rate": 249.76966666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.6357084322036887e-05
+    },
+    {
+     "parts_mean": 498.9252384003813,
+     "parts_quantiles": {
+      "0.5": 516,
+      "0.9": 602,
+      "0.99": 659
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 69.88845808380326,
+     "fresh_lifetime_mean": 0.27945543959943403,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19764719313548085,
+      "0.9": 0.42656313087254616,
+      "0.99": 1.606687292761345
+     },
+     "fresh_waiting_mean": 0.03765333722036883,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01316642237634369,
+      "0.9": 0.05541654430389836,
+      "0.99": 0.46978720556409204
+     },
+     "fresh_rate": 250.09066666666666,
+     "merge_duration_mean": 0.7383573280955602,
+     "merge_duration_quantiles": {
+      "0.5": 0.18131079021378582,
+      "0.9": 0.9372907366153178,
+      "0.99": 8.703339169732104
+     },
+     "write_amplification": 4.336567045197838,
+     "insert_rate": 250.09066666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.0575555189873026e-05
+    },
+    {
+     "parts_mean": 494.7161607101565,
+     "parts_quantiles": {
+      "0.5": 503,
+      "0.9": 585,
+      "0.99": 667
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 71.1801626124375,
+     "fresh_lifetime_mean": 0.28508632842340476,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19912514467569054,
+      "0.9": 0.434824160065989,
+      "0.99": 1.6718885534830121
+     },
+     "fresh_waiting_mean": 0.03952623684967519,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.013428603782585924,
+      "0.9": 0.05962345507077771,
+      "0.99": 0.49677156191385075
+     },
+     "fresh_rate": 249.672,
+     "merge_duration_mean": 0.7362321104667015,
+     "merge_duration_quantiles": {
+      "0.5": 0.18213675862841683,
+      "0.9": 0.9261960542262502,
+      "0.99": 8.799675287854589
+     },
+     "write_amplification": 4.2849943751719515,
+     "insert_rate": 249.672,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.93455680982833e-05
+    },
+    {
+     "parts_mean": 459.72678022279575,
+     "parts_quantiles": {
+      "0.5": 469,
+      "0.9": 548,
+      "0.99": 595
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 68.69087889666628,
+     "fresh_lifetime_mean": 0.2752736520318031,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19652152757851127,
+      "0.9": 0.4092769241067345,
+      "0.99": 1.5738452275723773
+     },
+     "fresh_waiting_mean": 0.03550941316889395,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.012831576220492025,
+      "0.9": 0.05015386068287165,
+      "0.99": 0.44556160772397135
+     },
+     "fresh_rate": 249.54633333333334,
+     "merge_duration_mean": 0.7353641705377897,
+     "merge_duration_quantiles": {
+      "0.5": 0.18111646537317938,
+      "0.9": 0.9345976781610261,
+      "0.99": 8.722037374196274
+     },
+     "write_amplification": 4.382639319827578,
+     "insert_rate": 249.54633333333334,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.8602376161969e-05
+    },
+    {
+     "parts_mean": 482.65591734590777,
+     "parts_quantiles": {
+      "0.5": 490,
+      "0.9": 564,
+      "0.99": 615
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 70.28216629565571,
+     "fresh_lifetime_mean": 0.2811405254640537,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.1986385698567119,
+      "0.9": 0.42671402141190823,
+      "0.99": 1.6357044936292524
+     },
+     "fresh_waiting_mean": 0.03780105638230075,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01329157668874359,
+      "0.9": 0.056223902533224714,
+      "0.99": 0.46821678060875477
+     },
+     "fresh_rate": 249.969,
+     "merge_duration_mean": 0.730220689986929,
+     "merge_duration_quantiles": {
+      "0.5": 0.18212929935452848,
+      "0.9": 0.9286087059131205,
+      "0.99": 8.659790385123188
+     },
+     "write_amplification": 4.30400224329516,
+     "insert_rate": 249.969,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 8.181714131403948e-05
+    },
+    {
+     "parts_mean": 463.53832647222333,
+     "parts_quantiles": {
+      "0.5": 469,
+      "0.9": 557,
+      "0.99": 612
+     },
+     "busy_threads_mean": 15.999999999999998,
+     "all_threads_busy": 0.9999999999999999,
+     "fresh_parts_mean": 68.14275471602801,
+     "fresh_lifetime_mean": 0.2730421389858172,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.19604019436076214,
+      "0.9": 0.40874341094705646,
+      "0.99": 1.5624010532841335
+     },
+     "fresh_waiting_mean": 0.03520606603875639,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.012895798931140234,
+      "0.9": 0.05012748835096089,
+      "0.99": 0.4472984019166286
+     },
+     "fresh_rate": 249.58566666666667,
+     "merge_duration_mean": 0.7303179570518326,
+     "merge_duration_quantiles": {
+      "0.5": 0.1808356315623314,
+      "0.9": 0.9495520439398892,
+      "0.99": 8.639014704121445
+     },
+     "write_amplification": 4.351675750790209,
+     "insert_rate": 249.58566666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 6.823279832474177e-05
+    }
+   ]
+  },
+  {
+   "stats": {
+    "parts_mean": [
+     349.46305434807596,
+     8.277090545747296
+    ],
+    "busy_threads_mean": [
+     16.0,
+     1.2707291325010533e-15
+    ],
+    "all_threads_busy": [
+     1.0,
+     7.942057078131583e-17
+    ],
+    "fresh_waiting_mean": [
+     0.016508315347940762,
+     0.0002879302144308534
+    ],
+    "fresh_lifetime_mean": [
+     0.1295901243037066,
+     0.0009209058207233152
+    ],
+    "merge_duration_mean": [
+     0.4517720644984052,
+     0.015121215973684866
+    ],
+    "write_amplification": [
+     4.31326024312254,
+     0.011033438104692801
+    ],
+    "insert_rate": [
+     249.9084666666667,
+     0.18635962995762378
+    ],
+    "delayed_fraction": [
+     0.0,
+     0.0
+    ],
+    "rejected_fraction": [
+     0.0,
+     0.0
+    ],
+    "delay_mean_ms": [
+     0.0,
+     0.0
+    ],
+    "little_relative_error": [
+     1.820313956786897e-05,
+     1.1684591722258752e-05
+    ],
+    "parts_quantiles_0.5": [
+     361.7,
+     8.787541600852323
+    ],
+    "parts_quantiles_0.9": [
+     456.9,
+     10.85128283733854
+    ],
+    "parts_quantiles_0.99": [
+     501.0,
+     13.522579377993532
+    ],
+    "fresh_waiting_quantiles_0.5": [
+     0.010415628389984022,
+     6.832321296789052e-05
+    ],
+    "fresh_waiting_quantiles_0.9": [
+     0.030120075280137833,
+     0.0002849700688732401
+    ],
+    "fresh_waiting_quantiles_0.99": [
+     0.15876356661942478,
+     0.006530105636085238
+    ],
+    "fresh_lifetime_quantiles_0.5": [
+     0.10964372174852315,
+     0.00015088941250231995
+    ],
+    "fresh_lifetime_quantiles_0.9": [
+     0.16800983300847178,
+     0.0017508095105905471
+    ],
+    "fresh_lifetime_quantiles_0.99": [
+     0.6605091296609771,
+     0.01432178834911353
+    ],
+    "merge_duration_quantiles_0.5": [
+     0.0995238159975429,
+     5.9062775073422874e-05
+    ],
+    "merge_duration_quantiles_0.9": [
+     0.5764455640251879,
+     0.0013958223195071578
+    ],
+    "merge_duration_quantiles_0.99": [
+     4.80331670803546,
+     0.02874198988177099
+    ],
+    "delay_quantiles_ms_0.5": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.9": [
+     0.0,
+     0.0
+    ],
+    "delay_quantiles_ms_0.99": [
+     0.0,
+     0.0
+    ]
+   },
+   "series": null,
+   "per_seed": [
+    {
+     "parts_mean": 363.31284018466334,
+     "parts_quantiles": {
+      "0.5": 378,
+      "0.9": 474,
+      "0.99": 537
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 33.08423251880141,
+     "fresh_lifetime_mean": 0.13227132793943366,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.11006768935942546,
+      "0.9": 0.1730428970732305,
+      "0.99": 0.7062307326366692
+     },
+     "fresh_waiting_mean": 0.01736360144245126,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01061300673450205,
+      "0.9": 0.03097105589222338,
+      "0.99": 0.17851195633768274
+     },
+     "fresh_rate": 250.11266666666666,
+     "merge_duration_mean": 0.4509881204651028,
+     "merge_duration_quantiles": {
+      "0.5": 0.09957682269646284,
+      "0.9": 0.5747384994229834,
+      "0.99": 4.869079810162223
+     },
+     "write_amplification": 4.29684256427331,
+     "insert_rate": 250.11266666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 4.527728813520936e-05
+    },
+    {
+     "parts_mean": 370.5097020706036,
+     "parts_quantiles": {
+      "0.5": 381,
+      "0.9": 478,
+      "0.99": 519
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.70441896680529,
+     "fresh_lifetime_mean": 0.1306731364351076,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10992360201362317,
+      "0.9": 0.17001984248784088,
+      "0.99": 0.673210457891985
+     },
+     "fresh_waiting_mean": 0.016796985744409566,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010490445532923331,
+      "0.9": 0.030361881502676633,
+      "0.99": 0.16469103695240858
+     },
+     "fresh_rate": 250.276,
+     "merge_duration_mean": 0.46364514979916266,
+     "merge_duration_quantiles": {
+      "0.5": 0.09965443904593485,
+      "0.9": 0.5754490187997817,
+      "0.99": 4.761910979739242
+     },
+     "write_amplification": 4.299910049146352,
+     "insert_rate": 250.276,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.1120195521088146e-06
+    },
+    {
+     "parts_mean": 351.6037275569049,
+     "parts_quantiles": {
+      "0.5": 365,
+      "0.9": 464,
+      "0.99": 513
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.39506692277415,
+     "fresh_lifetime_mean": 0.12947194598236159,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10970034057481826,
+      "0.9": 0.1673120003688382,
+      "0.99": 0.650448742840189
+     },
+     "fresh_waiting_mean": 0.016433855023971614,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.01039273606329516,
+      "0.9": 0.030006362626636494,
+      "0.99": 0.15680095190338675
+     },
+     "fresh_rate": 250.19933333333333,
+     "merge_duration_mean": 0.4485275257329054,
+     "merge_duration_quantiles": {
+      "0.5": 0.09958130079650118,
+      "0.9": 0.5766445574724913,
+      "0.99": 4.8014666976114375
+     },
+     "write_amplification": 4.305505720896058,
+     "insert_rate": 250.19933333333333,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.927612253346158e-05
+    },
+    {
+     "parts_mean": 348.2676518722103,
+     "parts_quantiles": {
+      "0.5": 358,
+      "0.9": 459,
+      "0.99": 499
+     },
+     "busy_threads_mean": 15.999999999999998,
+     "all_threads_busy": 0.9999999999999999,
+     "fresh_parts_mean": 31.93779727829234,
+     "fresh_lifetime_mean": 0.12781944294479888,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10944819101723624,
+      "0.9": 0.1644614516681031,
+      "0.99": 0.6342414192183917
+     },
+     "fresh_waiting_mean": 0.015992510412312654,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010301315215770046,
+      "0.9": 0.029563744621327714,
+      "0.99": 0.14654014568295687
+     },
+     "fresh_rate": 249.86333333333334,
+     "merge_duration_mean": 0.46950624796636,
+     "merge_duration_quantiles": {
+      "0.5": 0.09953328196763778,
+      "0.9": 0.5813625798950852,
+      "0.99": 4.759317780469994
+     },
+     "write_amplification": 4.3329674036190395,
+     "insert_rate": 249.86333333333334,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.2687139677881043e-05
+    },
+    {
+     "parts_mean": 335.35794987911623,
+     "parts_quantiles": {
+      "0.5": 341,
+      "0.9": 438,
+      "0.99": 481
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.19449263818675,
+     "fresh_lifetime_mean": 0.12889658545291457,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10952846359236901,
+      "0.9": 0.16641667944372784,
+      "0.99": 0.6509798074391692
+     },
+     "fresh_waiting_mean": 0.016352853926326388,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010334007634128284,
+      "0.9": 0.029828288625594723,
+      "0.99": 0.1552511109308398
+     },
+     "fresh_rate": 249.76966666666667,
+     "merge_duration_mean": 0.46108268443938766,
+     "merge_duration_quantiles": {
+      "0.5": 0.09953466804449818,
+      "0.9": 0.5777077856638472,
+      "0.99": 4.81857674871122
+     },
+     "write_amplification": 4.322516481205603,
+     "insert_rate": 249.76966666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 1.1012796865459133e-06
+    },
+    {
+     "parts_mean": 344.97184606125523,
+     "parts_quantiles": {
+      "0.5": 367,
+      "0.9": 448,
+      "0.99": 495
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.51657198031331,
+     "fresh_lifetime_mean": 0.13001565806836,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10952019351361741,
+      "0.9": 0.16845663171718575,
+      "0.99": 0.6618988205781521
+     },
+     "fresh_waiting_mean": 0.016652798653757673,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010442922083029771,
+      "0.9": 0.030246679379911254,
+      "0.99": 0.16049254990461545
+     },
+     "fresh_rate": 250.09066666666666,
+     "merge_duration_mean": 0.4449311447343134,
+     "merge_duration_quantiles": {
+      "0.5": 0.09937795457926768,
+      "0.9": 0.5750851161415086,
+      "0.99": 4.748461879385965
+     },
+     "write_amplification": 4.328477442160782,
+     "insert_rate": 250.09066666666666,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 2.673642511591841e-05
+    },
+    {
+     "parts_mean": 358.4016138656688,
+     "parts_quantiles": {
+      "0.5": 363,
+      "0.9": 474,
+      "0.99": 513
+     },
+     "busy_threads_mean": 16.000000000000004,
+     "all_threads_busy": 1.0000000000000002,
+     "fresh_parts_mean": 32.213787391618105,
+     "fresh_lifetime_mean": 0.12902349213971928,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10963540925149573,
+      "0.9": 0.16774865798470273,
+      "0.99": 0.652342655424717
+     },
+     "fresh_waiting_mean": 0.01630401952106727,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010385003495287037,
+      "0.9": 0.030062711472305638,
+      "0.99": 0.15626096346023155
+     },
+     "fresh_rate": 249.672,
+     "merge_duration_mean": 0.488504400998565,
+     "merge_duration_quantiles": {
+      "0.5": 0.09955090204118733,
+      "0.9": 0.5758903666828701,
+      "0.99": 4.831999433535779
+     },
+     "write_amplification": 4.2982132625363585,
+     "insert_rate": 249.672,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 7.265898519299581e-06
+    },
+    {
+     "parts_mean": 338.3318847358229,
+     "parts_quantiles": {
+      "0.5": 349,
+      "0.9": 446,
+      "0.99": 481
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.01355049151492,
+     "fresh_lifetime_mean": 0.12828278956384392,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10937764134041572,
+      "0.9": 0.16580930444388287,
+      "0.99": 0.6472656772626795
+     },
+     "fresh_waiting_mean": 0.01609176752529787,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010304316804536029,
+      "0.9": 0.02977657211104088,
+      "0.99": 0.14952958360559926
+     },
+     "fresh_rate": 249.54633333333334,
+     "merge_duration_mean": 0.43026994843078253,
+     "merge_duration_quantiles": {
+      "0.5": 0.09943353560703372,
+      "0.9": 0.5757227191048288,
+      "0.99": 4.8511053062071
+     },
+     "write_amplification": 4.337309637571497,
+     "insert_rate": 249.54633333333334,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 3.2821291919779036e-05
+    },
+    {
+     "parts_mean": 345.67133627515983,
+     "parts_quantiles": {
+      "0.5": 362,
+      "0.9": 451,
+      "0.99": 489
+     },
+     "busy_threads_mean": 16.000000000000004,
+     "all_threads_busy": 1.0000000000000002,
+     "fresh_parts_mean": 32.57240334765979,
+     "fresh_lifetime_mean": 0.1303049312176268,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10960922795356964,
+      "0.9": 0.16973518492295625,
+      "0.99": 0.6742808361149207
+     },
+     "fresh_waiting_mean": 0.016780037026925904,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010472135340933164,
+      "0.9": 0.030404363095794907,
+      "0.99": 0.16537528766370135
+     },
+     "fresh_rate": 249.969,
+     "merge_duration_mean": 0.41178729364243233,
+     "merge_duration_quantiles": {
+      "0.5": 0.09944090000158212,
+      "0.9": 0.5751119793372936,
+      "0.99": 4.802088073304151
+     },
+     "write_amplification": 4.305225278049652,
+     "insert_rate": 249.969,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 6.447056380700326e-06
+    },
+    {
+     "parts_mean": 338.20199097935466,
+     "parts_quantiles": {
+      "0.5": 353,
+      "0.9": 437,
+      "0.99": 483
+     },
+     "busy_threads_mean": 16.0,
+     "all_threads_busy": 1.0,
+     "fresh_parts_mean": 32.23224326471923,
+     "fresh_lifetime_mean": 0.12914193329289986,
+     "fresh_lifetime_quantiles": {
+      "0.5": 0.10962645886866085,
+      "0.9": 0.1670956799742498,
+      "0.99": 0.6541921472028982
+     },
+     "fresh_waiting_mean": 0.016314724202887435,
+     "fresh_waiting_quantiles": {
+      "0.5": 0.010420394995435345,
+      "0.9": 0.02997909347386667,
+      "0.99": 0.15418207975282563
+     },
+     "fresh_rate": 249.58566666666667,
+     "merge_duration_mean": 0.44847812877503995,
+     "merge_duration_quantiles": {
+      "0.5": 0.0995543551953233,
+      "0.9": 0.5767430177311894,
+      "0.99": 4.789160371227493
+     },
+     "write_amplification": 4.305634591766752,
+     "insert_rate": 249.58566666666667,
+     "delayed_fraction": 0.0,
+     "rejected_fraction": 0.0,
+     "delay_mean_ms": 0.0,
+     "delay_quantiles_ms": {
+      "0.5": 0.0,
+      "0.9": 0.0,
+      "0.99": 0.0
+     },
+     "little_relative_error": 8.30687415778564e-06
+    }
+   ]
+  }
+ ],
+ "differences": {
+  "200": {
+   "parts_mean": [
+    -9.803850182312289,
+    2.837657916706659
+   ],
+   "busy_threads_mean": [
+    -0.07723661456777471,
+    0.062488310381843985
+   ],
+   "all_threads_busy": [
+    -0.06096395577356728,
+    0.03635278000961326
+   ],
+   "fresh_waiting_mean": [
+    -3.146067699276913e-05,
+    2.4333948276030872e-05
+   ],
+   "fresh_lifetime_mean": [
+    -0.012986349995246883,
+    0.0023331552305112324
+   ],
+   "merge_duration_mean": [
+    -0.03950737765948399,
+    0.011209320134862689
+   ],
+   "write_amplification": [
+    -0.014815465937913785,
+    0.03991975918762882
+   ],
+   "insert_rate": [
+    0.0,
+    0.0
+   ],
+   "delayed_fraction": [
+    0.0,
+    0.0
+   ],
+   "rejected_fraction": [
+    0.0,
+    0.0
+   ],
+   "delay_mean_ms": [
+    0.0,
+    0.0
+   ],
+   "little_relative_error": [
+    1.866211225195893e-07,
+    4.010965665855087e-06
+   ],
+   "merge_duration_p99": [
+    -0.5583287818901324,
+    0.12245379832770112
+   ]
+  },
+  "250": {
+   "parts_mean": [
+    -135.27646682638542,
+    9.864039475854703
+   ],
+   "busy_threads_mean": [
+    -1.7763568394002506e-16,
+    2.354566558861373e-15
+   ],
+   "all_threads_busy": [
+    -1.1102230246251566e-17,
+    1.471604099288358e-16
+   ],
+   "fresh_waiting_mean": [
+    -0.021530111524527162,
+    0.0011496295264674333
+   ],
+   "fresh_lifetime_mean": [
+    -0.1519227183508603,
+    0.0031148525316931886
+   ],
+   "merge_duration_mean": [
+    -0.2837359477136057,
+    0.015006500649415144
+   ],
+   "write_amplification": [
+    -0.012514994899688858,
+    0.01897079742263167
+   ],
+   "insert_rate": [
+    0.0,
+    0.0
+   ],
+   "delayed_fraction": [
+    0.0,
+    0.0
+   ],
+   "rejected_fraction": [
+    0.0,
+    0.0
+   ],
+   "delay_mean_ms": [
+    0.0,
+    0.0
+   ],
+   "little_relative_error": [
+    -3.374599485703359e-05,
+    2.006634806840888e-05
+   ],
+   "merge_duration_p99": [
+    -3.922798105909181,
+    0.04997815742607187
+   ]
+  }
+ }
+}

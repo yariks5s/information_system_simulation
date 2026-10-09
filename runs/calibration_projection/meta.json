@@ -1,0 +1,12 @@
+{
+ "table": "default.cal_projection",
+ "duration": 600,
+ "rows": 25000,
+ "mode": "open",
+ "rate": 4,
+ "clients": 4,
+ "think": 1.0,
+ "seed": 1,
+ "extra": ", PROJECTION by_event (SELECT * ORDER BY event, ts)",
+ "settings": ""
+}

@@ -1,0 +1,13 @@
+{
+ "table": "default.val_closed",
+ "duration": 360.0,
+ "rows": 10000,
+ "mode": "closed",
+ "rate": 1.0,
+ "clients": 8,
+ "think": 0.5,
+ "seed": 1,
+ "extra": "",
+ "settings": "",
+ "async_insert": false
+}

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лабораторія фонових злиттів MergeTree</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect x=%271%27 y=%279%27 width=%2714%27 height=%276%27 rx=%271%27 fill=%27%232a78d6%27/%3E%3Crect x=%271%27 y=%272%27 width=%277%27 height=%276%27 rx=%271%27 fill=%27%2386b6ef%27/%3E%3Crect x=%279%27 y=%272%27 width=%276%27 height=%276%27 rx=%271%27 fill=%27%23eb6834%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Лабораторія фонових злиттів MergeTree</h1>
+    <p>Жива імітаційна модель підсистеми злиттів ClickHouse як системи масового обслуговування, черга якої гальмує власний вхідний потік. Змінюйте параметри на ходу і спостерігайте, як система реагує. Ядро моделі подія в подію збігається з відкаліброваною і провалідованою Python-моделлю.</p>
+  </div>
+  <button class="btn ghost" id="theme" type="button" title="Перемкнути тему">Тема: авто</button>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Розділи">
+  <button role="tab" aria-selected="true" aria-controls="tab-lab" id="t-lab">Лабораторія</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-model" id="t-model">Як влаштована модель</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-results" id="t-results">Результати експериментів</button>
+  <button role="tab" aria-selected="false" aria-controls="tab-validation" id="t-validation">Валідація</button>
+</nav>
+
+<main>
+  <section class="tab" id="tab-lab" role="tabpanel" aria-labelledby="t-lab">
+    <div class="lab">
+      <aside class="sidebar card" aria-label="Параметри моделі">
+        <h2>Параметри</h2>
+        <p class="sub">Кожна зміна діє одразу, з поточного моменту модельного часу.</p>
+        <div id="params"></div>
+      </aside>
+
+      <div class="lab-main">
+        <div class="toolbar card">
+          <button class="btn primary" id="play" type="button">▶ Пуск</button>
+          <button class="btn" id="step" type="button" title="До наступної події, що щось змінює (клавіша →)">Крок ›</button>
+          <label>Швидкість
+            <select id="speed">
+              <option value="0.25">×0.25</option>
+              <option value="1">×1</option>
+              <option value="5">×5</option>
+              <option value="10" selected>×10</option>
+              <option value="30">×30</option>
+              <option value="100">×100</option>
+              <option value="1000">×1000</option>
+            </select>
+          </label>
+          <span class="clock-wrap">модельний час <strong class="clock" id="clock">00:00</strong><span id="speed-real" class="muted"></span></span>
+          <span class="spacer"></span>
+          <label>Зерно <input type="number" id="seed" value="1" min="1" step="1"></label>
+          <button class="btn" id="reset" type="button">Почати знову</button>
+          <span class="keys">Пробіл: пуск і пауза · →: крок</span>
+        </div>
+
+        <div class="tiles">
+          <div class="tile"><div class="label">Активні куски</div><div class="value" id="v-parts">—</div><div class="detail" id="d-parts"></div></div>
+          <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div></div>
+          <div class="tile"><div class="label">Задачі злиття в пулі</div><div class="value" id="v-tasks">—</div><div class="meter" id="m-tasks"><span></span></div></div>
+          <div class="tile"><div class="label">Підсилення записів за хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
+          <div class="tile"><div class="label">Вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
+          <div class="tile"><div class="label">Середнє злиття за хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Активні куски даних</h2>
+              <p class="sub">Кожен прямокутник є куском, ряд показує рівень злиття. По горизонталі: які вставки кусок містить, у логарифмічному масштабі від найновіших праворуч до найстаріших ліворуч. Клацніть на кусок, щоб дослідити його.</p>
+            </div>
+          </div>
+          <div class="legend"><span>рівень злиття:</span>
+            <span class="key"><span class="swatch" style="background:var(--level-0)"></span>0</span>
+            <span class="key"><span class="swatch" style="background:var(--level-1)"></span>1</span>
+            <span class="key"><span class="swatch" style="background:var(--level-2)"></span>2</span>
+            <span class="key"><span class="swatch" style="background:var(--level-3)"></span>3</span>
+            <span class="key"><span class="swatch" style="background:var(--level-4)"></span>4+</span>
+            <span class="key"><span class="swatch outline"></span>зливається зараз</span>
+          </div>
+          <canvas class="tree" id="tree"></canvas>
+        </div>
+
+        <div class="grid lab-split">
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
+              <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--axis)"></span>чекає потоку</span></div>
+            </div>
+            <div id="pool"></div>
+          </div>
+          <div class="side-stack">
+            <div class="card"><h2>Вибране</h2><div id="inspector"></div></div>
+            <div class="card"><h2>Останнє рішення селектора</h2><div id="explain"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><h2>Як змінюється система</h2><p class="sub">Одна точка на секунду модельного часу; лінії згладжені за 5 секунд.</p></div>
+            <label class="muted">Вікно
+              <select id="window">
+                <option value="300">5 хв</option>
+                <option value="600" selected>10 хв</option>
+                <option value="1800">30 хв</option>
+                <option value="7200">2 год</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid two">
+            <div><h3>Кількість кусків</h3><div id="c-parts"></div></div>
+            <div><h3>Пул</h3><div id="c-busy"></div></div>
+            <div><h3>Вставки за секунду</h3><div id="c-inserts"></div></div>
+            <div><h3>Підсилення записів</h3><div id="c-wa"></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Журнал подій</h2>
+          <p class="sub">Найновіші зверху. Записи про злиття клікабельні.</p>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-model" role="tabpanel" aria-labelledby="t-model" hidden>
+    <div class="card diagram">
+      <h2>Схема системи масового обслуговування</h2>
+      <p class="sub">Кожен механізм перенесено з коду ClickHouse; у лабораторії кожен з них можна змінити. Помаранчеві стрілки показують зворотний зв'язок: кількість кусків гальмує вхідний потік. Жирні значення внизу блоків і ряд кусків беруться з моделі, що зараз працює в лабораторії.</p>
+      <svg viewBox="0 0 1200 545" role="img" aria-label="Схема моделі">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="arr-fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="head feedback" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <rect class="box" x="20" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="38" y="90">Клієнти</text>
+        <text class="live" id="live-clients" x="38" y="196"></text>
+        <text class="box-text" x="38" y="116">відкритий потік λ(t): пуасонівський,</text>
+        <text class="box-text" x="38" y="134">добовий профіль і сплески,</text>
+        <text class="box-text" x="38" y="152">або N замкнених клієнтів з часом</text>
+        <text class="box-text" x="38" y="170">думання Z між вставками</text>
+
+        <rect class="box" x="450" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="468" y="90">Перевірка перед вставкою</text>
+        <text class="live" id="live-check" x="468" y="196"></text>
+        <text class="box-text" x="468" y="116">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
+        <text class="box-text" x="468" y="134">n ≥ 1000: затримати на</text>
+        <text class="formula" x="468" y="152">max(10, 1000·(n−999)/2000) мс</text>
+        <text class="box-text" x="468" y="170">середній кусок &gt; 1 ГіБ: без обмежень</text>
+
+        <rect class="box accent" x="880" y="60" width="300" height="166" rx="10"/>
+        <text class="box-title" x="898" y="90">Активні куски</text>
+        <text class="live" id="live-parts" x="898" y="196"></text>
+        <text class="box-text" x="898" y="116">черга з дисципліною не FIFO</text>
+        <text class="box-text" x="898" y="134">впорядковані за номером блоку</text>
+        <text class="box-text" x="898" y="152">усередині кожної партиції</text>
+        <g id="model-parts"></g>
+
+        <rect class="box" x="880" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="898" y="390">Призначувач</text>
+        <text class="live" id="live-assignee" x="898" y="496"></text>
+        <text class="box-text" x="898" y="416">одне злиття за запуск; будить вставка</text>
+        <text class="box-text" x="898" y="434">без роботи спить</text>
+        <text class="formula" x="898" y="452">min(600, 0.1·1.1ⁿ) + U(0, 1) с</text>
+        <text class="box-text" x="898" y="470">пул повний: вибір пропускається</text>
+
+        <rect class="box" x="450" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="468" y="390">SimpleMergeSelector</text>
+        <text class="live" id="live-selector" x="468" y="496"></text>
+        <text class="box-text" x="468" y="416">діапазон сусідніх вільних кусків, якщо</text>
+        <text class="formula" x="468" y="434">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
+        <text class="box-text" x="468" y="452">base′: від 5 до 2 з віком і кількістю</text>
+        <text class="formula" x="468" y="470">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
+
+        <rect class="box" x="20" y="360" width="300" height="166" rx="10"/>
+        <text class="box-title" x="38" y="390">Пул фонових задач</text>
+        <text class="live" id="live-pool" x="38" y="496"></text>
+        <text class="box-text" x="38" y="416">16 потоків, 32 задачі</text>
+        <text class="box-text" x="38" y="434">round_robin або shortest_task_first</text>
+        <text class="box-text" x="38" y="452">тривалість роботи злиття:</text>
+        <text class="formula" x="38" y="470">(2.7 мс + Σ/244.5 МБ/с)·ε·(1+δ)</text>
+
+        <path class="arrow" d="M320,110 L446,110" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="330" y="100">вставка ≈ 3.6 МБ</text>
+        <path class="arrow" d="M750,110 L876,110" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="760" y="100">кусок рівня 0</text>
+        <path class="arrow" d="M1030,226 L1030,356" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="1040" y="296">будить після вставки</text>
+        <path class="arrow" d="M880,440 L754,440" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="770" y="430">запуск вибору</text>
+        <path class="arrow" d="M450,440 L324,440" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="336" y="430">задача злиття</text>
+        <path class="arrow" d="M170,360 L170,282 L960,282 L960,230" marker-end="url(#arr)"/>
+        <text class="arrow-label" x="190" y="274">злитий кусок рівня max + 1 замінює джерела</text>
+
+        <path class="arrow feedback" d="M1030,60 L1030,28 L620,28 L620,56" marker-end="url(#arr-fb)"/>
+        <text class="arrow-label feedback" x="660" y="20">n: кількість кусків найбільшої партиції</text>
+        <path class="arrow feedback" d="M450,170 L324,170" marker-end="url(#arr-fb)"/>
+        <text class="arrow-label feedback" x="20" y="252">затримка сповільнює замкнених клієнтів</text>
+      </svg>
+    </div>
+    <div class="grid two" style="margin-top:16px">
+      <div class="card">
+        <h2>Відкалібровані параметри</h2>
+        <p class="sub">Підібрано по 1 409 злиттях з <code>system.part_log</code> окремого сервера ClickHouse 26.10.</p>
+        <dl class="kv" id="calibration"></dl>
+      </div>
+      <div class="card prose">
+        <h2>Що робить модель складною</h2>
+        <p><strong>Обслуговування партіями змінного розміру.</strong> Селектор забирає з черги не одну заявку, а діапазон сусідніх кусків, і розмір партії залежить від стану черги.</p>
+        <p><strong>Дисципліна залежить від навантаження.</strong> Поріг <code>base′</code> знижується з віком і кількістю кусків, а межа розміру злиття звужується від 150 ГБ до 1 МБ, коли пул заповнюється.</p>
+        <p><strong>Зворотний зв'язок.</strong> Кількість кусків затримує і відхиляє вставки. Для замкнених клієнтів це прямо зменшує вхідний потік.</p>
+        <p><strong>Нестаціонарність.</strong> Партиція, що росте, не має стаціонарного режиму: рівнів злиття стає більше з логарифмом розміру таблиці. Ротація партицій з видаленням старих це виправляє.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-results" role="tabpanel" aria-labelledby="t-results" hidden></section>
+  <section class="tab" id="tab-validation" role="tabpanel" aria-labelledby="t-validation" hidden></section>
+</main>
+
+<footer>Проєкт: <code>~/merge-sim/app</code>. Модель, калібрування і експерименти: <code>~/merge-sim</code>, опис у <code>RFC.md</code>.</footer>
+<div class="tooltip" id="tooltip" hidden></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

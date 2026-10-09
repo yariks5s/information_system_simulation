@@ -1,0 +1,11 @@
+{
+ "table": "default.cal_base",
+ "duration": 600.0,
+ "rows": 25000,
+ "mode": "open",
+ "rate": 4.0,
+ "clients": 4,
+ "think": 1.0,
+ "seed": 1,
+ "extra": ""
+}

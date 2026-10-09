@@ -1,0 +1,13 @@
+{
+ "table": "default.val_open",
+ "duration": 360.0,
+ "rows": 10000,
+ "mode": "open",
+ "rate": 8,
+ "clients": 4,
+ "think": 1.0,
+ "seed": 0,
+ "extra": "",
+ "settings": "",
+ "async_insert": false
+}

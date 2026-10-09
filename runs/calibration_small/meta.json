@@ -1,0 +1,12 @@
+{
+ "table": "default.cal_small",
+ "duration": 300,
+ "rows": 2000,
+ "mode": "open",
+ "rate": 10,
+ "clients": 4,
+ "think": 1.0,
+ "seed": 1,
+ "extra": "",
+ "settings": ""
+}
