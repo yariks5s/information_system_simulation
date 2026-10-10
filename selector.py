@@ -18,18 +18,24 @@ REMOVE_SMALL_AT_RIGHT_RATIO = 0.01
 ALIGN_MIN_RATIO_TO_PREV = 0.9
 ALIGN_MAX_POWERS_OF_TWO = 0.5
 ALIGN_MAX_SCORE_ADJUSTMENT = 0.75
+# CompactionStatistics: a merge starts only with this much free space per source byte, and reserves RESERVE_RATIO
+SELECT_RATIO = 2.0  # DISK_USAGE_COEFFICIENT_TO_SELECT
+RESERVE_RATIO = 1.1  # DISK_USAGE_COEFFICIENT_TO_RESERVE
 
 
-def max_source_parts_bytes(max_tasks, scheduled, cfg):
+def max_source_parts_bytes(max_tasks, scheduled, cfg, free_disk=None):
     """CompactionStatistics::getMaxSourcePartsBytesForMerge: the merge size limit shrinks
-    exponentially towards max_bytes_to_merge_at_min_space_in_pool as the pool fills up."""
+    exponentially towards max_bytes_to_merge_at_min_space_in_pool as the pool fills up,
+    and is at most half of the free unreserved disk space (free_disk, None for no limit)."""
     if cfg.max_bytes_at_max_space == 0:
         return 0
     free = max_tasks - scheduled
     if scheduled <= 1 or free >= cfg.free_entries_to_lower_max_size:
-        return cfg.max_bytes_at_max_space
-    low = max(1, min(cfg.max_bytes_at_min_space, cfg.max_bytes_at_max_space))
-    return int(low * (cfg.max_bytes_at_max_space / low) ** (free / cfg.free_entries_to_lower_max_size))
+        limit = cfg.max_bytes_at_max_space
+    else:
+        low = max(1, min(cfg.max_bytes_at_min_space, cfg.max_bytes_at_max_space))
+        limit = int(low * (cfg.max_bytes_at_max_space / low) ** (free / cfg.free_entries_to_lower_max_size))
+    return limit if free_disk is None else min(limit, int(free_disk / SELECT_RATIO))
 
 
 def _unit(value, low, high):  # mapPiecewiseLinearToUnit

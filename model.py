@@ -1,4 +1,5 @@
 """MergeTree background merges: state and event handlers (RFC sections 3 and 5)."""
+from collections import deque
 from dataclasses import KW_ONLY, dataclass
 import itertools
 import math
@@ -6,7 +7,7 @@ import math
 from engine import Engine
 from inputs import MIB, daily_rate, lognormal, next_arrival, streams
 from pool import Pool, Task
-from selector import SELECTORS, max_source_parts_bytes, select_across
+from selector import RESERVE_RATIO, SELECTORS, max_source_parts_bytes, select_across
 from throttle import check_insert
 
 
@@ -54,6 +55,9 @@ class Config:
     retention_partitions: int = 0  # keep this many newest partitions, the current one included (0: keep all)
     # seconds between a trigger and the assignee run; 0 in ClickHouse terms means "as soon as a thread is free"
     assign_latency: float = 0.0
+    # disk (RFC 3.10): bytes the table may take (0: no limit), and how long merged parts stay on disk
+    disk_bytes: int = 0
+    old_parts_lifetime: float = 480.0
     seed: int = 1
 
 
@@ -103,6 +107,9 @@ class Table:
         self.arrivals = 0
         self.in_flight = 0  # accepted inserts waiting out their delay
         self.rejected = 0
+        self.rejected_disk = 0  # NOT_ENOUGH_SPACE at commit
+        self.outdated = deque()  # (outdated at, bytes) of merge sources still on disk, oldest first
+        self.outdated_bytes = 0
         self.delayed = 0
         self.delay_total_ms = 0
         self.merged_bytes = 0
@@ -119,6 +126,7 @@ class Table:
         self.history_parts = []  # every part ever created
         self.history_merges = []  # (assigned_at, done_at, source bytes)
         self.history_inserts = []  # (arrival_at, delay_ms or None if rejected)
+        self.history_nospace = []  # commit times of inserts rejected with NOT_ENOUGH_SPACE
 
     @property
     def parts(self):
@@ -178,8 +186,17 @@ class Table:
 
     def on_insert_commit(self, size, client):
         self.in_flight -= 1
-        self.last_block += 1
         key = self._partition_for_insert()
+        # MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
+        if self.cfg.disk_bytes and size > self.disk_free():
+            self.rejected_disk += 1
+            self.history_nospace.append(self.engine.now)
+            if self.trace is not None:
+                self.trace.append(("nospace", self.engine.now, size))
+            if client is not None:
+                self._think(client)
+            return
+        self.last_block += 1
         if key not in self.partitions:
             self.partitions[key] = []
             self.partition_bytes[key] = 0
@@ -224,8 +241,9 @@ class Table:
         if not self.pool.has_capacity():
             return False
         self.selector_runs += 1
-        max_bytes = max_source_parts_bytes(self.pool.max_tasks, len(self.pool.tasks), self.cfg)
-        if max_bytes == 0:  # max_bytes_to_merge_at_max_space_in_pool = 0 disables merges
+        free = self.disk_free() if self.cfg.disk_bytes else None
+        max_bytes = max_source_parts_bytes(self.pool.max_tasks, len(self.pool.tasks), self.cfg, free)
+        if max_bytes == 0:  # merges are disabled, or the disk is full
             return False
         found = select_across(self.partitions, self.engine.now, max_bytes, self.cfg, self.cfg.selector)
         if found is None:
@@ -260,6 +278,9 @@ class Table:
         self.part_count -= len(sources) - 1
         for part in sources:
             part.removed_at = self.engine.now
+        self._remove_outdated()
+        self.outdated.append((self.engine.now, task.priority))
+        self.outdated_bytes += task.priority
         self.history_parts.append(merged)
         self.history_merges.append((task.created_at, self.engine.now, task.priority))
         self.merged_bytes += task.priority
@@ -300,6 +321,27 @@ class Table:
         if self.trace is not None:
             self.trace.append(("drop", self.engine.now, key))
 
+    # disk (RFC 3.10)
+
+    def _remove_outdated(self):
+        """clearOldPartsFromFilesystem: merge sources older than old_parts_lifetime leave the disk."""
+        while self.outdated and self.outdated[0][0] + self.cfg.old_parts_lifetime <= self.engine.now:
+            self.outdated_bytes -= self.outdated.popleft()[1]
+
+    def disk_used(self):
+        """Active parts, outdated parts not yet removed, and what running merges have written or reserved."""
+        self._remove_outdated()
+        merging = 0.0
+        for task in self.pool.tasks:
+            # MergeTask shrinks the reservation to (1 - progress) of the initial one as it writes the new part
+            progress = min(1.0, max(0.0, 1.0 - self.pool.remaining_now(task) / task.work)) if task.work > 0 else 1.0
+            merging += task.priority * (progress + (1 - progress) * RESERVE_RATIO)
+        return self.inserted_bytes - self.dropped_bytes + self.outdated_bytes + merging
+
+    def disk_free(self):
+        """getMaxUnreservedFreeSpace for the table."""
+        return max(0.0, self.cfg.disk_bytes - self.disk_used())
+
     def _account_parts(self):
         self.parts_area += self.part_count * (self.engine.now - self._parts_changed_at)
         self._parts_changed_at = self.engine.now
@@ -314,7 +356,9 @@ class Table:
         assert sum(p.size for p in parts) == self.inserted_bytes - self.dropped_bytes
         assert sum(p.blocks for p in parts) == self.last_block - self.dropped_blocks
         assert len(parts) == self.part_count
-        assert self.arrivals == self.last_block + self.in_flight + self.rejected
+        assert self.arrivals == self.last_block + self.in_flight + self.rejected + self.rejected_disk
+        if self.cfg.disk_bytes:
+            assert self.disk_used() <= self.cfg.disk_bytes * (1 + 1e-9)
         assert list(self.partitions) == sorted(self.partitions)
         for key, partition in self.partitions.items():
             assert self.partition_bytes[key] == sum(p.size for p in partition)

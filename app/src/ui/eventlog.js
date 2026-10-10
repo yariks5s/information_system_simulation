@@ -1,5 +1,5 @@
 // The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
-// of delayed inserts is one line, not thousands.
+// of delayed inserts is one line, not thousands. Each model has its own entries (newState); the log shows one of them.
 
 import { el, bytes, clock, duration, INT, NUM2, partsText } from "./dom.js";
 
@@ -9,15 +9,15 @@ export const KINDS = {
   partition: "партиції",
   assignee: "призначувач",
   insert: "вставки",
+  disk: "диск",
 };
 
 export class EventLog {
   constructor(root, onPick) {
     this.root = root;
     this.onPick = onPick;
-    this.entries = [];
-    this.enabled = new Set(["merge", "throttle", "partition"]);
-    this.throttleSecond = null;
+    this.enabled = new Set(["merge", "throttle", "partition", "disk"]);
+    this.s = EventLog.newState();
     this.dirty = true;
     const filters = el("div", { class: "log-filters" });
     for (const [kind, name] of Object.entries(KINDS)) {
@@ -29,38 +29,39 @@ export class EventLog {
     root.append(filters, this.list);
   }
 
-  clear() {
-    this.entries = [];
-    this.throttleSecond = null;
+  static newState() {
+    return { entries: [], throttleSecond: null, diskSecond: null };
+  }
+
+  show(state) {
+    this.s = state;
     this.dirty = true;
   }
 
-  push(t, kind, text, ref = null) {
-    this.entries.push({ t, kind, text, ref });
-    if (this.entries.length > 400) this.entries.shift();
+  push(state, t, kind, text, ref = null) {
+    add(state, { t, kind, text, ref });
     this.dirty = true;
   }
 
-  observe(type, t, ...data) {
+  observe(state, type, t, ...data) {
+    this.dirty = true;
     if (type === "assign") {
       const [task, found] = data;
       const sizes = task.payload.map(p => p.level);
       const lo = Math.min(...sizes), hi = Math.max(...sizes);
       const why = found.tiered ? `${found.count} сусідніх кусків одного рівня` : `base′ = ${NUM2.format(found.loweredBase)}, оцінка ${bytes(found.score)}`;
-      this.push(t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} рівнів ${lo === hi ? lo : lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
+      this.push(state, t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} рівнів ${lo === hi ? lo : lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
     } else if (type === "merged") {
       const [task, part] = data;
-      this.push(t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
+      this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
     } else if (type === "arrival") {
       const delay = data[0];
       if (delay === null || delay > 0) {
         const second = Math.floor(t);
-        let e = this.throttleSecond;
+        let e = state.throttleSecond;
         if (!e || e.second !== second) {
-          e = this.throttleSecond = { second, delayed: 0, rejected: 0, maxDelay: 0, entry: null };
-          e.entry = { t, kind: "throttle", text: "", ref: null };
-          this.entries.push(e.entry);
-          if (this.entries.length > 400) this.entries.shift();
+          e = state.throttleSecond = { second, delayed: 0, rejected: 0, maxDelay: 0, entry: { t, kind: "throttle", text: "", ref: null } };
+          add(state, e.entry);
         }
         if (delay === null) e.rejected++;
         else { e.delayed++; e.maxDelay = Math.max(e.maxDelay, delay); }
@@ -68,17 +69,26 @@ export class EventLog {
         if (e.delayed) parts.push(`затримано ${INT.format(e.delayed)} (до ${INT.format(e.maxDelay)} мс)`);
         if (e.rejected) parts.push(`відхилено ${INT.format(e.rejected)} з TOO_MANY_PARTS`);
         e.entry.text = "Вставки за секунду: " + parts.join(", ");
-        this.dirty = true;
       }
+    } else if (type === "nospace") {
+      // summed per second, like throttling
+      const second = Math.floor(t);
+      let e = state.diskSecond;
+      if (!e || e.second !== second) {
+        e = state.diskSecond = { second, count: 0, entry: { t, kind: "disk", text: "", ref: null } };
+        add(state, e.entry);
+      }
+      e.count++;
+      e.entry.text = `Вставки за секунду: відхилено ${INT.format(e.count)} з NOT_ENOUGH_SPACE, бракує місця для нового куска`;
     } else if (type === "insert") {
       const part = data[0];
-      this.push(t, "insert", `Вставка: новий кусок ${bytes(part.size)} у партиції ${part.partition}`, { part: part.id });
+      this.push(state, t, "insert", `Вставка: новий кусок ${bytes(part.size)} у партиції ${part.partition}`, { part: part.id });
     } else if (type === "sleep") {
-      this.push(t, "assignee", `Призначувач не знайшов злиття і заснув на ${duration(data[0])}`);
+      this.push(state, t, "assignee", `Призначувач не знайшов злиття і заснув на ${duration(data[0])}`);
     } else if (type === "rotate") {
-      this.push(t, "partition", `Почалась партиція ${data[0]}`);
+      this.push(state, t, "partition", `Почалась партиція ${data[0]}`);
     } else if (type === "drop") {
-      this.push(t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}`);
+      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}`);
     }
   }
 
@@ -86,8 +96,9 @@ export class EventLog {
     if (!this.dirty) return;
     this.dirty = false;
     const shown = [];
-    for (let i = this.entries.length - 1; i >= 0 && shown.length < 120; i--) {
-      const e = this.entries[i];
+    const entries = this.s.entries;
+    for (let i = entries.length - 1; i >= 0 && shown.length < 120; i--) {
+      const e = entries[i];
       if (this.enabled.has(e.kind)) shown.push(e);
     }
     this.list.replaceChildren(...shown.map(e => {
@@ -99,4 +110,9 @@ export class EventLog {
       return item;
     }));
   }
+}
+
+function add(state, entry) {
+  state.entries.push(entry);
+  if (state.entries.length > 400) state.entries.shift();
 }

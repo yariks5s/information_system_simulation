@@ -6,7 +6,7 @@
 import { Engine } from "./engine.js";
 import { Pool } from "./pool.js";
 import { lognormal, roundHalfEven, streams, Rng } from "./rng.js";
-import { maxSourcePartsBytes, selectAcross } from "./selector.js";
+import { RESERVE_RATIO, maxSourcePartsBytes, selectAcross } from "./selector.js";
 import { checkInsert } from "./throttle.js";
 
 const MIB = 1024 * 1024;
@@ -52,6 +52,9 @@ export const DEFAULTS = {
   partition_seconds: 0.0,
   late_insert_fraction: 0.0,
   retention_partitions: 0,
+  // disk (RFC 3.10): bytes the table may take (0: no limit), and how long merged parts stay on disk
+  disk_bytes: 0,
+  old_parts_lifetime: 480.0,
   seed: 1,
 };
 
@@ -82,6 +85,10 @@ export class Table {
     this.arrivals = 0;
     this.inFlight = 0;
     this.rejected = 0;
+    this.rejectedDisk = 0;  // NOT_ENOUGH_SPACE at commit
+    this.outdated = [];  // [outdated at, bytes] of merge sources still on disk, oldest first, from outdatedHead on
+    this.outdatedHead = 0;
+    this.outdatedBytes = 0;
     this.delayed = 0;
     this.delayTotalMs = 0;
     this.mergedBytes = 0;
@@ -188,8 +195,15 @@ export class Table {
 
   onInsertCommit(size, client) {
     this.inFlight--;
-    this.lastBlock++;
     const key = this.partitionForInsert();
+    // MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
+    if (this.cfg.disk_bytes && size > this.diskFree()) {
+      this.rejectedDisk++;
+      this.emit("nospace", size, client);
+      if (client !== null) this.thinkThen(client);
+      return;
+    }
+    this.lastBlock++;
     if (!this.partitions.has(key)) this.addPartition(key);
     const part = { id: this.nextId++, minBlock: this.lastBlock, maxBlock: this.lastBlock, level: 0, size, createdAt: this.engine.now,
                    partition: key, blocks: 1, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
@@ -243,15 +257,17 @@ export class Table {
       return false;
     }
     this.selectorRuns++;
-    const maxBytes = maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg);
+    const free = this.cfg.disk_bytes ? this.diskFree() : null;
+    const maxBytes = maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg, free);
+    const diskLimited = free !== null && maxBytes < maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg);
     if (maxBytes === 0) {
-      this.lastSelection = { at: this.engine.now, outcome: "disabled" };
+      this.lastSelection = { at: this.engine.now, outcome: this.cfg.max_bytes_at_max_space === 0 ? "disabled" : "disk_full", free };
       return false;
     }
     const stats = { considered: 0, allowed: 0 };
     const found = selectAcross(this.partitions, this.engine.now, maxBytes, this.cfg, this.cfg.selector, stats);
     if (found === null) {
-      this.lastSelection = { at: this.engine.now, outcome: "nothing", maxBytes, ...stats };
+      this.lastSelection = { at: this.engine.now, outcome: "nothing", maxBytes, diskLimited, ...stats };
       return false;
     }
     const sources = this.partitions.get(found.key).slice(found.begin, found.end);
@@ -266,7 +282,7 @@ export class Table {
     const work = (this.cfg.merge_fixed_seconds + baseSize / this.cfg.merge_bytes_per_second) * noise * this.auxTime;
     const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0 };
     this.pool.add(task);
-    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes,
+    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited,
                                             freeEntries: this.pool.maxTasks - this.pool.tasks.length + 1, ...stats, ...found, work };
     this.emit("assign", task, found);
     return true;
@@ -288,6 +304,9 @@ export class Table {
     parts.splice(begin, sources.length, merged);
     this.partCount -= sources.length - 1;
     for (const p of sources) p.removedAt = this.engine.now;
+    this.removeOutdated();
+    this.outdated.push([this.engine.now, task.priority]);
+    this.outdatedBytes += task.priority;
     this.mergedBytes += task.priority;
     this.mergesDone++;
     this.emit("merged", task, merged);
@@ -335,6 +354,39 @@ export class Table {
     this.droppedPartitions.push([key, this.engine.now]);
     this.emit("drop", key, parts.length);
     return true;
+  }
+
+  // disk (RFC 3.10)
+
+  // clearOldPartsFromFilesystem: merge sources older than old_parts_lifetime leave the disk
+  removeOutdated() {
+    const q = this.outdated, lifetime = this.cfg.old_parts_lifetime, now = this.engine.now;
+    while (this.outdatedHead < q.length && q[this.outdatedHead][0] + lifetime <= now) this.outdatedBytes -= q[this.outdatedHead++][1];
+    if (this.outdatedHead > 4096 && this.outdatedHead * 2 > q.length) {
+      this.outdated = q.slice(this.outdatedHead);
+      this.outdatedHead = 0;
+    }
+  }
+
+  // bytes written or reserved by running merges: MergeTask shrinks the reservation to (1 - progress) of the initial one
+  mergingBytes() {
+    let merging = 0;
+    for (const task of this.pool.tasks) {
+      const progress = task.work > 0 ? Math.min(1.0, Math.max(0.0, 1.0 - this.pool.remainingNow(task) / task.work)) : 1.0;
+      merging += task.priority * (progress + (1 - progress) * RESERVE_RATIO);
+    }
+    return merging;
+  }
+
+  // active parts, outdated parts not yet removed, and running merges
+  diskUsed() {
+    this.removeOutdated();
+    return this.insertedBytes - this.droppedBytes + this.outdatedBytes + this.mergingBytes();
+  }
+
+  // getMaxUnreservedFreeSpace for the table
+  diskFree() {
+    return Math.max(0.0, this.cfg.disk_bytes - this.diskUsed());
   }
 
   // live changes from the UI; each takes effect from the current model time

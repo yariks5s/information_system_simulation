@@ -93,6 +93,13 @@ def results():
             dict(name=v, parts=thin(r["series"]["parts"], 2), largest=thin(r["series"]["largest"], 2), stats={k: mean_half(r, k) for k in (
                 "parts_mean", "write_amplification", "insert_rate", "delayed_fraction", "rejected_fraction")})
             for v, r in zip(d[part]["variants"], d[part]["runs"])]) for part in ("open", "closed")})
+    d = load("results/e11_disk.json")
+    if d:
+        out["e11"] = dict(disk_bytes=d["disk_bytes"], grid=thin(d["grid"], 2), variants=[
+            dict(name=v, used=thin(r["series"]["used"], 2), outdated=thin(r["series"]["outdated"], 2), parts=thin(r["series"]["parts"], 2),
+                 first_nospace=r["first_nospace"], stats={k: mean_half(r, k) for k in (
+                     "parts_mean", "write_amplification", "delayed_fraction", "rejected_fraction", "nospace_fraction")})
+            for v, r in zip(d["variants"], d["runs"])])
     cases = []
     for key, title in (("open", "відкритий потік, 8 вставок/с"), ("closed", "8 замкнених клієнтів"), ("throttled", "40 вставок/с, низькі пороги")):
         d = load(f"runs/validation_{key}.json")

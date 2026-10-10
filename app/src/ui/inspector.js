@@ -81,7 +81,8 @@ export class Inspector {
     const status = !x ? "Селектор ще не запускався."
       : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті, вибір пропущено.`
       : x.outcome === "disabled" ? `Останній запуск (${clock(x.at)}): злиття вимкнені, max_bytes_to_merge_at_max_space_in_pool = 0.`
-      : x.outcome === "nothing" && !x.considered ? `Останній запуск (${clock(x.at)}): немає двох сусідніх вільних кусків у межах розміру злиття; призначувач засинає.`
+      : x.outcome === "disk_full" ? `Останній запуск (${clock(x.at)}): на диску вільно ${bytes(x.free)}, а злиття стартує, лише коли вільно вдвічі більше за його джерела; призначувач засинає.`
+      : x.outcome === "nothing" && !x.considered ? `Останній запуск (${clock(x.at)}): немає двох сусідніх вільних кусків у межах розміру злиття${x.diskLimited ? ` (${bytes(x.maxBytes)}, знижена через місце на диску)` : ""}; призначувач засинає.`
       : x.outcome === "nothing" ? `Останній запуск (${clock(x.at)}): перевірено ${INT.format(x.considered)} діапазонів, жоден не пройшов умову допуску; призначувач засинає.`
       : `Останній запуск (${clock(x.at)}) призначив злиття №${x.task}.`;
     const out = [el("p", { class: "status-line" }, status)];
@@ -99,7 +100,7 @@ export class Inspector {
       ["оцінка", `(Σ + 5 МБ·k)/(k − 1.9) = ${bytes(m.score)}${m.aligned ? ", знижена за вирівнювання з лівим сусідом" : ""}`],
       ["відкинуто дрібних справа", String(m.trimmed || 0)],
       ["кандидатів", `${INT.format(m.allowed)} допустимих з ${INT.format(m.considered)}`],
-      ["межа розміру злиття", `${bytes(m.maxBytes)}, вільних місць у пулі ${m.freeEntries}`],
+      ["межа розміру злиття", `${bytes(m.maxBytes)}, ${m.diskLimited ? "знижена через місце на диску: половина вільного" : `вільних місць у пулі ${m.freeEntries}`}`],
       ["ліміт довжини діапазону", String(m.maxParts)],
       ["робота злиття", `${NUM3.format(m.work)} с часу потоку`],
     ]));

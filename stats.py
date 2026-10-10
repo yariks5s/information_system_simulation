@@ -91,6 +91,7 @@ def summary(table, warmup=0.0, end=None):
         insert_rate=arrivals / length,
         delayed_fraction=float((accepted > 0).sum() / arrivals) if arrivals else math.nan,
         rejected_fraction=(arrivals - len(accepted)) / arrivals if arrivals else math.nan,
+        nospace_fraction=sum(1 for t in table.history_nospace if warmup <= t <= end) / arrivals if arrivals else math.nan,
         delay_mean_ms=float(accepted.mean()) if len(accepted) else math.nan,
         delay_quantiles_ms=quantiles(accepted),
     )

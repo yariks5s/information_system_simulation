@@ -32,9 +32,10 @@ test("invariants hold while every parameter changes on the fly", () => {
     [660, tb => tb.setInsertsPaused(false)],
     [700, tb => tb.newPartitionNow()],
     [720, tb => tb.dropOldestPartition()],
+    [750, tb => tb.configure({ disk_bytes: 2e11, old_parts_lifetime: 60 })],
     [780, tb => tb.configure({ arrivals: "open", insert_rate: 50, partition_seconds: 0, threads: 32, selector: "simple" })],
   ]);
-  assert.ok(t.mergesDone > 1000 && t.delayed > 0 && t.droppedPartitions.length > 0);
+  assert.ok(t.mergesDone > 1000 && t.delayed > 0 && t.droppedPartitions.length > 0 && t.rejectedDisk > 0);
 });
 
 test("pausing inserts stops them, resuming starts them again", () => {

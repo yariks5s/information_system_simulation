@@ -79,7 +79,7 @@ export class Chart {
   }
 
   extent(axis, values, pad) {
-    if (!values.length) return [axis.min ?? 0, axis.max ?? 1];
+    if (!values.length) return axis.log ? [axis.min ?? 1, axis.max ?? 10] : [axis.min ?? 0, axis.max ?? 1];
     let lo = axis.min != null ? axis.min : Math.min(...values);
     let hi = axis.max != null ? axis.max : Math.max(...values);
     if (axis.log) {

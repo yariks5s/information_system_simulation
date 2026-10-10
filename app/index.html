@@ -51,16 +51,29 @@
           <span class="spacer"></span>
           <label>Зерно <input type="number" id="seed" value="1" min="1" step="1"></label>
           <button class="btn" id="reset" type="button">Почати знову</button>
+          <button class="btn" id="compare" type="button" aria-pressed="false" title="Запустити поруч дві моделі на однакових вставках і порівняти їх">Порівняти A і B</button>
           <span class="keys">Пробіл: пуск і пауза · →: крок</span>
+        </div>
+
+        <div class="card compare-bar" id="compare-bar" hidden>
+          <div>
+            <h2>Порівняння A і B</h2>
+            <p class="sub">A: конфігурація на момент увімкнення порівняння, вона зафіксована. B: та, що на панелі параметрів, і кожна зміна параметра діє тільки на B. Обидві моделі отримують ті самі вставки тих самих розмірів (спільні випадкові числа), тож різниця між ними походить тільки від параметрів. Сплеск, пауза вставок і дії з партиціями діють на обидві. «Почати знову» запускає обидві з нуля з їхніми поточними конфігураціями.</p>
+            <ul class="compare-diff" id="compare-diff"></ul>
+          </div>
+          <div class="field compare-view">
+            <span class="field-label">Дерево, пул і журнал</span>
+            <div class="seg" role="group" id="compare-view"><button type="button" data-value="B" aria-pressed="true">B</button><button type="button" data-value="A" aria-pressed="false">A</button></div>
+          </div>
         </div>
 
         <div class="tiles">
           <div class="tile"><div class="label">Активні куски</div><div class="value" id="v-parts">—</div><div class="detail" id="d-parts"></div></div>
-          <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div></div>
-          <div class="tile"><div class="label">Задачі злиття в пулі</div><div class="value" id="v-tasks">—</div><div class="meter" id="m-tasks"><span></span></div></div>
+          <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div><div class="detail" id="d-busy"></div></div>
           <div class="tile"><div class="label">Підсилення записів за хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
-          <div class="tile"><div class="label">Вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
+          <div class="tile"><div class="label">Прийняті вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
           <div class="tile"><div class="label">Середнє злиття за хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
+          <div class="tile"><div class="label">Місце на диску</div><div class="value" id="v-disk">—</div><div class="meter" id="m-disk"><span></span></div><div class="detail" id="d-disk"></div></div>
         </div>
 
         <div class="card">
@@ -112,11 +125,13 @@
             <div><h3>Пул</h3><div id="c-busy"></div></div>
             <div><h3>Вставки за секунду</h3><div id="c-inserts"></div></div>
             <div><h3>Підсилення записів</h3><div id="c-wa"></div></div>
+            <div><h3>Місце на диску</h3><div id="c-disk"></div></div>
+            <div><h3>Межа розміру злиття</h3><div id="c-cap"></div></div>
           </div>
         </div>
 
         <div class="card">
-          <h2>Журнал подій</h2>
+          <h2 id="log-title">Журнал подій</h2>
           <p class="sub">Найновіші зверху. Записи про злиття клікабельні.</p>
           <div id="log"></div>
         </div>

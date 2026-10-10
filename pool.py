@@ -40,6 +40,10 @@ class Pool:
     def busy_threads(self):
         return sum(t.rate for t in self.tasks)
 
+    def remaining_now(self, task):
+        """Remaining work of a task at the current time, without advancing the pool."""
+        return task.remaining - task.rate * (self.engine.now - self._updated_at)
+
     def add(self, task):
         assert self.has_capacity()
         self._advance()

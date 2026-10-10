@@ -46,6 +46,8 @@ CASES = {
     "stf_projection": (dict(insert_rate=40, scheduling_policy="shortest_task_first", threads=4, aux=((0.99, 0.93),)), 200),
     "profile_burst": (dict(insert_rate=150, rate_amplitude=0.5, burst=(60.0, 60.0, 3.0)), 150),
     "rejections": (dict(insert_rate=400, insert_bytes_mean=MIB, threads=1, parts_to_delay_insert=60, parts_to_throw_insert=120), 150),
+    "disk_full": (dict(insert_rate=100, disk_bytes=20 * 10**9, old_parts_lifetime=30.0), 150),
+    "disk_partitions": (dict(insert_rate=150, partition_seconds=60.0, retention_partitions=2, disk_bytes=60 * 10**9, old_parts_lifetime=20.0), 300),
 }
 
 
@@ -60,6 +62,7 @@ def record(overrides, until):
     plain = {k: (list(map(list, v)) if k == "aux" else list(v) if isinstance(v, tuple) else v) for k, v in config.__dict__.items()}
     return dict(config=plain, until=until, streams={k: r.values for k, r in table.rng.items()}, clients=[r.values for r in table.think],
                 trace=table.trace, final=dict(parts=len(table.parts), merges=table.merges_done, delayed=table.delayed, rejected=table.rejected,
+                                              rejected_disk=table.rejected_disk,
                                               inserted=table.inserted_bytes, merged=table.merged_bytes))
 
 

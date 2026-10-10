@@ -36,6 +36,7 @@ for (const [name, run] of Object.entries(runs)) {
       else if (type === "assign") trace.push(["assign", t, data[0].id, data[1].key, data[1].begin, data[1].end - data[1].begin, data[0].work]);
       else if (type === "merged") trace.push(["merged", t, data[0].id, data[1].level]);
       else if (type === "drop") trace.push(["drop", t, data[0]]);
+      else if (type === "nospace") trace.push(["nospace", t, data[0]]);
     };
     table.start();
     table.engine.run(run.until, Infinity, () => {});
@@ -51,6 +52,7 @@ for (const [name, run] of Object.entries(runs)) {
     assert.equal(table.mergesDone, run.final.merges);
     assert.equal(table.delayed, run.final.delayed);
     assert.equal(table.rejected, run.final.rejected);
+    assert.equal(table.rejectedDisk, run.final.rejected_disk);
     assert.equal(table.insertedBytes, run.final.inserted);
     assert.equal(table.mergedBytes, run.final.merged);
     table.checkInvariants();

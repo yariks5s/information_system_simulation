@@ -8,3 +8,4 @@ results_quick/
 server/*
 !server/config.xml
 !server/users.xml
+tmp/

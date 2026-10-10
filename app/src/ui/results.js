@@ -2,7 +2,7 @@
 // drawn from the data the Python side exported (tools/export_data.py).
 
 import { RESULTS } from "../data/results.js";
-import { el, sv, tooltip, clock, NUM, NUM2, NUM3, INT, PCT } from "./dom.js";
+import { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } from "./dom.js";
 import { Chart, Bars, table, card, ci, niceTicks, S } from "./charts.js";
 
 
@@ -116,6 +116,27 @@ export function results() {
         thresholds: part === "closed" ? [{ y: 1000, label: "parts_to_delay_insert" }] : [],
         series: d.variants.map((v, i) => ({ name: names[v.name] || v.name, short: v.name === "one partition" ? "одна" : v.name === "rotation" ? "ротація" : "запізнілі",
           color: S(i + 1), points: d.grid.map((t, j) => [t / 60, v.parts[j]]) })) });
+    }
+    grid.append(c);
+  }
+
+  if (R.e11) {
+    const names = { "no limit": "без обмеження", "2 TB, old_parts_lifetime 480 s": "2 ТБ, old_parts_lifetime 480 с", "2 TB, old_parts_lifetime 60 s": "2 ТБ, old_parts_lifetime 60 с" };
+    const short = { "no limit": "без обмеження", "2 TB, old_parts_lifetime 480 s": "480 с", "2 TB, old_parts_lifetime 60 s": "60 с" };
+    const { card: c, body } = card("E11. Диск, що заповнюється",
+      `Одна партиція, 100 вставок/с, місця для таблиці ${bytes(R.e11.disk_bytes)}. Злиття стартує, лише коли вільно вдвічі більше за його джерела, а злиті джерела ще old_parts_lifetime лежать на диску. Тому злиття дробляться задовго до першої відхиленої вставки.`,
+      { wide: true, tableView: () => table(["варіант", "перша NOT_ENOUGH_SPACE", "куски", "підсилення", "затримано", "TOO_MANY_PARTS", "NOT_ENOUGH_SPACE"],
+        R.e11.variants.map(v => [names[v.name] || v.name, v.first_nospace ? `${NUM.format(v.first_nospace[0] / 60)} ± ${NUM.format(v.first_nospace[1] / 60)} хв` : "немає",
+          ci(v.stats.parts_mean), ci(v.stats.write_amplification), PCT.format(v.stats.delayed_fraction[0]), PCT.format(v.stats.rejected_fraction[0]), PCT.format(v.stats.nospace_fraction[0])])) });
+    const row = el("div", { class: "grid two" });
+    body.append(row);
+    const d = R.e11;
+    for (const [key, title, format] of [["used", "Зайнято на диску", v => bytes(v)], ["parts", "Активні куски", v => INT.format(v)]]) {
+      const holder = el("div");
+      row.append(el("div", {}, el("h3", {}, title), holder));
+      new Chart(holder, { height: 230, x: { label: "модельний час, хв", format: v => INT.format(v) }, y: { min: 0, format }, valueFormat: format, tooltipTitle: x => clock(x * 60),
+        thresholds: key === "used" ? [{ y: d.disk_bytes, label: "disk_bytes" }] : [],
+        series: d.variants.map((v, i) => ({ name: names[v.name] || v.name, short: short[v.name] || v.name, color: S(i + 1), points: d.grid.map((t, j) => [t / 60, v[key][j]]) })) });
     }
     grid.append(c);
   }

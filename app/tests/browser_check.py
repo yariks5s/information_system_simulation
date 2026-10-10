@@ -44,6 +44,7 @@ with sync_playwright() as p:
     page.click("#step")
     assert ev("lab.table.engine.events") > before
     ev("lab.table.checkInvariants()")
+    page.locator("#tree").scroll_into_view_if_needed()
     box = page.locator("#tree").bounding_box()
     rect = ev("(() => { const r = lab.tree.rects[lab.tree.rects.length - 1]; return [r.x0 + (r.x1 - r.x0) / 2, r.y + r.h / 2]; })()")
     page.mouse.click(box["x"] + rect[0], box["y"] + rect[1])
@@ -81,6 +82,39 @@ with sync_playwright() as p:
     page.keyboard.press("Space")
     assert ev("lab.table.delayed") > 0
     page.screenshot(path=os.path.join(shots, f"lab_feedback_{scheme}.png"), full_page=True)
+
+    # the disk fills up: NOT_ENOUGH_SPACE, and the merge size limit follows the free space
+    page.select_option("#preset", "disk")
+    ev("lab.speed = 1000")
+    # merge entries can push an early NOT_ENOUGH_SPACE line out of the 400 kept ones, so wait for one in the log
+    page.wait_for_function("lab.table.rejectedDisk > 0 && lab.log.s.entries.some(e => e.kind === 'disk' && e.text.includes('NOT_ENOUGH_SPACE'))", timeout=60000)
+    page.keyboard.press("Space")
+    ev("lab.table.checkInvariants()")
+    assert ev("lab.table.diskUsed() <= lab.table.cfg.disk_bytes * (1 + 1e-9)")
+    page.screenshot(path=os.path.join(shots, f"lab_disk_{scheme}.png"), full_page=True)
+
+    # comparison: B takes the panel's changes, A stays, both see the same inserts
+    page.select_option("#preset", "normal")
+    page.click("#compare")
+    assert ev("lab.a !== null") and not page.locator("#compare-bar").is_hidden()
+    assert "однакові" in page.inner_text("#compare-diff")
+    ev("""(() => { const s = document.getElementById('f-threads'); s.value = 100; s.dispatchEvent(new Event('input')); })()""")
+    assert ev("lab.table.cfg.threads") != ev("lab.a.table.cfg.threads") == 16
+    assert "→" in page.inner_text("#compare-diff"), page.inner_text("#compare-diff")
+    ev("lab.speed = 30")
+    page.wait_for_timeout(4000)
+    assert abs(ev("lab.a.table.engine.now - lab.b.table.engine.now")) < 1
+    assert abs(ev("lab.a.table.arrivals - lab.b.table.arrivals")) <= 2, "common random numbers: the same arrivals"
+    page.click('#compare-view [data-value="A"]')
+    assert ev("lab.view") == "A" and "моделі A" in page.inner_text("#log-title")
+    page.keyboard.press("Space")
+    ev("lab.a.table.checkInvariants(); lab.b.table.checkInvariants()")
+    page.screenshot(path=os.path.join(shots, f"lab_compare_{scheme}.png"), full_page=True)
+    threads = ev("lab.table.cfg.threads")
+    page.click("#reset")
+    assert ev("lab.table.engine.now") < 5 and ev("lab.table.cfg.threads") == threads and ev("lab.a.table.cfg.threads") == 16
+    page.click("#compare")
+    assert ev("lab.a") is None and page.locator("#compare-bar").is_hidden()
 
     for tab in ("model", "results", "validation"):
         page.click(f"#t-{tab}")

@@ -290,6 +290,34 @@ def e10(d):
     save(fig, "e10_partitions")
 
 
+def e11(d):
+    names = {"no limit": "без обмеження", "2 TB, old_parts_lifetime 480 s": "2 ТБ, old_parts_lifetime 480 с",
+             "2 TB, old_parts_lifetime 60 s": "2 ТБ, old_parts_lifetime 60 с"}
+    grid = np.array(d["grid"]) / 60
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9))
+    for i, (variant, run) in enumerate(zip(d["variants"], d["runs"])):
+        sr = run["series"]
+        label = names.get(variant, variant)
+        axes[0].plot(grid, np.array(sr["used"]) / 1e12, color=SERIES[i], label=label)
+        if variant != "no limit":
+            axes[0].plot(grid, np.array(sr["outdated"]) / 1e12, color=SERIES[i], linestyle=(0, (3, 2)), linewidth=1.2)
+        axes[1].plot(grid, sr["parts"], color=SERIES[i], label=label)
+        axes[2].plot(grid, np.maximum(np.array(sr["cap"]) / 1e9, 1e-2), color=SERIES[i], label=label)
+    axes[0].axhline(d["disk_bytes"] / 1e12, color=MUTED, linewidth=0.8)
+    axes[0].annotate("disk_bytes", (grid[0], d["disk_bytes"] / 1e12), xytext=(2, 3), textcoords="offset points", fontsize=7, color=MUTED)
+    axes[0].set_title("Зайнято на диску, ТБ (пунктир: застарілі куски)", fontsize=9)
+    axes[1].set_title("Активні куски", fontsize=9)
+    axes[2].set_title("Межа розміру злиття, ГБ (нуль показано як 0.01)", fontsize=9)
+    axes[2].set_yscale("log")
+    for ax in axes:
+        ax.set_xlabel("модельний час, хв")
+    axes[0].set_ylim(bottom=0)
+    axes[1].set_ylim(bottom=0)
+    axes[1].legend(loc="upper left")
+    fig.suptitle("Диск, що заповнюється: одна партиція, 100 вставок/с", x=0.01, ha="left", fontsize=10, color=INK, fontweight="bold")
+    save(fig, "e11_disk")
+
+
 def validation():
     cases = [c for c in ("open", "closed", "throttled") if os.path.exists(f"runs/validation_{c}.json")]
     if not cases:
@@ -320,7 +348,7 @@ def validation():
 
 if __name__ == "__main__":
     for name, fn in (("e1_load", e1), ("e2_batch", e2), ("e3_boundary", e3), ("e4_selector", e4), ("e5_policy", e5),
-                     ("e6_feedback", e6), ("e7_burst", e7), ("e9_factorial", e9), ("e10_partitions", e10)):
+                     ("e6_feedback", e6), ("e7_burst", e7), ("e9_factorial", e9), ("e10_partitions", e10), ("e11_disk", e11)):
         d = load(name)
         if d is not None:
             fn(d)

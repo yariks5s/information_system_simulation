@@ -22,6 +22,8 @@ export const PRESETS = {
             config: { insert_rate: 150, selector: "tiered", base: 2 } },
   projection: { title: "Проєкція", text: "100 вставок/с у таблицю з проєкцією: кожен кусок на диску вдвічі більший, а злиття вдвічі довше. Порівняйте зайнятість пулу зі звичайною роботою.",
                 config: { insert_rate: 100, aux: [AUX.projection] } },
+  disk: { title: "Диск заповнюється", text: "100 вставок/с, для таблиці 1.5 ТБ. Куски, що вже злились, ще 8 хвилин лежать на диску (old_parts_lifetime) і займають понад половину місця. Злиття стартує, лише коли вільно вдвічі більше за його джерела, тому з 15-ї хвилини межа розміру злиття падає. Коли місце закінчується, вставки відхиляються з NOT_ENOUGH_SPACE, злиття не вміщаються, кусків стає дедалі більше, і врешті вмикається гальмування.",
+          config: { insert_rate: 100, disk_bytes: 1.5e12 } },
   stopped: { title: "Без злиттів", text: "Злиття вимкнені (max_bytes_to_merge_at_max_space_in_pool = 0), пороги гальмування знижено до 200 і 400: кусків стає дедалі більше, поки вставки спершу гальмуються, а потім відхиляються.",
              config: { insert_rate: 50, max_bytes_at_max_space: 0, parts_to_delay_insert: 200, parts_to_throw_insert: 400 } },
 };
@@ -78,6 +80,14 @@ const FIELDS = [
     visible: c => c.partition_seconds > 0 },
   { actions: [["rotate", "Нова партиція зараз"], ["drop", "Видалити найстарішу"]], visible: c => c.partition_seconds > 0 },
 
+  { group: "Диск" },
+  { key: "disk_on", label: "Обмежити місце на диску", type: "toggle", get: c => c.disk_bytes > 0, set: on => ({ disk_bytes: on ? 2e12 : 0 }),
+    hint: "Злиття стартує, лише коли вільно вдвічі більше за його джерела; вставка без місця для куска отримує NOT_ENOUGH_SPACE." },
+  { key: "disk_bytes", label: "Місце для таблиці", type: "range", ...log(10e9, 100e12), round: v => Math.round(v / 1e9) * 1e9, format: v => bytes(v),
+    visible: c => c.disk_bytes > 0 },
+  { key: "old_parts_lifetime", label: "old_parts_lifetime", type: "range", ...lin(0, 900), round: v => Math.round(v / 10) * 10, format: v => `${INT.format(v)} с`,
+    hint: "Скільки куски-джерела злиття ще лежать на диску, поки їх не видалить очищення." },
+
   { group: "Вартість злиття" },
   { key: "merge_bytes_per_second", label: "Швидкість злиття", type: "range", ...log(20 * MB, 2000 * MB), round: v => Math.round(v / 1e5) * 1e5, format: v => `${NUM.format(v / MB)} МБ/с на потік` },
   { key: "merge_fixed_seconds", label: "Фіксована вартість", type: "range", ...lin(0, 0.2), round: v => Math.round(v * 10000) / 10000, format: v => `${NUM.format(v * 1000)} мс` },
@@ -85,6 +95,28 @@ const FIELDS = [
   { key: "aux_index", label: "Індекс bloom_filter", type: "toggle", get: c => c.aux.some(a => a === AUX.index), set: (on, c) => ({ aux: toggle(c.aux, AUX.index, on) }) },
   { key: "aux_projection", label: "Проєкція", type: "toggle", get: c => c.aux.some(a => a === AUX.projection), set: (on, c) => ({ aux: toggle(c.aux, AUX.projection, on) }) },
 ];
+
+// differences between two configurations, as "label: a → b" lines for the comparison bar
+export function describeDifferences(a, b) {
+  const label = key => ({ aux: "Індекс і проєкція", max_avg_part_size_for_too_many_parts: "Обмеження за середнім розміром", disk_bytes: "Місце для таблиці" })[key]
+    || (FIELDS.find(f => f.key === key) || {}).label || key;
+  const value = (key, v) => {
+    if (key === "aux") return v.length ? v.map(x => (x === AUX.index ? "індекс" : x === AUX.projection ? "проєкція" : JSON.stringify(x))).join(" і ") : "немає";
+    if (key === "max_avg_part_size_for_too_many_parts") return v > 0 ? "увімкнене" : "вимкнене";
+    if (key === "disk_bytes" && !v) return "без обмеження";
+    if (key === "max_bytes_at_max_space" && !v) return "злиття вимкнені";
+    const f = FIELDS.find(x => x.key === key);
+    if (f && f.format) return f.format(v);
+    if (f && f.options) return (f.options.find(([o]) => String(o) === String(v)) || [v, String(v)])[1];
+    return String(v);
+  };
+  const out = [];
+  for (const key of Object.keys(b)) {
+    if (key === "burst" || key === "seed" || JSON.stringify(a[key]) === JSON.stringify(b[key])) continue;
+    out.push(`${label(key)}: ${value(key, a[key])} → ${value(key, b[key])}`);
+  }
+  return out;
+}
 
 function toggle(list, item, on) {
   const rest = list.filter(a => a !== item);

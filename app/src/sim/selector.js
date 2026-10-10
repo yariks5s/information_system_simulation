@@ -14,13 +14,21 @@ const ALIGN_MIN_RATIO_TO_PREV = 0.9;
 const ALIGN_MAX_POWERS_OF_TWO = 0.5;
 const ALIGN_MAX_SCORE_ADJUSTMENT = 0.75;
 
-export function maxSourcePartsBytes(maxTasks, scheduled, cfg) {
-  // CompactionStatistics::getMaxSourcePartsBytesForMerge
+// CompactionStatistics: a merge starts only with this much free space per source byte, and reserves RESERVE_RATIO
+export const SELECT_RATIO = 2.0;  // DISK_USAGE_COEFFICIENT_TO_SELECT
+export const RESERVE_RATIO = 1.1;  // DISK_USAGE_COEFFICIENT_TO_RESERVE
+
+export function maxSourcePartsBytes(maxTasks, scheduled, cfg, freeDisk = null) {
+  // CompactionStatistics::getMaxSourcePartsBytesForMerge; freeDisk is the free unreserved space, null for no limit
   if (cfg.max_bytes_at_max_space === 0) return 0;
   const free = maxTasks - scheduled;
-  if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) return cfg.max_bytes_at_max_space;
-  const low = Math.max(1, Math.min(cfg.max_bytes_at_min_space, cfg.max_bytes_at_max_space));
-  return Math.trunc(low * Math.pow(cfg.max_bytes_at_max_space / low, free / cfg.free_entries_to_lower_max_size));
+  let limit;
+  if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) limit = cfg.max_bytes_at_max_space;
+  else {
+    const low = Math.max(1, Math.min(cfg.max_bytes_at_min_space, cfg.max_bytes_at_max_space));
+    limit = Math.trunc(low * Math.pow(cfg.max_bytes_at_max_space / low, free / cfg.free_entries_to_lower_max_size));
+  }
+  return freeDisk === null ? limit : Math.min(limit, Math.trunc(freeDisk / SELECT_RATIO));
 }
 
 const unit = (v, lo, hi) => (v <= lo ? 0.0 : v >= hi ? 1.0 : (v - lo) / (hi - lo));

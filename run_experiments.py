@@ -22,7 +22,7 @@ STEP = 30.0
 OUT = "results_quick" if QUICK else "results"
 KEYS = ("parts_mean", "busy_threads_mean", "all_threads_busy", "fresh_waiting_mean", "fresh_lifetime_mean",
         "merge_duration_mean", "write_amplification", "insert_rate", "delayed_fraction", "rejected_fraction",
-        "delay_mean_ms", "little_relative_error")
+        "nospace_fraction", "delay_mean_ms", "little_relative_error")
 MB = 1e6
 with open("calibration.json") as f:
     CAL = json.load(f)["model"]
@@ -210,8 +210,45 @@ def e10_partitions():
                                 closed=dict(variants=list(closed_variants), grid=closed_grid.tolist(), runs=closed_runs)))
 
 
+def _disk_job(job):
+    """One run with the disk state every STEP seconds."""
+    from model import Table
+    from selector import max_source_parts_bytes
+
+    config, until = job
+    table = Table(config)
+    table.start()
+    rows = []
+    for t in np.arange(0, until + STEP, STEP):
+        table.engine.run(t)
+        used = table.disk_used()
+        free = max(0.0, config.disk_bytes - used) if config.disk_bytes else None
+        rows.append(dict(used=used, outdated=table.outdated_bytes, parts=len(table.parts), nospace=table.rejected_disk,
+                         cap=max_source_parts_bytes(table.pool.max_tasks, len(table.pool.tasks), config, free)))
+    first_nospace = table.history_nospace[0] if table.history_nospace else math.inf
+    return stats.summary(table), {k: [r[k] for r in rows] for k in rows[0]}, first_nospace
+
+
+def e11_disk():
+    """A disk that fills up: one partition, 100 inserts per second, 2 TB, and the lifetime of outdated parts."""
+    until = 600.0 if QUICK else 6000.0
+    disk = int((0.3 if QUICK else 2.0) * 10**12)
+    variants = {"no limit": {}, "2 TB, old_parts_lifetime 480 s": dict(disk_bytes=disk), "2 TB, old_parts_lifetime 60 s": dict(disk_bytes=disk, old_parts_lifetime=60.0)}
+    jobs = [(base(insert_rate=100, seed=seed, **v), until) for v in variants.values() for seed in SEEDS]
+    results = stats.pmap(_disk_job, jobs)
+    n = len(SEEDS)
+    runs = []
+    for i in range(len(variants)):
+        chunk = results[i * n : (i + 1) * n]
+        firsts = [f for *_, f in chunk]
+        runs.append(dict(stats=aggregate([c[0] for c in chunk]), series=mean_series([c[1] for c in chunk]),
+                         first_nospace=stats.confidence_interval(firsts) if all(math.isfinite(f) for f in firsts) else None,
+                         first_nospace_per_seed=[f if math.isfinite(f) else None for f in firsts]))
+    save("e11_disk", dict(disk_bytes=disk, variants=list(variants), grid=np.arange(0, until + STEP, STEP).tolist(), runs=runs))
+
+
 EXPERIMENTS = {f.__name__: f for f in (e1_load, e2_batch, e3_boundary, e4_selector, e5_policy, e6_feedback, e7_burst, e8_aux, e9_factorial,
-                                       e10_partitions)}
+                                       e10_partitions, e11_disk)}
 
 if __name__ == "__main__":
     names = [a for a in sys.argv[1:] if not a.startswith("--")] or list(EXPERIMENTS)
