@@ -22,7 +22,7 @@ def test_invariants_with_rotation_late_inserts_and_retention():
     def check():
         nonlocal most
         table.check_invariants()
-        most = max(most, len(table.partitions) - len(table.pending_drops))
+        most = max(most, len(table.partitions))
 
     table.engine.run(max_events=2 * 10**5, after_event=check)
     assert len(table.dropped_partitions) >= 3 and table.merges_done > 0

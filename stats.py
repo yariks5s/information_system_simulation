@@ -60,7 +60,7 @@ def summary(table, warmup=0.0, end=None):
     threads = table.cfg.threads
     parts_mean, parts_distribution = step_stats(parts_changes(table), warmup, end)
     fresh_mean, _ = step_stats(parts_changes(table, level=0), warmup, end)
-    task_changes = [c for a, d, _ in table.history_merges for c in ((a, 1), (d, -1))]
+    task_changes = [c for a, d, _ in table.history_merges + table.history_aborted for c in ((a, 1), (d, -1))]
     task_changes += [(task.created_at, 1) for task in table.pool.tasks]
     busy_mean, busy_distribution = step_stats(task_changes, warmup, end, transform=lambda n: min(n, threads))
 
@@ -84,7 +84,8 @@ def summary(table, warmup=0.0, end=None):
         fresh_lifetime_quantiles=quantiles(lifetime),
         fresh_waiting_mean=float(waiting.mean()) if len(waiting) else math.nan,
         fresh_waiting_quantiles=quantiles(waiting),
-        fresh_rate=created / length,
+        fresh_rate=created / length,  # accepted inserts per second
+        merges_aborted=sum(1 for _, d, _ in table.history_aborted if warmup <= d <= end),
         merge_duration_mean=float(np.mean([d - a for a, d, _ in merges])) if merges else math.nan,
         merge_duration_quantiles=quantiles(np.array([d - a for a, d, _ in merges])),
         write_amplification=sum(size for *_, size in merges) / inserted if inserted else math.nan,
@@ -152,10 +153,11 @@ def _run(job):
     table = Table(config)
     table.start()
     table.engine.run(until)
+    # several warm-ups at once: the characteristics come from recorded facts, so this costs no extra run
+    result = {w: summary(table, w) for w in warmup} if isinstance(warmup, tuple) else summary(table, warmup)
     if grid is None:
-        return summary(table, warmup), None
-    return summary(table, warmup), dict(parts=series(table, grid), fresh=series(table, grid, level=0),
-                                        largest=largest_partition_series(table, grid))
+        return result, None
+    return result, dict(parts=series(table, grid), fresh=series(table, grid, level=0), largest=largest_partition_series(table, grid))
 
 
 def pmap(fn, jobs, workers=None):
@@ -201,11 +203,12 @@ def paired_difference(a, b, key, level=0.95):
 
 
 def welch(curves, window):
-    """Welch's procedure: average the replications, then a centred moving average of half-width `window`."""
+    """Welch's procedure (Law): average the replications, then a centred moving average of half-width `window`.
+    Only the first m - window points have a full right half, so the result is that much shorter."""
     mean = np.mean(curves, axis=0)
-    smoothed = np.empty_like(mean, dtype=float)
-    for i in range(len(mean)):
-        half = min(window, i, len(mean) - 1 - i)
+    smoothed = np.empty(max(0, len(mean) - window), dtype=float)
+    for i in range(len(smoothed)):
+        half = min(window, i)
         smoothed[i] = mean[i - half : i + half + 1].mean()
     return smoothed
 

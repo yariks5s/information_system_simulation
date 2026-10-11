@@ -36,6 +36,15 @@ export class Pool {
     this.reallocate();
   }
 
+  // removes every task, as when DROP PARTITION cancels the merges of the table; returns them
+  cancelAll() {
+    this.advance();
+    const tasks = this.tasks;
+    this.tasks = [];
+    this.reallocate();
+    return tasks;
+  }
+
   // live changes from the UI
   configure({ threads, maxTasks, policy }) {
     this.advance();

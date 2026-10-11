@@ -11,7 +11,7 @@
 <header class="top">
   <div>
     <h1>Лабораторія фонових злиттів MergeTree</h1>
-    <p>Жива імітаційна модель підсистеми злиттів ClickHouse як системи масового обслуговування, черга якої гальмує власний вхідний потік. Змінюйте параметри на ходу і спостерігайте, як система реагує. Ядро моделі подія в подію збігається з відкаліброваною і провалідованою Python-моделлю.</p>
+    <p>Жива імітаційна модель підсистеми злиттів ClickHouse як системи масового обслуговування, черга якої гальмує власний вхідний потік. Змінюйте параметри на ходу і спостерігайте, як система реагує. Ядро моделі подія в подію збігається з відкаліброваною і валідованою Python-моделлю.</p>
   </div>
   <button class="btn ghost" id="theme" type="button" title="Перемкнути тему">Тема: авто</button>
 </header>
@@ -50,7 +50,7 @@
           <span class="clock-wrap">модельний час <strong class="clock" id="clock">00:00</strong><span id="speed-real" class="muted"></span></span>
           <span class="spacer"></span>
           <label>Зерно <input type="number" id="seed" value="1" min="1" step="1"></label>
-          <button class="btn" id="reset" type="button">Почати знову</button>
+          <button class="btn" id="reset" type="button" title="Запустити модель з нуля з поточними параметрами">Почати знову</button>
           <button class="btn" id="compare" type="button" aria-pressed="false" title="Запустити поруч дві моделі на однакових вставках і порівняти їх">Порівняти A і B</button>
           <span class="keys">Пробіл: пуск і пауза · →: крок</span>
         </div>
@@ -58,11 +58,11 @@
         <div class="card compare-bar" id="compare-bar" hidden>
           <div>
             <h2>Порівняння A і B</h2>
-            <p class="sub">A: конфігурація на момент увімкнення порівняння, вона зафіксована. B: та, що на панелі параметрів, і кожна зміна параметра діє тільки на B. Обидві моделі отримують ті самі вставки тих самих розмірів (спільні випадкові числа), тож різниця між ними походить тільки від параметрів. Сплеск, пауза вставок і дії з партиціями діють на обидві. «Почати знову» запускає обидві з нуля з їхніми поточними конфігураціями.</p>
+            <p class="sub">A: конфігурація на момент увімкнення порівняння, вона зафіксована. B: та, що на панелі параметрів, і кожна зміна параметра діє тільки на B. Обидві моделі отримують ті самі вставки тих самих розмірів (спільні випадкові числа), тож різниця між ними походить тільки від параметрів. Сплеск, пауза вставок і дії з партиціями діють на обидві. Плитки показують B і поруч A; дерево, пул, вибране, пояснення селектора і журнал показують модель, обрану праворуч. «Почати знову» запускає обидві з нуля з їхніми поточними конфігураціями.</p>
             <ul class="compare-diff" id="compare-diff"></ul>
           </div>
           <div class="field compare-view">
-            <span class="field-label">Дерево, пул і журнал</span>
+            <span class="field-label">Показувати модель</span>
             <div class="seg" role="group" id="compare-view"><button type="button" data-value="B" aria-pressed="true">B</button><button type="button" data-value="A" aria-pressed="false">A</button></div>
           </div>
         </div>
@@ -70,16 +70,16 @@
         <div class="tiles">
           <div class="tile"><div class="label">Активні куски</div><div class="value" id="v-parts">—</div><div class="detail" id="d-parts"></div></div>
           <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div><div class="detail" id="d-busy"></div></div>
-          <div class="tile"><div class="label">Підсилення записів за хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
-          <div class="tile"><div class="label">Прийняті вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
-          <div class="tile"><div class="label">Середнє злиття за хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
+          <div class="tile"><div class="label">Підсилення записів за останню хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
+          <div class="tile"><div class="label">Прийняті вставки за останню хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
+          <div class="tile"><div class="label">Середнє злиття за останню хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
           <div class="tile"><div class="label">Місце на диску</div><div class="value" id="v-disk">—</div><div class="meter" id="m-disk"><span></span></div><div class="detail" id="d-disk"></div></div>
         </div>
 
         <div class="card">
           <div class="card-head">
             <div>
-              <h2>Активні куски даних</h2>
+              <h2 id="tree-title">Активні куски даних</h2>
               <p class="sub">Кожен прямокутник є куском, ряд показує рівень злиття. По горизонталі: які вставки кусок містить, у логарифмічному масштабі від найновіших праворуч до найстаріших ліворуч. Клацніть на кусок, щоб дослідити його.</p>
             </div>
           </div>
@@ -91,20 +91,20 @@
             <span class="key"><span class="swatch" style="background:var(--level-4)"></span>4+</span>
             <span class="key"><span class="swatch outline"></span>зливається зараз</span>
           </div>
-          <canvas class="tree" id="tree"></canvas>
+          <canvas class="tree" id="tree" role="img" aria-label="Дерево активних кусків за рівнями злиття"></canvas>
         </div>
 
         <div class="grid lab-split">
           <div class="card">
             <div class="card-head">
-              <div><h2>Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
+              <div><h2 id="pool-title">Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
               <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--axis)"></span>чекає потоку</span></div>
             </div>
             <div id="pool"></div>
           </div>
           <div class="side-stack">
-            <div class="card"><h2>Вибране</h2><div id="inspector"></div></div>
-            <div class="card"><h2>Останнє рішення селектора</h2><div id="explain"></div></div>
+            <div class="card"><h2 id="inspector-title">Вибране</h2><div id="inspector"></div></div>
+            <div class="card"><h2 id="explain-title">Останнє рішення селектора</h2><div id="explain"></div></div>
           </div>
         </div>
 
@@ -160,9 +160,9 @@
         <rect class="box" x="450" y="60" width="300" height="166" rx="10"/>
         <text class="box-title" x="468" y="90">Перевірка перед вставкою</text>
         <text class="live" id="live-check" x="468" y="196"></text>
-        <text class="box-text" x="468" y="116">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
-        <text class="box-text" x="468" y="134">n ≥ 1000: затримати на</text>
-        <text class="formula" x="468" y="152">max(10, 1000·(n−999)/2000) мс</text>
+        <text class="box-text" x="468" y="116" id="live-throw">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
+        <text class="box-text" x="468" y="134" id="live-delay">n ≥ 1000: затримати на</text>
+        <text class="formula" x="468" y="152" id="live-formula">max(10, 1000·(n−999)/2000) мс</text>
         <text class="box-text" x="468" y="170">середній кусок &gt; 1 ГіБ: без обмежень</text>
 
         <rect class="box accent" x="880" y="60" width="300" height="166" rx="10"/>
@@ -186,16 +186,16 @@
         <text class="live" id="live-selector" x="468" y="496"></text>
         <text class="box-text" x="468" y="416">діапазон сусідніх вільних кусків, якщо</text>
         <text class="formula" x="468" y="434">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
-        <text class="box-text" x="468" y="452">base′: від 5 до 2 з віком і кількістю</text>
+        <text class="box-text" x="468" y="452" id="live-base">base′: від 5 до 2 з віком і кількістю</text>
         <text class="formula" x="468" y="470">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
 
         <rect class="box" x="20" y="360" width="300" height="166" rx="10"/>
         <text class="box-title" x="38" y="390">Пул фонових задач</text>
         <text class="live" id="live-pool" x="38" y="496"></text>
-        <text class="box-text" x="38" y="416">16 потоків, 32 задачі</text>
+        <text class="box-text" x="38" y="416" id="live-pool-size">16 потоків, 32 задачі</text>
         <text class="box-text" x="38" y="434">round_robin або shortest_task_first</text>
-        <text class="box-text" x="38" y="452">тривалість роботи злиття:</text>
-        <text class="formula" x="38" y="470">(2.7 мс + Σ/244.5 МБ/с)·ε·(1+δ)</text>
+        <text class="box-text" x="38" y="452">робота злиття, D: обсяг даних джерел</text>
+        <text class="formula" x="38" y="470" id="live-cost">(2.7 мс + D/244.5 МБ/с)·ε·(1+δ)</text>
 
         <path class="arrow" d="M320,110 L446,110" marker-end="url(#arr)"/>
         <text class="arrow-label" x="330" y="100">вставка ≈ 3.6 МБ</text>

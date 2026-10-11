@@ -1,7 +1,7 @@
 """Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded for one partition.
 
-The delay grows linearly with the number of parts over parts_to_delay_insert. The doc string
-of max_delay_to_insert still shows an older exponential formula; the code is what is modelled."""
+The delay grows linearly with the number of parts over parts_to_delay_insert (the formula the doc string
+of max_delay_to_insert gives "starting from version 23.1")."""
 
 
 def check_insert(parts_count, partition_bytes, cfg, total_parts=None):
@@ -22,4 +22,4 @@ def check_insert(parts_count, partition_bytes, cfg, total_parts=None):
     max_ms = cfg.max_delay_to_insert * 1000 if cfg.max_delay_to_insert > 0 else 1000
     if over >= allowed:
         return max_ms
-    return max(cfg.min_delay_to_insert_ms, int(max_ms * over / allowed))
+    return max(cfg.min_delay_to_insert_ms, int(max_ms * (over / allowed)))

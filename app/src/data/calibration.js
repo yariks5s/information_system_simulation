@@ -4,15 +4,19 @@ export const CALIBRATED = {
   "merge_bytes_per_second": 244504578.58316943,
   "merge_noise_cv": 0.12290395761261506,
   "insert_bytes_mean": 3607962.8763336567,
-  "insert_bytes_cv": 0.3514333577709221
+  "insert_bytes_cv": 0.3514333577709221,
+  "result_ratio": 0.9924737500565795,
+  "result_ratio_large": 0.7945592504794639,
+  "large_merge_bytes": 105187814,
+  "large_merge_time_factor": 1.1370079621788785
 };
 export const AUX = {
   "index": [
     0.007155583071234206,
-    0.062429390588294886
+    0.10176512260370196
   ],
   "projection": [
     0.9912682104579509,
-    0.9304387282149285
+    1.0019119207924843
   ]
 };

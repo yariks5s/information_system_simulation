@@ -249,18 +249,19 @@ def e7(d):
 def e9(d):
     names = {"insert size": "вставка 0.9 → 3.6 МБ", "threads": "пул 8 → 16", "base": "base 3 → 8",
              "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією"}
-    responses = [r for r in d["responses"] if any(abs(v) > 1e-12 for v in d["effects"][r]["main"].values())]
+    responses = [r for r in d["responses"] if any(abs(v[0]) > 1e-12 for v in d["effects"][r]["main"].values())]
     fig, axes = plt.subplots(1, len(responses), figsize=(3.1 * len(responses) + 1.5, 3.2))
     for ax, response in zip(axes, responses):
         main = d["effects"][response]["main"]
         factors = list(main)
-        ax.barh(range(len(factors)), [main[f] for f in factors], color=SERIES[0], height=0.6)
+        ax.barh(range(len(factors)), [main[f][0] for f in factors], xerr=[main[f][1] for f in factors], color=SERIES[0], height=0.6,
+                error_kw=dict(ecolor=INK2, elinewidth=0.8, capsize=2))
         ax.set_yticks(range(len(factors)), [names[f] for f in factors] if ax is axes[0] else [""] * len(factors))
         ax.axvline(0, color=AXIS, linewidth=0.8)
         ax.set_title(METRIC_NAMES[response], fontsize=9)
         ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
         ax.invert_yaxis()
-    fig.suptitle("Головні ефекти факторного плану 2^5: зміна середнього при переході фактора з рівня −1 на +1",
+    fig.suptitle("Головні ефекти факторного плану 2^5: зміна середнього при переході фактора з рівня −1 на +1, з 95% інтервалом",
                  x=0.01, ha="left", fontsize=9, color=INK)
     save(fig, "e9_factorial")
 
@@ -318,6 +319,46 @@ def e11(d):
     save(fig, "e11_disk")
 
 
+def inputs():
+    """Input data analysis: arrival gaps of a live open run against the exponential law, and the log residuals of
+    merge time (small merges of the base table) against the normal law, with Kolmogorov-Smirnov tests."""
+    import csv
+    from scipy import stats
+
+    if not os.path.exists("runs/validation_open_0/inserts.csv") or not os.path.exists("runs/calibration_base/merges.npy"):
+        return
+    with open("calibration.json") as f:
+        cal = json.load(f)["model"]
+    arrivals = np.array(sorted(float(r["arrival"]) for r in csv.DictReader(open("runs/validation_open_0/inserts.csv"))))
+    gaps = np.diff(arrivals)
+    merges = np.load("runs/calibration_base/merges.npy")
+    small = merges[:, 3] < cal["large_merge_bytes"]
+    residual = np.log(merges[small, 0]) - np.log(cal["merge_fixed_seconds"] + merges[small, 3] / cal["merge_bytes_per_second"])
+    ks_gaps = stats.kstest(gaps, "expon", args=(0, gaps.mean()))
+    ks_noise = stats.kstest((residual - residual.mean()) / residual.std(ddof=1), "norm")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+    ax = axes[0]
+    ax.hist(gaps, bins=40, density=True, color=SERIES[0], alpha=0.7, label="виміряні інтервали")
+    x = np.linspace(0, gaps.max(), 200)
+    ax.plot(x, stats.expon.pdf(x, scale=gaps.mean()), color=SERIES[1], label="експоненційний закон")
+    ax.set_title(f"Інтервали між вставками, сервер, 8/с: KS D = {ks_gaps.statistic:.3f}, p = {ks_gaps.pvalue:.2f}", fontsize=9)
+    ax.set_xlabel("інтервал, с")
+    ax.legend()
+    ax = axes[1]
+    (osm, osr), (slope, intercept, _) = stats.probplot(residual, dist="norm")
+    ax.scatter(osm, osr, s=8, color=SERIES[0], label="залишки")
+    ax.plot(osm, slope * osm + intercept, color=SERIES[1], label="нормальний закон")
+    ax.set_title(f"Шум тривалості злиття, Q-Q: KS D = {ks_noise.statistic:.3f}, p = {ks_noise.pvalue:.4f}", fontsize=9)
+    ax.set_xlabel("квантилі нормального закону")
+    ax.set_ylabel("лог-залишок")
+    ax.legend()
+    save(fig, "inputs")
+    with open(f"{SRC}/inputs.json", "w") as f:
+        json.dump(dict(gaps=dict(n=len(gaps), mean=float(gaps.mean()), cv=float(gaps.std() / gaps.mean()), ks=ks_gaps.statistic, p=ks_gaps.pvalue),
+                       merge_noise=dict(n=int(small.sum()), sigma=float(residual.std(ddof=1)), ks=ks_noise.statistic, p=ks_noise.pvalue,
+                                        skew=float(stats.skew(residual)), excess_kurtosis=float(stats.kurtosis(residual)))), f, indent=1)
+
+
 def validation():
     cases = [c for c in ("open", "closed", "throttled") if os.path.exists(f"runs/validation_{c}.json")]
     if not cases:
@@ -353,3 +394,4 @@ if __name__ == "__main__":
         if d is not None:
             fn(d)
     validation()
+    inputs()

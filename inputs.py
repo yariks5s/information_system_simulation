@@ -20,21 +20,30 @@ def lognormal(rng, mean, cv):
     return rng.lognormvariate(math.log(mean) - sigma2 / 2, math.sqrt(sigma2))
 
 
-def daily_rate(mean, amplitude, peak_at, burst):
-    """Rate λ(t) with a daily cosine profile and an optional (start, duration, factor) burst,
-    and its maximum, for thinning."""
+def daily_rate(mean, amplitude, peak_at):
+    """Rate λ(t) with a daily cosine profile, and its maximum, for thinning."""
     def rate(t):
-        value = mean * (1 + amplitude * math.cos(2 * math.pi * (t - peak_at) / DAY))
-        if burst and burst[0] <= t < burst[0] + burst[1]:
-            value *= burst[2]
-        return value
+        return mean * (1 + amplitude * math.cos(2 * math.pi * (t - peak_at) / DAY))
 
-    return rate, mean * (1 + amplitude) * max(1.0, burst[2] if burst else 1.0)
+    return rate, mean * (1 + amplitude)
 
 
-def next_arrival(t, rate, peak, candidates, thinning):
-    """Next event of a non-homogeneous Poisson process after t, by thinning (Lewis, Shedler)."""
+def burst_rate(rate, peak, burst):
+    """Extra rate (factor - 1) λ(t) of a (start, duration, factor) burst, and its maximum. The model adds it as a
+    separate Poisson process with its own streams, so the base arrivals are the same with and without the burst."""
+    start, duration, factor = burst
+
+    def extra(t):
+        return (factor - 1) * rate(t) if start <= t < start + duration else 0.0
+
+    return extra, (factor - 1) * peak
+
+
+def next_arrival(t, rate, peak, candidates, thinning, until=math.inf):
+    """Next event of a non-homogeneous Poisson process after t, by thinning (Lewis, Shedler); None if not before until."""
     while True:
         t += candidates.expovariate(peak)
+        if t >= until:
+            return None
         if thinning.random() * peak <= rate(t):
             return t

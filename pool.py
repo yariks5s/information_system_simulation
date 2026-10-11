@@ -17,6 +17,8 @@ class Task:
     remaining: float = 0.0
     rate: float = 0.0
     created_at: float = 0.0  # time the task entered the pool
+    result_size: int = 0  # size of the merged part
+    result_fresh: int = 0  # its bytes that never went through a large merge (RFC 3.1)
 
 
 class Pool:
@@ -43,6 +45,13 @@ class Pool:
     def remaining_now(self, task):
         """Remaining work of a task at the current time, without advancing the pool."""
         return task.remaining - task.rate * (self.engine.now - self._updated_at)
+
+    def cancel_all(self):
+        """Removes every task, as when DROP PARTITION cancels the merges of the table; returns them."""
+        self._advance()
+        tasks, self.tasks = self.tasks, []
+        self._reallocate()
+        return tasks
 
     def add(self, task):
         assert self.has_capacity()

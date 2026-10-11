@@ -6,6 +6,9 @@ import { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } from "./dom.
 import { Chart, Bars, table, card, ci, niceTicks, S } from "./charts.js";
 
 
+// a model-time interval as "53 ± 2 хв", or "ніколи" for an event that did not happen in every replication
+const minutes = v => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : "ніколи");
+
 export function results() {
   const R = RESULTS, root = document.getElementById("tab-results");
   const grid = el("div", { class: "grid two" });
@@ -43,10 +46,23 @@ export function results() {
     show("parts");
   }
 
+  if (R.e2) {
+    const names = { parts_mean: "активні куски", write_amplification: "підсилення записів", busy_threads_mean: "зайняті потоки" };
+    const { card: c, body } = card("E2. Розмір вставки за однакового потоку даних",
+      "180 МБ/с вставлених даних дрібними або великими вставками, пул 4 і 16 потоків.", { tableView: () => table(
+        ["пул", "вставка, МБ", ...Object.values(names)],
+        R.e2.pools.flatMap((pool, i) => R.e2.sizes.map((size, j) => [String(pool), NUM3.format(size), ...Object.keys(names).map(k => ci(R.e2.metrics[k][i][j]))]))) });
+    new Chart(body, { height: 260, x: { label: "розмір вставки, МБ", log: true, format: v => NUM3.format(v) }, y: { min: 0 },
+      valueFormat: v => INT.format(v), tooltipTitle: x => `вставки по ${NUM3.format(x)} МБ`,
+      series: R.e2.pools.map((pool, i) => ({ name: `пул ${pool}: активні куски`, short: `пул ${pool}`, color: S(i + 1), markers: true,
+                                              points: R.e2.sizes.map((size, j) => [size, R.e2.metrics.parts_mean[i][j][0]]) })) });
+    grid.append(c);
+  }
+
   if (R.e3) {
     const names = { "pool 16": "пул 16", "pool 4": "пул 4", "pool 16 + projection": "пул 16 + проєкція" };
     const { card: c, body } = card("E3. Межа стійкості",
-      `Найбільший потік даних, за якого за ${R.e3.until / 60} хв не затримано жодної вставки в жодній з 6 реплік.`, { tableView: () => table(
+      `Найбільший потік даних, за якого за ${R.e3.until / 60} хв жодна партиція не дійшла до parts_to_delay_insert в жодній з 6 реплік (обмеження за середнім розміром куска вимкнене). У таблиці: інтервал бісекції.`, { tableView: () => table(
         ["варіант", "вставка, МБ", "вставок/с", "МБ/с"], R.e3.variants.flatMap(v => v.points.map(p => [names[v.name] || v.name, NUM.format(p[0]), `${INT.format(p[1])}–${INT.format(p[2])}`, INT.format(p[3])]))) });
     new Chart(body, { height: 260, x: { label: "розмір вставки, МБ", log: true, format: v => NUM3.format(v) }, y: { min: 0, label: "МБ/с" },
       valueFormat: v => INT.format(v) + " МБ/с", tooltipTitle: x => `вставки по ${NUM3.format(x)} МБ`,
@@ -125,9 +141,9 @@ export function results() {
     const short = { "no limit": "без обмеження", "2 TB, old_parts_lifetime 480 s": "480 с", "2 TB, old_parts_lifetime 60 s": "60 с" };
     const { card: c, body } = card("E11. Диск, що заповнюється",
       `Одна партиція, 100 вставок/с, місця для таблиці ${bytes(R.e11.disk_bytes)}. Злиття стартує, лише коли вільно вдвічі більше за його джерела, а злиті джерела ще old_parts_lifetime лежать на диску. Тому злиття дробляться задовго до першої відхиленої вставки.`,
-      { wide: true, tableView: () => table(["варіант", "перша NOT_ENOUGH_SPACE", "куски", "підсилення", "затримано", "TOO_MANY_PARTS", "NOT_ENOUGH_SPACE"],
-        R.e11.variants.map(v => [names[v.name] || v.name, v.first_nospace ? `${NUM.format(v.first_nospace[0] / 60)} ± ${NUM.format(v.first_nospace[1] / 60)} хв` : "немає",
-          ci(v.stats.parts_mean), ci(v.stats.write_amplification), PCT.format(v.stats.delayed_fraction[0]), PCT.format(v.stats.rejected_fraction[0]), PCT.format(v.stats.nospace_fraction[0])])) });
+      { wide: true, tableView: () => table(["варіант", "межа злиття падає", "перша NOT_ENOUGH_SPACE", "NOT_ENOUGH_SPACE в останні 10 хв", "куски", "підсилення"],
+        R.e11.variants.map(v => [names[v.name] || v.name, minutes(v.cap_drop), minutes(v.first_nospace),
+          v.nospace_last_10_min ? PCT.format(v.nospace_last_10_min[0]) : "0%", ci(v.stats.parts_mean), ci(v.stats.write_amplification)])) });
     const row = el("div", { class: "grid two" });
     body.append(row);
     const d = R.e11;
@@ -162,14 +178,14 @@ export function results() {
     const factors = { "insert size": "вставка 0.9 → 3.6 МБ", "threads": "пул 8 → 16", "base": "base 3 → 8", "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією" };
     const responses = { parts_mean: "активні куски", write_amplification: "підсилення записів", fresh_lifetime_mean: "час життя свіжого куска, с", busy_threads_mean: "зайняті потоки" };
     const { card: c, body } = card("E9. Головні ефекти факторного плану 2⁵",
-      "180 МБ/с вставлених даних, 6 реплік на кожну з 32 конфігурацій. Ефект: зміна середнього при переході фактора з нижнього рівня на верхній.", { wide: true, tableView: () => table(
-        ["фактор", ...R.e9.responses.map(r => responses[r] || r)], R.e9.factors.map(f => [factors[f] || f, ...R.e9.responses.map(r => NUM3.format(R.e9.effects[r].main[f]))])) });
+      "180 МБ/с вставлених даних, 6 реплік на кожну з 32 конфігурацій. Ефект: зміна середнього при переході фактора з нижнього рівня на верхній, з 95% інтервалом за парними ефектами реплік.", { wide: true, tableView: () => table(
+        ["фактор", ...R.e9.responses.map(r => responses[r] || r)], R.e9.factors.map(f => [factors[f] || f, ...R.e9.responses.map(r => ci(R.e9.effects[r].main[f]))])) });
     const row = el("div", { class: "grid two" });
     body.append(row);
     for (const r of R.e9.responses) {
       const holder = el("div");
       row.append(el("div", {}, el("h3", {}, responses[r] || r), holder));
-      new Bars(holder, { name: responses[r] || r, color: S(1), labels: R.e9.factors.map(f => factors[f] || f), values: R.e9.factors.map(f => R.e9.effects[r].main[f]) });
+      new Bars(holder, { name: responses[r] || r, color: S(1), labels: R.e9.factors.map(f => factors[f] || f), values: R.e9.factors.map(f => R.e9.effects[r].main[f][0]) });
     }
     grid.append(c);
   }

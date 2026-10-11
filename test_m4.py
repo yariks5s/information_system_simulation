@@ -2,7 +2,7 @@
 import math
 import random
 
-from inputs import MIB, daily_rate, next_arrival
+from inputs import MIB, burst_rate, daily_rate, next_arrival
 from model import Config, Table
 from throttle import check_insert
 
@@ -69,12 +69,20 @@ def test_throttling_slows_closed_clients_down():
 
 
 def count_arrivals(amplitude, burst, days):
-    rate, peak = daily_rate(1.0, amplitude, 14 * 3600, burst)
+    rate, peak = daily_rate(1.0, amplitude, 14 * 3600)
     candidates, thinning = random.Random(1), random.Random(2)
     t, times = 0.0, []
     while t < days * 86400:
         t = next_arrival(t, rate, peak, candidates, thinning)
         times.append(t)
+    if burst:
+        # the burst is a second process on top of the first, with its own streams
+        extra, extra_peak = burst_rate(rate, peak, burst)
+        candidates, thinning = random.Random(3), random.Random(4)
+        t = burst[0]
+        while (t := next_arrival(t, extra, extra_peak, candidates, thinning, burst[0] + burst[1])) is not None:
+            times.append(t)
+        times.sort()
     return times
 
 

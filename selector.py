@@ -74,12 +74,14 @@ def _score(segment, begin, end, sum_size):
 
 
 def _max_parts_to_merge(part_count, cfg):
-    """merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once."""
+    """merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once; 0 means no limit."""
     limit = cfg.max_parts_to_merge_at_once
+    if not limit:
+        return math.inf
     if part_count < cfg.base:
         return limit
     if part_count >= cfg.parts_to_throw_insert:
-        return max(2, int(cfg.base))
+        return min(limit, max(2, int(cfg.base)))
     fill = (part_count - cfg.base) / (cfg.parts_to_throw_insert - cfg.base)
     return min(limit, int(cfg.base + (limit - cfg.base) * (1 - fill**cfg.lower_max_parts_exponent)))
 
@@ -98,16 +100,17 @@ def _segment_best(segment, offset, now, max_bytes, max_parts, cfg):
     """Best candidate of one segment as (score, -begin, begin, end): smaller is better, ties go to the right."""
     n = len(segment)
     best = None
+    now = math.floor(now)  # ages are whole seconds, as time_t in ClickHouse
     for begin in range(max(0, n - cfg.window_size), n):
         sum_size = max_size = segment[begin].size
-        min_age = now - segment[begin].created_at
+        min_age = now - math.floor(segment[begin].created_at)
         for end in range(begin + 2, n + 1):
             if end - begin > max_parts:
                 break
             part = segment[end - 1]
             sum_size += part.size
             max_size = max(max_size, part.size)
-            min_age = min(min_age, now - part.created_at)
+            min_age = min(min_age, now - math.floor(part.created_at))
             if sum_size > max_bytes:
                 break
             if _allow(sum_size, max_size, min_age, end - begin, n, cfg.base):
@@ -148,10 +151,10 @@ def _segment_best_fast(segment, offset, now, max_bytes, max_parts, cfg):
     prefix = np.concatenate([[0], np.cumsum(sizes)])
     # sums grow with the length, so no range longer than this fits into max_bytes
     fits = np.searchsorted(prefix, prefix[first : n - 1] + max_bytes, side="right") - 1 - np.arange(first, n - 1)
-    width = min(max_parts, n - first, int(fits.max()))
+    width = int(min(max_parts, n - first, int(fits.max())))
     if width < 2:
         return None
-    ages = now - np.fromiter((p.created_at for p in segment), dtype=np.float64, count=n)
+    ages = math.floor(now) - np.floor(np.fromiter((p.created_at for p in segment), dtype=np.float64, count=n))
     window_sizes = sliding_window_view(np.concatenate([sizes, np.zeros(width - 1, dtype=np.int64)]), width)[first : n - 1]
     window_ages = sliding_window_view(np.concatenate([ages, np.full(width - 1, np.inf)]), width)[first : n - 1]
     sum_size = np.cumsum(window_sizes, axis=1)
@@ -217,7 +220,7 @@ def select_simple_fast(parts, now, max_bytes, cfg):
 
 def select_tiered(parts, now, max_bytes, cfg):
     """Baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level."""
-    base = int(cfg.base)
+    base = max(2, int(cfg.base))
     run = 0  # length of the run of idle same-level parts ending at i
     for i, part in enumerate(parts):
         if part.merging:
@@ -231,7 +234,8 @@ def select_tiered(parts, now, max_bytes, cfg):
 
 def select_across(partitions, now, max_bytes, cfg, selector):
     """One merge over all partitions: (partition key, begin, end) or None. SimpleMergeSelector compares the
-    candidates of all partitions by score; ties go to the later partition, like ties inside one partition."""
+    candidates of all partitions by score. ClickHouse breaks a tie across partitions by memory address; the model
+    gives it to the later partition, like ties inside one partition."""
     if selector == "tiered":
         for key, parts in partitions.items():
             found = select_tiered(parts, now, max_bytes, cfg)

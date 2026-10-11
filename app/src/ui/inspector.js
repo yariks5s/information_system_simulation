@@ -24,6 +24,7 @@ export class Inspector {
 
   select(selection) {
     this.selection = selection;
+    this.lastExplainKey = null;  // the model shown may have changed
   }
 
   draw(table) {
@@ -79,9 +80,10 @@ export class Inspector {
     this.lastExplainKey = key;
     const root = this.explainRoot;
     const status = !x ? "Селектор ще не запускався."
-      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті, вибір пропущено.`
+      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті; призначувач засинає.`
       : x.outcome === "disabled" ? `Останній запуск (${clock(x.at)}): злиття вимкнені, max_bytes_to_merge_at_max_space_in_pool = 0.`
       : x.outcome === "disk_full" ? `Останній запуск (${clock(x.at)}): на диску вільно ${bytes(x.free)}, а злиття стартує, лише коли вільно вдвічі більше за його джерела; призначувач засинає.`
+      : x.outcome === "nothing" && table.cfg.selector === "tiered" ? `Останній запуск (${clock(x.at)}): немає ряду з ${Math.max(2, Math.trunc(table.cfg.base))} сусідніх вільних кусків одного рівня в межах розміру злиття; призначувач засинає.`
       : x.outcome === "nothing" && !x.considered ? `Останній запуск (${clock(x.at)}): немає двох сусідніх вільних кусків у межах розміру злиття${x.diskLimited ? ` (${bytes(x.maxBytes)}, знижена через місце на диску)` : ""}; призначувач засинає.`
       : x.outcome === "nothing" ? `Останній запуск (${clock(x.at)}): перевірено ${INT.format(x.considered)} діапазонів, жоден не пройшов умову допуску; призначувач засинає.`
       : `Останній запуск (${clock(x.at)}) призначив злиття №${x.task}.`;

@@ -21,7 +21,7 @@ export const RESERVE_RATIO = 1.1;  // DISK_USAGE_COEFFICIENT_TO_RESERVE
 export function maxSourcePartsBytes(maxTasks, scheduled, cfg, freeDisk = null) {
   // CompactionStatistics::getMaxSourcePartsBytesForMerge; freeDisk is the free unreserved space, null for no limit
   if (cfg.max_bytes_at_max_space === 0) return 0;
-  const free = maxTasks - scheduled;
+  const free = Math.max(0, maxTasks - scheduled);  // a pool shrunk from the UI can hold more tasks than it has room for
   let limit;
   if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) limit = cfg.max_bytes_at_max_space;
   else {
@@ -66,10 +66,11 @@ function score(segment, begin, end, sumSize) {
 }
 
 export function maxPartsToMerge(partCount, cfg) {
-  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once
+  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once; 0 means no limit
   const limit = cfg.max_parts_to_merge_at_once;
+  if (!limit) return Infinity;
   if (partCount < cfg.base) return limit;
-  if (partCount >= cfg.parts_to_throw_insert) return Math.max(2, Math.trunc(cfg.base));
+  if (partCount >= cfg.parts_to_throw_insert) return Math.min(limit, Math.max(2, Math.trunc(cfg.base)));
   const fill = (partCount - cfg.base) / (cfg.parts_to_throw_insert - cfg.base);
   return Math.min(limit, Math.trunc(cfg.base + (limit - cfg.base) * (1 - Math.pow(fill, cfg.lower_max_parts_exponent))));
 }
@@ -85,14 +86,15 @@ function better(a, b) {
 function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) {
   const n = segment.length;
   let best = null;
+  now = Math.floor(now);  // ages are whole seconds, as time_t in ClickHouse
   for (let begin = Math.max(0, n - cfg.window_size); begin < n; begin++) {
-    let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - segment[begin].createdAt;
+    let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - Math.floor(segment[begin].createdAt);
     for (let end = begin + 2; end <= n; end++) {
       if (end - begin > maxParts) break;
       const part = segment[end - 1];
       sumSize += part.size;
       if (part.size > maxSize) maxSize = part.size;
-      const age = now - part.createdAt;
+      const age = now - Math.floor(part.createdAt);
       if (age < minAge) minAge = age;
       if (sumSize > maxBytes) break;
       stats.considered++;
@@ -124,7 +126,7 @@ function segments(parts) {
 
 function selectTieredIn(parts, maxBytes, cfg) {
   // baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level
-  const base = Math.trunc(cfg.base);
+  const base = Math.max(2, Math.trunc(cfg.base));
   let run = 0;
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];

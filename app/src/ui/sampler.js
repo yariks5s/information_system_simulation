@@ -14,15 +14,17 @@ export class Sampler {
     table.engine.schedule(1, () => this.sample());
   }
 
-  // called by the lab for every model event
+  // called by the lab for every model event; a delayed insert counts as delayed when it commits, so an insert that
+  // waits out its delay and then gets NOT_ENOUGH_SPACE counts only as rejected
   observe(type, t, ...data) {
     const c = this.counts;
     if (type === "arrival") {
-      const delay = data[0];
-      if (delay === null) c.rejected++;
-      else if (delay > 0) { c.delayed++; c.maxDelay = Math.max(c.maxDelay, delay); }
-    } else if (type === "insert") c.accepted++;
-    else if (type === "nospace") c.nospace++;
+      if (data[0] === null) c.rejected++;
+    } else if (type === "insert") {
+      c.accepted++;
+      const delay = data[1];
+      if (delay > 0) { c.delayed++; c.maxDelay = Math.max(c.maxDelay, delay); }
+    } else if (type === "nospace") c.nospace++;
     else if (type === "merged") { c.merges++; c.mergeTime += t - data[0].createdAt; }
   }
 

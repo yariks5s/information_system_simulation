@@ -123,10 +123,14 @@ export class Chart {
 
     const fmtX = o.x.format || (v => NUM3.format(v));
     const fmtY = o.y.format || (v => NUM3.format(v));
+    let lastLabel = null;
     for (const v of (o.y.log ? logTicks(y0, y1) : niceTicks(y0, y1))) {
+      const label = fmtY(v);
+      if (label === lastLabel) continue;  // an integer format over a short range would repeat labels
+      lastLabel = label;
       const y = Math.round(Y(v)) + 0.5;
       svg.append(sv("line", { class: "grid-line", x1: m.l, x2: width - m.r, y1: y, y2: y }));
-      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, fmtY(v)));
+      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, label));
     }
     for (const v of (o.x.log ? logTicks(x0, x1) : niceTicks(x0, x1, Math.max(3, Math.floor((width - m.l - m.r) / 64))))) {
       const x = Math.round(X(v)) + 0.5;

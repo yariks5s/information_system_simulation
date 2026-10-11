@@ -14,8 +14,9 @@ def apply_level(config, name, level):
 
 
 def factorial(base_config, factors, until, warmup, responses, seeds):
-    """Full 2^k design. factors: {name: (low, high)}. Returns the runs and, per response,
-    the main effects and two-factor interactions (difference of means between the +1 and -1 halves)."""
+    """Full 2^k design. factors: {name: (low, high)}. Returns the runs and, per response, the main effects and
+    two-factor interactions (difference of means between the +1 and -1 halves), each as (mean, CI half-width) over
+    seeds: every seed is a full replicate of the design on common random numbers, so its effects are paired."""
     names = list(factors)
     design = list(itertools.product((-1, 1), repeat=len(names)))
     configs = []
@@ -29,13 +30,16 @@ def factorial(base_config, factors, until, warmup, responses, seeds):
         results.append(dict(signs=signs, summaries=summaries,
                             means={r: float(np.mean([s[r] for s in summaries])) for r in responses}))
     effects = {}
+    x = np.array([row["signs"] for row in results], dtype=float)
     for response in responses:
-        y = np.array([row["means"][response] for row in results])
-        x = np.array([row["signs"] for row in results], dtype=float)
+        y = np.array([[s[response] for s in row["summaries"]] for row in results])  # design rows x seeds
+
+        def effect(contrast):
+            return stats.confidence_interval((contrast[:, None] * y).mean(axis=0) * 2)
+
         effects[response] = dict(
-            main={n: float((x[:, i] * y).mean() * 2) for i, n in enumerate(names)},
-            interactions={f"{a} x {b}": float((x[:, i] * x[:, j] * y).mean() * 2)
-                          for (i, a), (j, b) in itertools.combinations(enumerate(names), 2)})
+            main={n: effect(x[:, i]) for i, n in enumerate(names)},
+            interactions={f"{a} x {b}": effect(x[:, i] * x[:, j]) for (i, a), (j, b) in itertools.combinations(enumerate(names), 2)})
     return results, effects
 
 

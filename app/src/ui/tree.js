@@ -1,7 +1,9 @@
 // The parts of every partition as rectangles: the row is the merge level, the horizontal position is which
 // inserts a part holds, on a log scale from the newest inserts at the right to the oldest at the left.
 
-import { cssVar, tooltip, bytes, duration, INT } from "./dom.js";
+import { cssVar, tooltip, bytes, duration, INT, plural } from "./dom.js";
+
+const MAX_BANDS = 8;  // newest partitions shown; with "keep all" the canvas would otherwise grow without limit
 
 export class PartsTree {
   constructor(canvas, { onPick }) {
@@ -28,7 +30,7 @@ export class PartsTree {
   }
 
   layout(width, table) {
-    this.maxBands = Math.max(this.maxBands, table.partitions.size);
+    this.maxBands = Math.min(MAX_BANDS, Math.max(this.maxBands, table.partitions.size));
     for (const parts of table.partitions.values()) for (const p of parts) if (p.level > this.maxLevel) this.maxLevel = p.level;
     const levels = Math.min(this.maxLevel, 11) + 1;
     const bands = this.maxBands, gap = 3, bandPad = 18;
@@ -62,7 +64,7 @@ export class PartsTree {
     this.rects = [];
     ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
     ctx.textBaseline = "middle";
-    const keys = [...table.partitions.keys()].sort((a, b) => b - a);  // newest on top
+    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);  // newest on top
     keys.forEach((key, b) => {
       const top = L.top + b * L.bandH;
       const bottom = top + L.levels * (L.rowH + L.gap);
@@ -72,7 +74,6 @@ export class PartsTree {
       ctx.fillText(table.cfg.partition_seconds || table.partitions.size > 1 ? `партиція ${key}` : "таблиця", 0, top + 7);
       ctx.fillStyle = muted;
       ctx.fillText(`${INT.format(parts.length)} шт.`, 0, top + 21);
-      if (table.pendingDrops.has(key)) { ctx.fillStyle = active; ctx.fillText("видаляється", 0, top + 35); }
       ctx.textAlign = "right";
       ctx.fillStyle = muted;
       for (let lv = 0; lv < L.levels; lv++) {
@@ -94,6 +95,12 @@ export class PartsTree {
         ctx.globalAlpha = sources && !sources.has(p) ? 0.28 : 1;
         ctx.fillStyle = colors[Math.min(p.level, 4)];
         ctx.fillRect(x0, y, drawW, L.rowH);
+        if (p.level === 0 && drawW > 2 && !p.merging) {
+          // the lightest level is below 3:1 against the surface: an outline keeps it visible
+          ctx.strokeStyle = colors[2];
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x0 + 0.5, y + 0.5, drawW - 1, L.rowH - 1);
+        }
         if (p.merging) {
           ctx.strokeStyle = active;
           ctx.lineWidth = sources && sources.has(p) ? 2.5 : 1.5;
@@ -120,6 +127,11 @@ export class PartsTree {
     ctx.textAlign = "left";
     ctx.fillStyle = secondary;
     ctx.fillText("вставок тому", L.left, axisY + 14);
+    const hidden = table.partitions.size - keys.length;
+    if (hidden > 0) {
+      ctx.textAlign = "right";
+      ctx.fillText(`ще ${hidden} ${plural(hidden, "старша партиція", "старші партиції", "старших партицій")} не показано`, L.right, axisY + 14);
+    }
     this.table = table;
   }
 

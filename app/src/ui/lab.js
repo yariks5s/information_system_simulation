@@ -15,8 +15,10 @@ import { PartsTree } from "./tree.js";
 
 const FRAME_BUDGET_MS = 14;
 const SIGNIFICANT = new Set(["insert", "assign", "merged", "drop", "rotate", "arrival", "nospace"]);
-// aux keeps its items: the panel recognises the index and the projection by identity
-const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])] });
+// aux keeps its items: the panel recognises the index and the projection by identity; a burst started from the
+// toolbar is an event of that run, not a parameter, so a new run does not replay it
+const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])], burst: null });
+const STEP_LIMIT = 600;  // model seconds a step may skip when nothing visible happens
 
 export class Lab {
   constructor() {
@@ -100,7 +102,7 @@ export class Lab {
       table.engine.schedule(at, () => {
         if (name === "burst") {
           table.burst(...args);
-          this.log.push(m.log, table.engine.now, "throttle", `Сплеск: потік ×${args[0]} на ${args[1]} с`);
+          this.log.push(m.log, table.engine.now, "action", `Сплеск: потік ×${args[0]} на ${args[1]} с`);
         }
       });
     }
@@ -108,10 +110,9 @@ export class Lab {
     return m;
   }
 
-  // a new run from time zero: with the preset, or with both current configurations while comparing
+  // a new run from time zero with the current configurations (a preset choice resets them)
   restart() {
-    if (this.a) this.start({ ...this.b.table.cfg, seed: this.seed }, { ...this.a.table.cfg, seed: this.seed });
-    else this.load(this.presetKey);
+    this.start({ ...this.b.table.cfg, seed: this.seed }, this.a ? { ...this.a.table.cfg, seed: this.seed } : null);
   }
 
   toggleCompare() {
@@ -140,7 +141,12 @@ export class Lab {
     button.setAttribute("aria-pressed", String(on));
     button.textContent = on ? "Вимкнути порівняння" : "Порівняти A і B";
     this.$("compare-bar").hidden = !on;
-    this.$("log-title").textContent = on ? `Журнал подій моделі ${this.view}` : "Журнал подій";
+    const suffix = on ? ` · модель ${this.view}` : "";
+    this.$("log-title").textContent = "Журнал подій" + suffix;
+    this.$("tree-title").textContent = "Активні куски даних" + suffix;
+    this.$("pool-title").textContent = "Пул фонових задач" + suffix;
+    this.$("inspector-title").textContent = "Вибране" + suffix;
+    this.$("explain-title").textContent = "Останнє рішення селектора" + suffix;
     for (const b of this.$("compare-view").children) b.setAttribute("aria-pressed", String(b.dataset.value === this.view));
     if (!on) return;
     const diff = describeDifferences(this.a.table.cfg, this.b.table.cfg);
@@ -154,20 +160,20 @@ export class Lab {
       const [factor, length] = this.controls.burstSettings();
       for (const m of models) {
         m.table.burst(factor, length);
-        this.log.push(m.log, m.table.engine.now, "throttle", `Сплеск: потік ×${factor} на ${length} с`);
+        this.log.push(m.log, m.table.engine.now, "action", `Сплеск: потік ×${factor} на ${length} с`);
       }
     } else if (name === "pause") {
       this.paused = !this.paused;
       for (const m of models) {
         m.table.setInsertsPaused(this.paused);
-        this.log.push(m.log, m.table.engine.now, "insert", this.paused ? "Вставки зупинено" : "Вставки відновлено");
+        this.log.push(m.log, m.table.engine.now, "action", this.paused ? "Вставки зупинено" : "Вставки відновлено");
       }
       this.controls.setPaused(this.paused);
     } else if (name === "rotate") {
       for (const m of models) m.table.newPartitionNow();
     } else if (name === "drop") {
       for (const m of models) {
-        if (!m.table.dropOldestPartition()) this.log.push(m.log, m.table.engine.now, "partition", "Найстарішу партицію не видалено: у ній ще йдуть злиття, її видалять після них");
+        if (!m.table.dropOldestPartition()) this.log.push(m.log, m.table.engine.now, "action", "Партицію не видалено: це єдина партиція таблиці");
       }
     }
     this.controls.sync();
@@ -189,7 +195,8 @@ export class Lab {
     });
     this.$("window").addEventListener("change", e => { this.window = +e.target.value; this.updateCharts(); });
     document.addEventListener("keydown", e => {
-      if (this.$("tab-lab").hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      // keys of a focused control stay with it: Space presses a button, opens a group, picks a log entry
+      if (this.$("tab-lab").hidden || document.activeElement.closest("input, select, textarea, button, summary, a, [role=button]")) return;
       if (e.code === "Space") { e.preventDefault(); this.toggle(); }
       if (e.code === "ArrowRight") { e.preventDefault(); this.step(); }
     });
@@ -207,10 +214,11 @@ export class Lab {
   // the shown model to its next event that changes something visible, the other one to the same time
   step() {
     this.pause();
-    const m = this.shown();
+    const m = this.shown(), engine = m.table.engine, limit = engine.now + STEP_LIMIT;
     this.lastSignificant = null;
-    for (let i = 0; i < 100000 && !this.lastSignificant; i++) if (!m.table.engine.step()) break;
-    for (const other of this.models()) if (other !== m) other.table.engine.run(m.table.engine.now);
+    while (!this.lastSignificant && engine.peekTime() <= limit) engine.step();
+    if (!this.lastSignificant) engine.run(limit);  // an idle model: at most STEP_LIMIT seconds, not a day of samples
+    for (const other of this.models()) if (other !== m) other.table.engine.run(engine.now);
     this.drawAll();
     this.slowUpdate();
   }
@@ -283,6 +291,14 @@ export class Lab {
     const m = tb.lastMerge;
     set("live-selector", m ? (m.tiered ? `${m.count} шт` : `${m.count} шт, base′ ${NUM2.format(m.loweredBase)}`) : "—");
     set("live-pool", `${NUM.format(tb.pool.busyThreads())} з ${tb.pool.threads} потоків`);
+    // the rules on the diagram with the parameters of the running model
+    const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert, maxMs = cfg.max_delay_to_insert * 1000;
+    set("live-throw", `n ≥ ${INT.format(cfg.parts_to_throw_insert)}: відхилити (TOO_MANY_PARTS)`);
+    set("live-delay", `n ≥ ${INT.format(cfg.parts_to_delay_insert)}: затримати на`);
+    set("live-formula", `max(${cfg.min_delay_to_insert_ms}, ${INT.format(maxMs)}·(n−${INT.format(cfg.parts_to_delay_insert - 1)})/${INT.format(allowed)}) мс`);
+    set("live-base", `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
+    set("live-pool-size", `${tb.pool.threads} потоків, ${tb.pool.maxTasks} задач`);
+    set("live-cost", `(${NUM.format(cfg.merge_fixed_seconds * 1000)} мс + D/${NUM.format(cfg.merge_bytes_per_second / 1e6)} МБ/с)·ε·(1+δ)`);
     // the newest partition as a row of parts: width by the logarithm of the size, colour by level
     const parts = [...tb.partitions.values()].pop() || [];
     const shown = parts.slice(-40);
@@ -329,64 +345,75 @@ export class Lab {
   buildCharts() {
     const minutes = v => clock(v * 60);
     const title = x => "момент " + clock(x * 60);
-    const opts = extra => ({ height: 190, x: { format: minutes }, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [], ...extra });
+    this.xAxis = { format: minutes };
+    const chart = (id, extra) => new Chart(this.$(id), { height: 190, x: this.xAxis, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [],
+                                                         ariaLabel: this.$(id).previousElementSibling.textContent, ...extra });
     this.charts = {
-      parts: new Chart(this.$("c-parts"), opts({ valueFormat: v => INT.format(v) })),
-      busy: new Chart(this.$("c-busy"), opts({ valueFormat: v => NUM.format(v) })),
-      inserts: new Chart(this.$("c-inserts"), opts({ valueFormat: v => NUM.format(v) + "/с" })),
-      wa: new Chart(this.$("c-wa"), opts({ y: { min: 0, format: v => NUM.format(v) }, valueFormat: v => NUM2.format(v) })),
-      disk: new Chart(this.$("c-disk"), opts({ y: { min: 0, format: v => bytes(v) }, valueFormat: v => bytes(v) })),
-      cap: new Chart(this.$("c-cap"), opts({ y: { log: true, format: v => bytes(v) }, valueFormat: v => bytes(v) })),
+      parts: chart("c-parts", { valueFormat: v => INT.format(v) }),
+      busy: chart("c-busy", { valueFormat: v => NUM.format(v) }),
+      inserts: chart("c-inserts", { valueFormat: v => NUM.format(v) + "/с" }),
+      wa: chart("c-wa", { y: { min: 0, format: v => NUM.format(v) }, valueFormat: v => NUM2.format(v) }),
+      disk: chart("c-disk", { y: { min: 0, format: v => bytes(v) }, valueFormat: v => bytes(v) }),
+      cap: chart("c-cap", { y: { log: true, format: v => bytes(v) }, valueFormat: v => bytes(v) }),
     };
   }
 
   updateCharts() {
     const B = this.view_(this.b), cfgB = this.b.table.cfg;
+    // every chart spans the whole window, also when a series has no values for part of it
+    const x = { x: { ...this.xAxis, min: B.T.length ? B.T[0] : null, max: B.T.length ? B.T[B.T.length - 1] : null } };
     if (this.a) {
       const A = this.view_(this.a), cfgA = this.a.table.cfg;
-      const pair = f => [{ name: "A: базова", short: "A", color: S(1), points: f(A) }, { name: "B: змінена", short: "B", color: S(2), points: f(B) }];
+      const pair = (metric, f) => [{ name: `A: ${metric}`, short: "A", color: S(1), points: f(A) }, { name: `B: ${metric}`, short: "B", color: S(2), points: f(B) }];
       const marks = (label, va, vb) => (va === vb ? [{ y: vb, label }] : [{ y: va, label: "A: " + label }, { y: vb, label: "B: " + label }]);
-      this.charts.parts.setSeries(pair(v => v.pts(v.col("parts"))), {
+      // the thresholds count the parts of one partition, so with several partitions the chart shows the largest one
+      const split = A.w.some(s => s.partitions > 1) || B.w.some(s => s.partitions > 1);
+      this.charts.parts.setSeries(pair(split ? "найбільша партиція" : "усі куски", v => v.pts(v.col(split ? "largest" : "parts"))), { ...x,
         thresholds: [...marks("parts_to_delay_insert", cfgA.parts_to_delay_insert, cfgB.parts_to_delay_insert),
                      ...marks("parts_to_throw_insert", cfgA.parts_to_throw_insert, cfgB.parts_to_throw_insert)] });
-      this.charts.busy.setSeries(pair(v => v.pts(v.smooth("busy"))), { thresholds: marks("потоків у пулі", this.a.table.pool.threads, this.b.table.pool.threads) });
-      this.charts.inserts.setSeries(pair(v => v.pts(v.smooth("accepted"))));
-      this.charts.wa.setSeries(pair(v => v.wa()));
-      this.charts.disk.setSeries(pair(v => v.pts(v.col("used"))), { thresholds: marks("disk_bytes", cfgA.disk_bytes, cfgB.disk_bytes).filter(t => t.y > 0) });
-      this.charts.cap.setSeries(pair(v => v.cap()));
+      this.charts.busy.setSeries(pair("зайняті потоки", v => v.pts(v.smooth("busy"))), { ...x, thresholds: marks("потоків у пулі", this.a.table.pool.threads, this.b.table.pool.threads) });
+      this.charts.inserts.setSeries(pair("прийняті вставки", v => v.pts(v.smooth("accepted"))), x);
+      this.charts.wa.setSeries(pair("підсилення записів", v => v.wa()), x);
+      this.charts.disk.setSeries(pair("зайнято", v => v.pts(v.col("used"))), { ...x, thresholds: marks("disk_bytes", cfgA.disk_bytes, cfgB.disk_bytes).filter(t => t.y > 0) });
+      this.charts.cap.setSeries(pair("межа розміру злиття", v => v.cap()), x);
       return;
     }
     const partsSeries = [{ name: "усі куски", short: "усі", color: S(1), points: B.pts(B.col("parts")) }];
     if (B.w.some(s => s.partitions > 1)) partsSeries.push({ name: "найбільша партиція", short: "найбільша", color: S(2), points: B.pts(B.col("largest")) });
     partsSeries.push({ name: "свіжі куски (рівень 0)", short: "свіжі", color: S(3), points: B.pts(B.col("fresh")) });
-    this.charts.parts.setSeries(partsSeries, { thresholds: [{ y: cfgB.parts_to_delay_insert, label: "parts_to_delay_insert" }, { y: cfgB.parts_to_throw_insert, label: "parts_to_throw_insert" }] });
+    this.charts.parts.setSeries(partsSeries, { ...x, thresholds: [{ y: cfgB.parts_to_delay_insert, label: "parts_to_delay_insert" }, { y: cfgB.parts_to_throw_insert, label: "parts_to_throw_insert" }] });
     this.charts.busy.setSeries([
       { name: "зайняті потоки", short: "потоки", color: S(1), points: B.pts(B.smooth("busy")) },
       { name: "задачі в пулі", short: "задачі", color: S(2), points: B.pts(B.smooth("tasks")) },
-    ], { thresholds: [{ y: this.b.table.pool.threads, label: "потоків у пулі" }] });
+    ], { ...x, thresholds: [{ y: this.b.table.pool.threads, label: "потоків у пулі" }] });
     const accepted = B.smooth("accepted"), delayed = B.smooth("delayed"), rejected = B.smooth("rejected"), nospace = B.smooth("nospace");
     this.charts.inserts.setSeries([
       { name: "прийняті без затримки", short: "без затримки", color: S(1), points: B.pts(accepted.map((v, i) => Math.max(0, v - delayed[i]))) },
       { name: "затримані", short: "затримані", color: "var(--warning)", points: B.pts(delayed) },
       { name: "відхилені", short: "відхилені", color: "var(--critical)", points: B.pts(rejected.map((v, i) => v + nospace[i])) },
-    ]);
-    this.charts.wa.setSeries([{ name: "підсилення записів за хвилину", color: S(1), points: B.wa() }]);
+    ], x);
+    this.charts.wa.setSeries([{ name: "підсилення записів за хвилину", color: S(1), points: B.wa() }], x);
     this.charts.disk.setSeries([
       { name: "зайнято", short: "зайнято", color: S(1), points: B.pts(B.col("used")) },
       { name: "з них застарілі куски", short: "застарілі", color: S(2), points: B.pts(B.col("outdated")) },
-    ], { thresholds: cfgB.disk_bytes ? [{ y: cfgB.disk_bytes, label: "disk_bytes" }] : [] });
-    this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }]);
+    ], { ...x, thresholds: cfgB.disk_bytes ? [{ y: cfgB.disk_bytes, label: "disk_bytes" }] : [] });
+    this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }], x);
   }
 
   // the samples of one model in the chart window, with helpers to turn them into points
   view_(m) {
-    const w = m.sampler.window(this.window), T = w.map(s => s.t / 60);
+    const all = m.sampler.samples, w = m.sampler.window(this.window), offset = all.length - w.length, T = w.map(s => s.t / 60);
     const pts = arr => T.map((t, i) => [t, arr[i]]);
     const col = key => w.map(s => s[key]);
-    const smooth = (key, k = 5) => w.map((_, i) => { let sum = 0, n = 0; for (let j = Math.max(0, i - k + 1); j <= i; j++) { sum += w[j][key]; n++; } return sum / n; });
+    // trailing means over the whole sample history, so a value at a moment does not change as the window scrolls
+    const smooth = (key, k = 5) => {
+      const prefix = [0];
+      for (const s of all) prefix.push(prefix[prefix.length - 1] + s[key]);
+      return w.map((_, i) => { const j = offset + i + 1, from = Math.max(0, j - k); return (prefix[j] - prefix[from]) / (j - from); });
+    };
     const wa = () => { const merged = smooth("merged", 60), inserted = smooth("inserted", 60); return pts(merged.map((x, i) => (inserted[i] ? x / inserted[i] : null))); };
     const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: a gap on the log axis
-    return { w, pts, col, smooth, wa, cap };
+    return { w, T, pts, col, smooth, wa, cap };
   }
 }
 

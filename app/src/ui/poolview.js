@@ -58,6 +58,7 @@ export class PoolView {
       const fill = node.lastElementChild.firstElementChild;
       if (!task) {
         node.className = "slot free" + (i >= pool.maxTasks ? " over" : "");
+        node.title = "";
         label.textContent = "вільно";
         pct.textContent = "";
         fill.style.width = "0";

@@ -13,7 +13,7 @@
   --surface-2: #f3f2ee;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  --text-muted: #706e69;
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
@@ -40,6 +40,7 @@
     --surface-1: #1a1a19;
     --surface-2: #232321;
     --text-primary: #ffffff;
+    --button-primary: #2a6bbd;
     --text-secondary: #c3c2b7;
     --text-muted: #898781;
     --grid: #2c2c2a;
@@ -65,6 +66,7 @@
   --surface-1: #1a1a19;
   --surface-2: #232321;
   --text-primary: #ffffff;
+  --button-primary: #2a6bbd;
   --text-secondary: #c3c2b7;
   --text-muted: #898781;
   --grid: #2c2c2a;
@@ -156,7 +158,7 @@ section.tab[hidden] { display: none; }
 .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid.sim { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
-@media (max-width: 1100px) { .grid.two, .grid.three, .grid.sim { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1100px) { .grid.two, .grid.three, .grid.sim { grid-template-columns: minmax(0, 1fr); } .lab .sidebar { order: 2; } }
 
 .controls {
   display: flex;
@@ -215,7 +217,7 @@ canvas.tree { width: 100%; display: block; cursor: crosshair; }
 .slot { font-size: 11.5px; color: var(--text-secondary); min-width: 0; }
 .slot .bar { height: 7px; border-radius: 3.5px; background: var(--surface-2); overflow: hidden; margin-top: 2px; }
 .slot .bar > span { display: block; height: 100%; border-radius: 3.5px; background: var(--series-1); }
-.slot.waiting .bar > span { background: var(--axis); }
+.slot.waiting .bar > span { background: var(--text-muted); }
 .slot.free { color: var(--text-muted); }
 .slot .meta { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; overflow: hidden; }
 .slot .meta span:last-child { font-variant-numeric: tabular-nums; }
@@ -309,8 +311,9 @@ footer { color: var(--text-muted); font-size: 12px; max-width: 1440px; margin: 0
 .spacer { flex: 1; }
 .keys { color: var(--text-muted); font-size: 12px; }
 .muted { color: var(--text-muted); font-size: 12.5px; }
-.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
-.btn.primary:hover { filter: brightness(1.08); background: var(--series-1); }
+.btn.primary { background: var(--button-primary, var(--series-1)); border-color: var(--button-primary, var(--series-1)); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+[hidden] { display: none !important; }
 .btn.small { min-width: 0; padding: 4px 9px; font-size: 12.5px; }
 
 .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 0; }
@@ -353,6 +356,7 @@ button.slot .bar { display: block; }
 .side-stack h3 { margin-top: 6px; }
 .side-stack .btn.small { margin-top: 10px; }
 
+.log li.pick:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
 .log-filters { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
 .check input { accent-color: var(--series-1); }
@@ -367,7 +371,6 @@ ol.log li.pick:hover { background: var(--surface-2); }
 .log-disk .log-kind { color: var(--text-primary); }
 .log-disk .log-kind::before { content: "✕ "; color: var(--critical); }
 
-.compare-bar[hidden] { display: none; }
 .compare-bar { display: flex; gap: 24px; align-items: flex-start; justify-content: space-between; border-color: var(--series-2); }
 .compare-diff { margin: 6px 0 0; padding-left: 18px; color: var(--text-primary); font-size: 13px; }
 .compare-diff li.same { color: var(--text-muted); list-style: none; margin-left: -18px; }
@@ -419,7 +422,7 @@ ol.log li.pick:hover { background: var(--surface-2); }
           <span class="clock-wrap">модельний час <strong class="clock" id="clock">00:00</strong><span id="speed-real" class="muted"></span></span>
           <span class="spacer"></span>
           <label>Зерно <input type="number" id="seed" value="1" min="1" step="1"></label>
-          <button class="btn" id="reset" type="button">Почати знову</button>
+          <button class="btn" id="reset" type="button" title="Запустити модель з нуля з поточними параметрами">Почати знову</button>
           <button class="btn" id="compare" type="button" aria-pressed="false" title="Запустити поруч дві моделі на однакових вставках і порівняти їх">Порівняти A і B</button>
           <span class="keys">Пробіл: пуск і пауза · →: крок</span>
         </div>
@@ -427,11 +430,11 @@ ol.log li.pick:hover { background: var(--surface-2); }
         <div class="card compare-bar" id="compare-bar" hidden>
           <div>
             <h2>Порівняння A і B</h2>
-            <p class="sub">A: конфігурація на момент увімкнення порівняння, вона зафіксована. B: та, що на панелі параметрів, і кожна зміна параметра діє тільки на B. Обидві моделі отримують ті самі вставки тих самих розмірів (спільні випадкові числа), тож різниця між ними походить тільки від параметрів. Сплеск, пауза вставок і дії з партиціями діють на обидві. «Почати знову» запускає обидві з нуля з їхніми поточними конфігураціями.</p>
+            <p class="sub">A: конфігурація на момент увімкнення порівняння, вона зафіксована. B: та, що на панелі параметрів, і кожна зміна параметра діє тільки на B. Обидві моделі отримують ті самі вставки тих самих розмірів (спільні випадкові числа), тож різниця між ними походить тільки від параметрів. Сплеск, пауза вставок і дії з партиціями діють на обидві. Плитки показують B і поруч A; дерево, пул, вибране, пояснення селектора і журнал показують модель, обрану праворуч. «Почати знову» запускає обидві з нуля з їхніми поточними конфігураціями.</p>
             <ul class="compare-diff" id="compare-diff"></ul>
           </div>
           <div class="field compare-view">
-            <span class="field-label">Дерево, пул і журнал</span>
+            <span class="field-label">Показувати модель</span>
             <div class="seg" role="group" id="compare-view"><button type="button" data-value="B" aria-pressed="true">B</button><button type="button" data-value="A" aria-pressed="false">A</button></div>
           </div>
         </div>
@@ -439,16 +442,16 @@ ol.log li.pick:hover { background: var(--surface-2); }
         <div class="tiles">
           <div class="tile"><div class="label">Активні куски</div><div class="value" id="v-parts">—</div><div class="detail" id="d-parts"></div></div>
           <div class="tile"><div class="label">Зайняті потоки пулу</div><div class="value" id="v-busy">—</div><div class="meter" id="m-busy"><span></span></div><div class="detail" id="d-busy"></div></div>
-          <div class="tile"><div class="label">Підсилення записів за хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
-          <div class="tile"><div class="label">Прийняті вставки за хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
-          <div class="tile"><div class="label">Середнє злиття за хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
+          <div class="tile"><div class="label">Підсилення записів за останню хвилину</div><div class="value" id="v-wa">—</div><div class="detail" id="d-wa"></div></div>
+          <div class="tile"><div class="label">Прийняті вставки за останню хвилину</div><div class="value" id="v-rate">—</div><div class="detail" id="d-rate"></div></div>
+          <div class="tile"><div class="label">Середнє злиття за останню хвилину</div><div class="value" id="v-merge">—</div><div class="detail" id="d-merge"></div></div>
           <div class="tile"><div class="label">Місце на диску</div><div class="value" id="v-disk">—</div><div class="meter" id="m-disk"><span></span></div><div class="detail" id="d-disk"></div></div>
         </div>
 
         <div class="card">
           <div class="card-head">
             <div>
-              <h2>Активні куски даних</h2>
+              <h2 id="tree-title">Активні куски даних</h2>
               <p class="sub">Кожен прямокутник є куском, ряд показує рівень злиття. По горизонталі: які вставки кусок містить, у логарифмічному масштабі від найновіших праворуч до найстаріших ліворуч. Клацніть на кусок, щоб дослідити його.</p>
             </div>
           </div>
@@ -460,20 +463,20 @@ ol.log li.pick:hover { background: var(--surface-2); }
             <span class="key"><span class="swatch" style="background:var(--level-4)"></span>4+</span>
             <span class="key"><span class="swatch outline"></span>зливається зараз</span>
           </div>
-          <canvas class="tree" id="tree"></canvas>
+          <canvas class="tree" id="tree" role="img" aria-label="Дерево активних кусків за рівнями злиття"></canvas>
         </div>
 
         <div class="grid lab-split">
           <div class="card">
             <div class="card-head">
-              <div><h2>Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
+              <div><h2 id="pool-title">Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
               <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--axis)"></span>чекає потоку</span></div>
             </div>
             <div id="pool"></div>
           </div>
           <div class="side-stack">
-            <div class="card"><h2>Вибране</h2><div id="inspector"></div></div>
-            <div class="card"><h2>Останнє рішення селектора</h2><div id="explain"></div></div>
+            <div class="card"><h2 id="inspector-title">Вибране</h2><div id="inspector"></div></div>
+            <div class="card"><h2 id="explain-title">Останнє рішення селектора</h2><div id="explain"></div></div>
           </div>
         </div>
 
@@ -529,9 +532,9 @@ ol.log li.pick:hover { background: var(--surface-2); }
         <rect class="box" x="450" y="60" width="300" height="166" rx="10"/>
         <text class="box-title" x="468" y="90">Перевірка перед вставкою</text>
         <text class="live" id="live-check" x="468" y="196"></text>
-        <text class="box-text" x="468" y="116">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
-        <text class="box-text" x="468" y="134">n ≥ 1000: затримати на</text>
-        <text class="formula" x="468" y="152">max(10, 1000·(n−999)/2000) мс</text>
+        <text class="box-text" x="468" y="116" id="live-throw">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
+        <text class="box-text" x="468" y="134" id="live-delay">n ≥ 1000: затримати на</text>
+        <text class="formula" x="468" y="152" id="live-formula">max(10, 1000·(n−999)/2000) мс</text>
         <text class="box-text" x="468" y="170">середній кусок &gt; 1 ГіБ: без обмежень</text>
 
         <rect class="box accent" x="880" y="60" width="300" height="166" rx="10"/>
@@ -555,16 +558,16 @@ ol.log li.pick:hover { background: var(--surface-2); }
         <text class="live" id="live-selector" x="468" y="496"></text>
         <text class="box-text" x="468" y="416">діапазон сусідніх вільних кусків, якщо</text>
         <text class="formula" x="468" y="434">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
-        <text class="box-text" x="468" y="452">base′: від 5 до 2 з віком і кількістю</text>
+        <text class="box-text" x="468" y="452" id="live-base">base′: від 5 до 2 з віком і кількістю</text>
         <text class="formula" x="468" y="470">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
 
         <rect class="box" x="20" y="360" width="300" height="166" rx="10"/>
         <text class="box-title" x="38" y="390">Пул фонових задач</text>
         <text class="live" id="live-pool" x="38" y="496"></text>
-        <text class="box-text" x="38" y="416">16 потоків, 32 задачі</text>
+        <text class="box-text" x="38" y="416" id="live-pool-size">16 потоків, 32 задачі</text>
         <text class="box-text" x="38" y="434">round_robin або shortest_task_first</text>
-        <text class="box-text" x="38" y="452">тривалість роботи злиття:</text>
-        <text class="formula" x="38" y="470">(2.7 мс + Σ/244.5 МБ/с)·ε·(1+δ)</text>
+        <text class="box-text" x="38" y="452">робота злиття, D: обсяг даних джерел</text>
+        <text class="formula" x="38" y="470" id="live-cost">(2.7 мс + D/244.5 МБ/с)·ε·(1+δ)</text>
 
         <path class="arrow" d="M320,110 L446,110" marker-end="url(#arr)"/>
         <text class="arrow-label" x="330" y="100">вставка ≈ 3.6 МБ</text>
@@ -724,6 +727,15 @@ class Pool {
     task.createdAt = this.engine.now;
     this.tasks.push(task);
     this.reallocate();
+  }
+
+  // removes every task, as when DROP PARTITION cancels the merges of the table; returns them
+  cancelAll() {
+    this.advance();
+    const tasks = this.tasks;
+    this.tasks = [];
+    this.reallocate();
+    return tasks;
   }
 
   // live changes from the UI
@@ -893,7 +905,7 @@ const RESERVE_RATIO = 1.1;  // DISK_USAGE_COEFFICIENT_TO_RESERVE
 function maxSourcePartsBytes(maxTasks, scheduled, cfg, freeDisk = null) {
   // CompactionStatistics::getMaxSourcePartsBytesForMerge; freeDisk is the free unreserved space, null for no limit
   if (cfg.max_bytes_at_max_space === 0) return 0;
-  const free = maxTasks - scheduled;
+  const free = Math.max(0, maxTasks - scheduled);  // a pool shrunk from the UI can hold more tasks than it has room for
   let limit;
   if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) limit = cfg.max_bytes_at_max_space;
   else {
@@ -938,10 +950,11 @@ function score(segment, begin, end, sumSize) {
 }
 
 function maxPartsToMerge(partCount, cfg) {
-  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once
+  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once; 0 means no limit
   const limit = cfg.max_parts_to_merge_at_once;
+  if (!limit) return Infinity;
   if (partCount < cfg.base) return limit;
-  if (partCount >= cfg.parts_to_throw_insert) return Math.max(2, Math.trunc(cfg.base));
+  if (partCount >= cfg.parts_to_throw_insert) return Math.min(limit, Math.max(2, Math.trunc(cfg.base)));
   const fill = (partCount - cfg.base) / (cfg.parts_to_throw_insert - cfg.base);
   return Math.min(limit, Math.trunc(cfg.base + (limit - cfg.base) * (1 - Math.pow(fill, cfg.lower_max_parts_exponent))));
 }
@@ -957,14 +970,15 @@ function better(a, b) {
 function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) {
   const n = segment.length;
   let best = null;
+  now = Math.floor(now);  // ages are whole seconds, as time_t in ClickHouse
   for (let begin = Math.max(0, n - cfg.window_size); begin < n; begin++) {
-    let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - segment[begin].createdAt;
+    let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - Math.floor(segment[begin].createdAt);
     for (let end = begin + 2; end <= n; end++) {
       if (end - begin > maxParts) break;
       const part = segment[end - 1];
       sumSize += part.size;
       if (part.size > maxSize) maxSize = part.size;
-      const age = now - part.createdAt;
+      const age = now - Math.floor(part.createdAt);
       if (age < minAge) minAge = age;
       if (sumSize > maxBytes) break;
       stats.considered++;
@@ -996,7 +1010,7 @@ function segments(parts) {
 
 function selectTieredIn(parts, maxBytes, cfg) {
   // baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level
-  const base = Math.trunc(cfg.base);
+  const base = Math.max(2, Math.trunc(cfg.base));
   let run = 0;
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -1043,7 +1057,7 @@ return { SELECT_RATIO, RESERVE_RATIO, maxSourcePartsBytes, maxPartsToMerge, sele
 // ---- src/sim/throttle.js
 const __module_4 = (() => {
 // Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded. The delay grows linearly with the
-// number of parts over parts_to_delay_insert; the doc string of max_delay_to_insert still shows an older formula.
+// number of parts over parts_to_delay_insert (the formula the doc string of max_delay_to_insert gives "starting from version 23.1").
 
 // Returns null if the insert is rejected with TOO_MANY_PARTS, otherwise its delay in milliseconds.
 // partsCount and partitionBytes are of the partition with the most parts; totalParts counts all partitions.
@@ -1057,7 +1071,7 @@ function checkInsert(partsCount, partitionBytes, cfg, totalParts = partsCount) {
   const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert;
   const maxMs = cfg.max_delay_to_insert > 0 ? cfg.max_delay_to_insert * 1000 : 1000;
   if (over >= allowed) return maxMs;
-  return Math.max(cfg.min_delay_to_insert_ms, Math.trunc(maxMs * over / allowed));
+  return Math.max(cfg.min_delay_to_insert_ms, Math.trunc(maxMs * (over / allowed)));
 }
 
 return { checkInsert };
@@ -1084,7 +1098,7 @@ const DEFAULTS = {
   insert_rate: 2.0,
   rate_amplitude: 0.0,
   rate_peak_at: 14 * 3600,
-  burst: null,  // [start, duration, factor]
+  burst: null,  // [start, duration, factor], factor > 1: a separate Poisson process on top (RFC 3.2)
   clients: 4,
   think_time: 2.0,
   insert_bytes_mean: 10 * MIB,
@@ -1114,15 +1128,25 @@ const DEFAULTS = {
   merge_bytes_per_second: 150e6,
   merge_noise_cv: 0.3,
   aux: [],  // [storage overhead s, merge time overhead δ] per projection or skip index
+  // size of a merged part (RFC 3.1): result_ratio of the sources, result_ratio_large once per byte in merges of at
+  // least large_merge_bytes (0: no such regime), which also take large_merge_time_factor longer (RFC 3.7)
+  result_ratio: 1.0,
+  result_ratio_large: 1.0,
+  large_merge_bytes: 0,
+  large_merge_time_factor: 1.0,
   // partitions (RFC 3.9)
   partition_seconds: 0.0,
   late_insert_fraction: 0.0,
   retention_partitions: 0,
+  // seconds between a trigger and the assignee run
+  assign_latency: 0.0,
   // disk (RFC 3.10): bytes the table may take (0: no limit), and how long merged parts stay on disk
   disk_bytes: 0,
   old_parts_lifetime: 480.0,
   seed: 1,
 };
+
+const STREAMS = ["arrival", "thinning", "size", "merge", "assignee", "partition", "burst_arrival", "burst_thinning", "burst_size", "burst_partition"];
 
 class Table {
   // rng: optional { streams, client(c) } to replace the random streams, used by the differential test
@@ -1133,40 +1157,44 @@ class Table {
     if (!["simple", "simple_reference", "tiered"].includes(cfg.selector)) throw new Error(`unknown selector ${cfg.selector}`);
     this.engine = new Engine();
     this.rngSource = rng;
-    this.rng = rng ? rng.streams : streams(cfg.seed, "arrival", "thinning", "size", "merge", "assignee", "partition");
+    this.rng = rng ? rng.streams : streams(cfg.seed, ...STREAMS);
     this.think = [];
     for (let c = 0; c < cfg.clients; c++) this.think.push(this.clientRng(c));
+    this.clientLive = [];  // a closed client has a pending think, arrival or delayed insert
     this.pool = new Pool(this.engine, cfg.threads, cfg.threads * cfg.concurrency_ratio, cfg.scheduling_policy, task => this.onMergeDone(task));
     this.partitions = new Map([[0, []]]);  // key -> active parts ordered by block number, keys ascending
     this.partitionBytes = new Map([[0, 0]]);
     this.partCount = 0;
-    this.currentPartition = 0;
-    this.pendingDrops = new Set();
+    this.currentPartition = 0;  // the number of rotations so far
     this.droppedPartitions = [];
     this.nextId = 1;
     this.lastBlock = 0;
     this.insertedBytes = 0;
     this.droppedBytes = 0;
     this.droppedBlocks = 0;
+    this.savedBytes = 0;  // sources minus merged parts (RFC 3.1)
     this.arrivals = 0;
     this.inFlight = 0;
     this.rejected = 0;
     this.rejectedDisk = 0;  // NOT_ENOUGH_SPACE at commit
-    this.outdated = [];  // [outdated at, bytes] of merge sources still on disk, oldest first, from outdatedHead on
+    this.outdated = [];  // [outdated at, bytes] of merge sources and dropped parts still on disk, oldest first, from outdatedHead on
     this.outdatedHead = 0;
     this.outdatedBytes = 0;
     this.delayed = 0;
     this.delayTotalMs = 0;
     this.mergedBytes = 0;
     this.mergesDone = 0;
+    this.mergesAborted = 0;
     this.selectorRuns = 0;
     this.noWorkCount = 0;
     this.assigneeAt = Infinity;
     this.assigneeToken = 0;
     this.arrivalToken = 0;
+    this.burstToken = 0;
     this.rotationToken = 0;
     this.activeClients = cfg.clients;
     this.insertsPaused = false;
+    this.diskLimitChanged = false;  // a limit lowered from the UI may be below the used space
     this.lastSelection = null;  // the outcome of the last selector run, for the UI
     this.lastMerge = null;  // why the last merge was chosen
     this.observer = null;  // (type, ...data) on every event, see emit
@@ -1181,16 +1209,19 @@ class Table {
     const cfg = this.cfg;
     this.auxStorage = 1 + cfg.aux.reduce((s, a) => s + a[0], 0);
     this.auxTime = 1 + cfg.aux.reduce((s, a) => s + a[1], 0);
-    const peakFactor = Math.max(1.0, cfg.burst ? cfg.burst[2] : 1.0);
-    this.peakRate = cfg.insert_rate * (1 + cfg.rate_amplitude) * peakFactor;
+    this.peakRate = cfg.insert_rate * (1 + cfg.rate_amplitude);
+    this.burstPeak = cfg.burst ? (cfg.burst[2] - 1) * this.peakRate : 0;
   }
 
   rate(t) {
     const cfg = this.cfg;
-    let value = cfg.insert_rate * (1 + cfg.rate_amplitude * Math.cos(2 * Math.PI * (t - cfg.rate_peak_at) / DAY));
-    const b = cfg.burst;
-    if (b && b[0] <= t && t < b[0] + b[1]) value *= b[2];
-    return value;
+    return cfg.insert_rate * (1 + cfg.rate_amplitude * Math.cos(2 * Math.PI * (t - cfg.rate_peak_at) / DAY));
+  }
+
+  // the extra rate (factor - 1) λ(t) of a burst
+  burstRate(t) {
+    const b = this.cfg.burst;
+    return b[0] <= t && t < b[0] + b[1] ? (b[2] - 1) * this.rate(t) : 0.0;
   }
 
   emit(type, ...data) {
@@ -1203,10 +1234,16 @@ class Table {
     return out;
   }
 
+  hasBurst() {
+    return this.cfg.arrivals === "open" && this.cfg.burst && this.cfg.burst[2] > 1;
+  }
+
   start() {
     if (this.cfg.partition_seconds) this.scheduleRotation();
-    if (this.cfg.arrivals === "open") this.scheduleArrival();
-    else for (let c = 0; c < this.cfg.clients; c++) this.thinkThen(c);
+    if (this.cfg.arrivals === "open") {
+      this.scheduleArrival();
+      if (this.hasBurst()) this.scheduleBurstArrival(this.cfg.burst[0]);
+    } else for (let c = 0; c < this.cfg.clients; c++) this.thinkThen(c);
     this.trigger();
   }
 
@@ -1223,18 +1260,48 @@ class Table {
     this.engine.schedule(t - this.engine.now, token => { if (token === this.arrivalToken) this.onInsertArrival(null); }, this.arrivalToken);
   }
 
+  scheduleBurstArrival(after) {
+    if (this.insertsPaused || !this.hasBurst() || this.burstPeak <= 0) return;
+    const [start, duration] = this.cfg.burst;
+    let t = Math.max(after, start);
+    for (;;) {
+      t += this.rng.burst_arrival.expovariate(this.burstPeak);
+      if (t >= start + duration) return;
+      if (this.rng.burst_thinning.random() * this.burstPeak <= this.burstRate(t)) break;
+    }
+    this.engine.schedule(t - this.engine.now, token => { if (token === this.burstToken) this.onInsertArrival(null, true); }, this.burstToken);
+  }
+
   thinkThen(client) {
+    this.clientLive[client] = true;
     this.engine.schedule(this.think[client].expovariate(1 / this.cfg.think_time), c => this.onInsertArrival(c), client);
   }
 
-  onInsertArrival(client) {
-    if (client === null) this.scheduleArrival();
-    else if (client >= this.activeClients || this.insertsPaused) return;  // the client was removed or inserts are paused
+  // closed clients still in the model, the others end their loop at the next event
+  clientStays(client) {
+    return client < this.activeClients && !this.insertsPaused && this.cfg.arrivals === "closed";
+  }
+
+  onInsertArrival(client, burst = false) {
+    if (client === null) {
+      if (burst) this.scheduleBurstArrival(this.engine.now);
+      else this.scheduleArrival();
+    } else if (!this.clientStays(client)) {
+      this.clientLive[client] = false;
+      return;
+    }
     this.arrivals++;
-    // drawn before the throttling decision, so that the i-th insert has the same size in every configuration
-    const size = Math.max(1, roundHalfEven(lognormal(this.rng.size, this.cfg.insert_bytes_mean, this.cfg.insert_bytes_cv) * this.auxStorage));
+    // drawn before the throttling decision, so that the i-th insert is the same in every configuration:
+    // its size, and whether its data belongs to the previous partition
+    const sizeRng = burst ? this.rng.burst_size : this.rng.size;
+    const size = Math.max(1, roundHalfEven(lognormal(sizeRng, this.cfg.insert_bytes_mean, this.cfg.insert_bytes_cv) * this.auxStorage));
+    let target = this.currentPartition;
+    if (this.cfg.partition_seconds && this.cfg.late_insert_fraction) {
+      if ((burst ? this.rng.burst_partition : this.rng.partition).random() < this.cfg.late_insert_fraction) target -= 1;
+    }
+    // getMaxPartsCountAndSizeForPartition: on a tie the first partition wins
     let key = null, most = -1;
-    for (const [k, parts] of this.partitions) if (parts.length >= most) { most = parts.length; key = k; }
+    for (const [k, parts] of this.partitions) if (parts.length > most) { most = parts.length; key = k; }
     const delay = checkInsert(this.partitions.get(key).length, this.partitionBytes.get(key), this.cfg, this.partCount);
     this.emit("arrival", delay, size, client);
     if (delay === null) {
@@ -1247,45 +1314,47 @@ class Table {
       this.delayTotalMs += delay;
     }
     this.inFlight++;
-    this.engine.schedule(delay / 1000, (s, c) => this.onInsertCommit(s, c), size, client);
+    this.engine.schedule(delay / 1000, (s, c, p, d) => this.onInsertCommit(s, c, p, d), size, client, target, delay);
   }
 
-  partitionForInsert() {
-    if (!this.cfg.partition_seconds) return 0;
-    const key = this.currentPartition;
-    if (this.cfg.late_insert_fraction && this.rng.partition.random() < this.cfg.late_insert_fraction) {
-      if (this.partitions.has(key - 1) && !this.pendingDrops.has(key - 1)) return key - 1;
-    }
-    return key;
+  // the partition of the insert's data; data of an already dropped partition goes to the current one
+  partitionForInsert(target) {
+    const keys = [...this.partitions.keys()];
+    if (this.partitions.has(target) || target > keys[keys.length - 1]) return target;
+    return this.currentPartition;
   }
 
-  onInsertCommit(size, client) {
+  onInsertCommit(size, client, target, delay) {
     this.inFlight--;
-    const key = this.partitionForInsert();
+    const key = this.partitionForInsert(target);
     // MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
     if (this.cfg.disk_bytes && size > this.diskFree()) {
       this.rejectedDisk++;
-      this.emit("nospace", size, client);
-      if (client !== null) this.thinkThen(client);
+      this.emit("nospace", size, client, delay);
+      if (client !== null) this.afterInsert(client);
       return;
     }
     this.lastBlock++;
     if (!this.partitions.has(key)) this.addPartition(key);
     const part = { id: this.nextId++, minBlock: this.lastBlock, maxBlock: this.lastBlock, level: 0, size, createdAt: this.engine.now,
-                   partition: key, blocks: 1, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
+                   partition: key, blocks: 1, fresh: size, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
     this.partitions.get(key).push(part);
     this.partitionBytes.set(key, this.partitionBytes.get(key) + size);
     this.partCount++;
     this.insertedBytes += size;
-    this.emit("insert", part);
+    this.emit("insert", part, delay);
     this.trigger();  // MergeTreeSink wakes the assignee after every insert
-    if (client !== null) this.thinkThen(client);
+    if (client !== null) this.afterInsert(client);
+  }
+
+  afterInsert(client) {
+    if (this.clientStays(client)) this.thinkThen(client);
+    else this.clientLive[client] = false;
   }
 
   addPartition(key) {
-    // keys stay ascending: a new key is the largest one, a late insert goes to an existing key
-    const entries = [...this.partitions.entries(), [key, []]].sort((a, b) => a[0] - b[0]);
-    this.partitions = new Map(entries);
+    // keys stay ascending: a new key is the largest one (partitionForInsert never returns an older missing key)
+    this.partitions.set(key, []);
     this.partitionBytes.set(key, 0);
   }
 
@@ -1293,12 +1362,13 @@ class Table {
 
   trigger() {
     this.noWorkCount = Math.floor(this.noWorkCount / 2);
-    if (this.assigneeAt > this.engine.now) this.scheduleAssignee(0.0);
+    if (this.assigneeAt > this.engine.now + this.cfg.assign_latency) this.scheduleAssignee(this.cfg.assign_latency);
   }
 
   postpone() {
     this.noWorkCount++;
-    const delay = Math.min(600.0, 0.1 * Math.pow(1.1, this.noWorkCount)) + this.rng.assignee.uniform(0, 1);
+    // std::pow saturates to inf in ClickHouse; the cap gives the same 600 s
+    const delay = Math.min(600.0, 0.1 * Math.pow(1.1, Math.min(this.noWorkCount, 200))) + this.rng.assignee.uniform(0, 1);
     this.scheduleAssignee(delay);
     this.emit("sleep", delay);
   }
@@ -1317,7 +1387,8 @@ class Table {
   }
 
   tryAssignMerge() {
-    // a full pool rejects the task, so the selection would be discarded anyway
+    // ClickHouse selects on a full pool too and postpones twice when the pool refuses the merge; skipping that
+    // selection changes only the backoff counter, which every insert halves (RFC 3.6)
     if (!this.pool.hasCapacity()) {
       this.lastSelection = { at: this.engine.now, outcome: "pool_full" };
       return false;
@@ -1337,21 +1408,41 @@ class Table {
       return false;
     }
     const sources = this.partitions.get(found.key).slice(found.begin, found.end);
-    let size = 0;
+    let size = 0, fresh = 0;
     for (const p of sources) {
       p.merging = true;
       p.pickedAt = this.engine.now;
       size += p.size;
+      fresh += p.fresh;
     }
     const noise = lognormal(this.rng.merge, 1.0, this.cfg.merge_noise_cv);
-    const baseSize = size / this.auxStorage;
-    const work = (this.cfg.merge_fixed_seconds + baseSize / this.cfg.merge_bytes_per_second) * noise * this.auxTime;
-    const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0 };
+    const work = this.mergeWork(size, fresh) * noise;
+    const [resultSize, resultFresh] = this.mergedSize(size, fresh);
+    const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0, resultSize, resultFresh };
     this.pool.add(task);
     this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited,
                                             freeEntries: this.pool.maxTasks - this.pool.tasks.length + 1, ...stats, ...found, work };
     this.emit("assign", task, found);
     return true;
+  }
+
+  // thread-seconds of a merge before noise (RFC 3.7): the cost line is per byte of fresh data; a byte that went through
+  // a large merge holds 1 / result_ratio_large times more data, and large merges are slower
+  mergeWork(size, fresh) {
+    const cfg = this.cfg;
+    const data = (fresh + (size - fresh) / cfg.result_ratio_large) / this.auxStorage;
+    let work = (cfg.merge_fixed_seconds + data / cfg.merge_bytes_per_second) * this.auxTime;
+    if (cfg.large_merge_bytes && size >= cfg.large_merge_bytes) work *= cfg.large_merge_time_factor;
+    return work;
+  }
+
+  // size of the merged part and its fresh bytes (RFC 3.1)
+  mergedSize(size, fresh) {
+    const cfg = this.cfg;
+    if (cfg.large_merge_bytes && size >= cfg.large_merge_bytes) {
+      return [Math.max(1, roundHalfEven(cfg.result_ratio * (size - fresh) + cfg.result_ratio_large * fresh)), 0];
+    }
+    return [Math.max(1, roundHalfEven(cfg.result_ratio * size)), roundHalfEven(cfg.result_ratio * fresh)];
   }
 
   // merges
@@ -1364,19 +1455,21 @@ class Table {
     let level = 0, blocks = 0;
     for (const p of sources) { if (p.level > level) level = p.level; blocks += p.blocks; }
     level += 1;
-    const merged = { id: task.id, minBlock: sources[0].minBlock, maxBlock: sources[sources.length - 1].maxBlock, level, size: task.priority,
-                     createdAt: this.engine.now, partition: key, blocks, merging: false, pickedAt: null, removedAt: null, dropped: false,
-                     origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
+    const merged = { id: task.id, minBlock: sources[0].minBlock, maxBlock: sources[sources.length - 1].maxBlock, level, size: task.resultSize,
+                     createdAt: this.engine.now, partition: key, blocks, fresh: task.resultFresh, merging: false, pickedAt: null, removedAt: null,
+                     dropped: false, origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
     parts.splice(begin, sources.length, merged);
     this.partCount -= sources.length - 1;
+    this.partitionBytes.set(key, this.partitionBytes.get(key) + task.resultSize - task.priority);
+    this.savedBytes += task.priority - task.resultSize;
     for (const p of sources) p.removedAt = this.engine.now;
     this.removeOutdated();
     this.outdated.push([this.engine.now, task.priority]);
     this.outdatedBytes += task.priority;
     this.mergedBytes += task.priority;
     this.mergesDone++;
+    this.noWorkCount++;  // MergePlainMergeTreeTask::onCompleted postpones the assignee after a successful merge
     this.emit("merged", task, merged);
-    if (this.pendingDrops.has(key)) this.tryDrop(key);
   }
 
   // partitions
@@ -1395,36 +1488,53 @@ class Table {
 
   applyRetention() {
     for (const key of [...this.partitions.keys()]) {
-      if (key <= this.currentPartition - this.cfg.retention_partitions) {
-        this.pendingDrops.add(key);
-        this.tryDrop(key);
-      }
+      if (key <= this.currentPartition - this.cfg.retention_partitions) this.drop(key);
     }
   }
 
-  tryDrop(key) {
-    // DROP PARTITION, once no merge of this partition is running
+  // DROP PARTITION: stopMergesAndWait cancels every running merge of the table first, then the parts become outdated
+  drop(key) {
+    this.cancelMerges();
     const parts = this.partitions.get(key);
-    if (!parts || parts.some(p => p.merging)) return false;
+    let size = 0;
     for (const p of parts) {
       p.removedAt = this.engine.now;
       p.dropped = true;
-      this.droppedBytes += p.size;
+      size += p.size;
       this.droppedBlocks += p.blocks;
     }
+    this.droppedBytes += size;
     this.partCount -= parts.length;
     this.partitions.delete(key);
     this.partitionBytes.delete(key);
-    if (!this.partitions.size) this.addPartition(key + 1);
-    this.pendingDrops.delete(key);
+    this.removeOutdated();
+    this.outdated.push([this.engine.now, size]);
+    this.outdatedBytes += size;
+    if (!this.partitions.size) this.addPartition(this.currentPartition);
     this.droppedPartitions.push([key, this.engine.now]);
     this.emit("drop", key, parts.length);
-    return true;
+  }
+
+  cancelMerges() {
+    const tasks = this.pool.cancelAll();
+    for (const task of tasks) {
+      for (const p of task.payload) {
+        p.merging = false;
+        p.pickedAt = null;
+      }
+      this.mergesAborted++;
+      this.emit("cancel", task);
+    }
+    if (tasks.length) {
+      // the cancelled tasks wake the assignee, which finds merges blocked by the DROP and goes to sleep
+      this.noWorkCount = Math.floor(this.noWorkCount / 2);
+      this.postpone();
+    }
   }
 
   // disk (RFC 3.10)
 
-  // clearOldPartsFromFilesystem: merge sources older than old_parts_lifetime leave the disk
+  // clearOldPartsFromFilesystem: outdated parts older than old_parts_lifetime leave the disk
   removeOutdated() {
     const q = this.outdated, lifetime = this.cfg.old_parts_lifetime, now = this.engine.now;
     while (this.outdatedHead < q.length && q[this.outdatedHead][0] + lifetime <= now) this.outdatedBytes -= q[this.outdatedHead++][1];
@@ -1439,7 +1549,7 @@ class Table {
     let merging = 0;
     for (const task of this.pool.tasks) {
       const progress = task.work > 0 ? Math.min(1.0, Math.max(0.0, 1.0 - this.pool.remainingNow(task) / task.work)) : 1.0;
-      merging += task.priority * (progress + (1 - progress) * RESERVE_RATIO);
+      merging += task.resultSize * progress + task.priority * RESERVE_RATIO * (1 - progress);
     }
     return merging;
   }
@@ -1447,7 +1557,7 @@ class Table {
   // active parts, outdated parts not yet removed, and running merges
   diskUsed() {
     this.removeOutdated();
-    return this.insertedBytes - this.droppedBytes + this.outdatedBytes + this.mergingBytes();
+    return this.insertedBytes - this.droppedBytes - this.savedBytes + this.outdatedBytes + this.mergingBytes();
   }
 
   // getMaxUnreservedFreeSpace for the table
@@ -1461,11 +1571,14 @@ class Table {
     const cfg = this.cfg, old = { ...cfg };
     Object.assign(cfg, changes);
     this.updateDerived();
-    if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes) && cfg.arrivals === "open") this.restartArrivals();
+    const open = cfg.arrivals === "open";
+    if (["insert_rate", "rate_amplitude"].some(k => k in changes) && open) this.restartArrivals();
+    if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes) && open) this.restartBurst();
     if ("arrivals" in changes && changes.arrivals !== old.arrivals) {
       this.arrivalToken++;
-      if (cfg.arrivals === "open") this.scheduleArrival();
-      else for (let c = 0; c < this.activeClients; c++) this.thinkThen(c);
+      this.burstToken++;
+      if (open) this.restartArrivals();
+      else this.startIdleClients();
     }
     if ("clients" in changes) this.setClients(cfg.clients);
     if (["threads", "concurrency_ratio", "scheduling_policy"].some(k => k in changes)) {
@@ -1476,6 +1589,7 @@ class Table {
       if (cfg.partition_seconds) this.scheduleRotation();
     }
     if ("retention_partitions" in changes && cfg.retention_partitions) this.applyRetention();
+    if ("disk_bytes" in changes && changes.disk_bytes !== old.disk_bytes) this.diskLimitChanged = true;
     this.trigger();  // new selector settings may allow a merge right away
   }
 
@@ -1484,19 +1598,34 @@ class Table {
     this.scheduleArrival();
   }
 
+  restartBurst() {
+    this.burstToken++;
+    this.scheduleBurstArrival(this.engine.now);
+  }
+
+  startIdleClients() {
+    if (this.cfg.arrivals !== "closed" || this.insertsPaused) return;
+    for (let c = 0; c < this.activeClients; c++) if (!this.clientLive[c]) this.thinkThen(c);
+  }
+
   setClients(n) {
-    const before = this.activeClients;
     while (this.think.length < n) this.think.push(this.clientRng(this.think.length));
     this.activeClients = n;
-    if (this.cfg.arrivals === "closed" && !this.insertsPaused) for (let c = before; c < n; c++) this.thinkThen(c);
+    this.startIdleClients();
   }
 
   setInsertsPaused(paused) {
     if (paused === this.insertsPaused) return;
     this.insertsPaused = paused;
-    if (paused) { this.arrivalToken++; return; }
-    if (this.cfg.arrivals === "open") this.restartArrivals();
-    else for (let c = 0; c < this.activeClients; c++) this.thinkThen(c);
+    if (paused) {
+      this.arrivalToken++;
+      this.burstToken++;
+      return;
+    }
+    if (this.cfg.arrivals === "open") {
+      this.restartArrivals();
+      this.restartBurst();
+    } else this.startIdleClients();
   }
 
   burst(factor, duration) {
@@ -1512,8 +1641,8 @@ class Table {
   dropOldestPartition() {
     const keys = [...this.partitions.keys()];
     if (keys.length < 2) return false;
-    this.pendingDrops.add(keys[0]);
-    return this.tryDrop(keys[0]);
+    this.drop(keys[0]);
+    return true;
   }
 
   // checks of RFC section 7
@@ -1521,9 +1650,10 @@ class Table {
     const parts = this.parts;
     let size = 0, blocks = 0, merging = 0;
     for (const p of parts) { size += p.size; blocks += p.blocks; if (p.merging) merging++; }
-    assert(size === this.insertedBytes - this.droppedBytes, "byte balance");
+    assert(size === this.insertedBytes - this.droppedBytes - this.savedBytes, "byte balance");
     assert(blocks === this.lastBlock - this.droppedBlocks, "block balance");
     assert(parts.length === this.partCount, "part count");
+    assert(this.arrivals === this.lastBlock + this.inFlight + this.rejected + this.rejectedDisk, "insert balance");
     let prevKey = -Infinity;
     for (const [key, ps] of this.partitions) {
       assert(key > prevKey, "partition keys ascending");
@@ -1532,9 +1662,16 @@ class Table {
       ps.forEach((p, i) => {
         bytes += p.size;
         assert(p.partition === key && p.maxBlock >= p.minBlock && !p.dropped, "part fields");
+        assert(p.blocks <= p.maxBlock - p.minBlock + 1 && p.fresh >= 0 && p.fresh <= p.size, "part contents");
         if (i) assert(ps[i - 1].maxBlock < p.minBlock, "parts ordered and disjoint");
       });
       assert(bytes === this.partitionBytes.get(key), "partition bytes");
+    }
+    if (this.partitions.size === 1 && !this.droppedPartitions.length) {
+      // one partition, nothing dropped: the parts cover the blocks 1..lastBlock without gaps
+      let expected = 1;
+      for (const p of parts) { assert(p.minBlock === expected, "blocks without gaps"); expected = p.maxBlock + 1; }
+      assert(expected === this.lastBlock + 1, "all blocks covered");
     }
     // the pool size is not checked: a pool shrunk from the UI keeps its running tasks, and Pool.add refuses new ones
     assert(this.pool.busyThreads() <= this.pool.threads + 1e-9, "busy threads");
@@ -1546,6 +1683,7 @@ class Table {
       sources += t.payload.length;
     }
     assert(sources === merging, "merging flags");
+    if (this.cfg.disk_bytes && !this.diskLimitChanged) assert(this.diskUsed() <= this.cfg.disk_bytes * (1 + 1e-9), "disk limit");
   }
 }
 
@@ -1564,16 +1702,20 @@ const CALIBRATED = {
   "merge_bytes_per_second": 244504578.58316943,
   "merge_noise_cv": 0.12290395761261506,
   "insert_bytes_mean": 3607962.8763336567,
-  "insert_bytes_cv": 0.3514333577709221
+  "insert_bytes_cv": 0.3514333577709221,
+  "result_ratio": 0.9924737500565795,
+  "result_ratio_large": 0.7945592504794639,
+  "large_merge_bytes": 105187814,
+  "large_merge_time_factor": 1.1370079621788785
 };
 const AUX = {
   "index": [
     0.007155583071234206,
-    0.062429390588294886
+    0.10176512260370196
   ],
   "projection": [
     0.9912682104579509,
-    0.9304387282149285
+    1.0019119207924843
   ]
 };
 
@@ -1802,10 +1944,14 @@ class Chart {
 
     const fmtX = o.x.format || (v => NUM3.format(v));
     const fmtY = o.y.format || (v => NUM3.format(v));
+    let lastLabel = null;
     for (const v of (o.y.log ? logTicks(y0, y1) : niceTicks(y0, y1))) {
+      const label = fmtY(v);
+      if (label === lastLabel) continue;  // an integer format over a short range would repeat labels
+      lastLabel = label;
       const y = Math.round(Y(v)) + 0.5;
       svg.append(sv("line", { class: "grid-line", x1: m.l, x2: width - m.r, y1: y, y2: y }));
-      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, fmtY(v)));
+      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, label));
     }
     for (const v of (o.x.log ? logTicks(x0, x1) : niceTicks(x0, x1, Math.max(3, Math.floor((width - m.l - m.r) / 64))))) {
       const x = Math.round(X(v)) + 0.5;
@@ -2047,7 +2193,9 @@ const FIELDS = [
     visible: c => c.arrivals === "closed" },
   { key: "insert_bytes_mean", label: "Розмір вставки", type: "range", ...log(0.05 * MB, 500 * MB), round: v => Math.round(v / 1e4) * 1e4, format: v => bytes(v) },
   { key: "insert_bytes_cv", label: "Розкид розміру (cv)", type: "range", ...lin(0, 2), round: v => Math.round(v * 20) / 20, format: v => NUM2.format(v) },
-  { actions: [["burst", "Сплеск"], ["pause", "Зупинити вставки"]] },
+  { actions: [["burst", "Сплеск"]], visible: c => c.arrivals === "open",
+    hint: "Сплеск додає до відкритого потоку окремий пуасонівський потік, тож базові вставки лишаються тими самими." },
+  { actions: [["pause", "Зупинити вставки"]] },
 
   { group: "Пул фонових задач" },
   { key: "threads", label: "Потоки (background_pool_size)", type: "range", ...lin(1, 64), round: Math.round, format: v => INT.format(v) },
@@ -2155,8 +2303,9 @@ class Controls {
           this.burstLength = el("select", { "aria-label": "Тривалість сплеску" }, ...[[30, "30 с"], [60, "1 хв"], [180, "3 хв"]].map(([v, t]) => el("option", { value: v, selected: v === 60 }, t)));
           row.insertBefore(el("span", { class: "burst" }, this.burstFactor, this.burstLength), row.children[1]);
         }
-        group.append(row);
-        this.inputs.push({ f, node: row });
+        const node = f.hint ? el("div", {}, row, el("p", { class: "hint" }, f.hint)) : row;
+        group.append(node);
+        this.inputs.push({ f, node });
         continue;
       }
       const id = "f-" + f.key;
@@ -2237,6 +2386,7 @@ return { PRESETS, describeDifferences, Controls };
 const __module_10 = (() => {
 // The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
 // of delayed inserts is one line, not thousands. Each model has its own entries (newState); the log shows one of them.
+// Only the kinds that are switched on are kept, so the hidden per-insert lines do not push the others out.
 
 const { el, bytes, clock, duration, INT, NUM2, partsText } = __module_7;
 const KINDS = {
@@ -2246,13 +2396,14 @@ const KINDS = {
   assignee: "призначувач",
   insert: "вставки",
   disk: "диск",
+  action: "дії",
 };
 
 class EventLog {
   constructor(root, onPick) {
     this.root = root;
     this.onPick = onPick;
-    this.enabled = new Set(["merge", "throttle", "partition", "disk"]);
+    this.enabled = new Set(["merge", "throttle", "partition", "disk", "action"]);
     this.s = EventLog.newState();
     this.dirty = true;
     const filters = el("div", { class: "log-filters" });
@@ -2266,7 +2417,7 @@ class EventLog {
   }
 
   static newState() {
-    return { entries: [], throttleSecond: null, diskSecond: null };
+    return { entries: [], throttleSecond: null, diskSecond: null, cancelled: null };
   }
 
   show(state) {
@@ -2275,6 +2426,7 @@ class EventLog {
   }
 
   push(state, t, kind, text, ref = null) {
+    if (!this.enabled.has(kind)) return;
     add(state, { t, kind, text, ref });
     this.dirty = true;
   }
@@ -2292,7 +2444,7 @@ class EventLog {
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
     } else if (type === "arrival") {
       const delay = data[0];
-      if (delay === null || delay > 0) {
+      if ((delay === null || delay > 0) && this.enabled.has("throttle")) {
         const second = Math.floor(t);
         let e = state.throttleSecond;
         if (!e || e.second !== second) {
@@ -2306,7 +2458,7 @@ class EventLog {
         if (e.rejected) parts.push(`відхилено ${INT.format(e.rejected)} з TOO_MANY_PARTS`);
         e.entry.text = "Вставки за секунду: " + parts.join(", ");
       }
-    } else if (type === "nospace") {
+    } else if (type === "nospace" && this.enabled.has("disk")) {
       // summed per second, like throttling
       const second = Math.floor(t);
       let e = state.diskSecond;
@@ -2324,12 +2476,22 @@ class EventLog {
     } else if (type === "rotate") {
       this.push(state, t, "partition", `Почалась партиція ${data[0]}`);
     } else if (type === "drop") {
-      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}`);
+      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}; її куски лежать на диску ще old_parts_lifetime`);
+    } else if (type === "cancel" && this.enabled.has("partition")) {
+      // DROP PARTITION cancels every running merge at once: one line per drop
+      let e = state.cancelled;
+      if (!e || e.t !== t) {
+        e = state.cancelled = { t, count: 0, entry: { t, kind: "partition", text: "", ref: null } };
+        add(state, e.entry);
+      }
+      e.count++;
+      e.entry.text = `DROP PARTITION скасував ${INT.format(e.count)} ${e.count === 1 ? "злиття" : "злиттів"}, що йшли в пулі; їхня робота втрачена`;
     }
   }
 
   render() {
-    if (!this.dirty) return;
+    // a list rebuilt under the pointer would swallow clicks
+    if (!this.dirty || this.list.matches(":hover")) return;
     this.dirty = false;
     const shown = [];
     const entries = this.s.entries;
@@ -2341,7 +2503,10 @@ class EventLog {
       const item = el("li", { class: "log-" + e.kind }, el("span", { class: "log-time" }, clock(e.t)), el("span", { class: "log-kind" }, KINDS[e.kind]), el("span", {}, e.text));
       if (e.ref) {
         item.classList.add("pick");
+        item.tabIndex = 0;
+        item.setAttribute("role", "button");
         item.addEventListener("click", () => this.onPick(e.ref));
+        item.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); this.onPick(e.ref); } });
       }
       return item;
     }));
@@ -2383,6 +2548,7 @@ class Inspector {
 
   select(selection) {
     this.selection = selection;
+    this.lastExplainKey = null;  // the model shown may have changed
   }
 
   draw(table) {
@@ -2438,9 +2604,10 @@ class Inspector {
     this.lastExplainKey = key;
     const root = this.explainRoot;
     const status = !x ? "Селектор ще не запускався."
-      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті, вибір пропущено.`
+      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті; призначувач засинає.`
       : x.outcome === "disabled" ? `Останній запуск (${clock(x.at)}): злиття вимкнені, max_bytes_to_merge_at_max_space_in_pool = 0.`
       : x.outcome === "disk_full" ? `Останній запуск (${clock(x.at)}): на диску вільно ${bytes(x.free)}, а злиття стартує, лише коли вільно вдвічі більше за його джерела; призначувач засинає.`
+      : x.outcome === "nothing" && table.cfg.selector === "tiered" ? `Останній запуск (${clock(x.at)}): немає ряду з ${Math.max(2, Math.trunc(table.cfg.base))} сусідніх вільних кусків одного рівня в межах розміру злиття; призначувач засинає.`
       : x.outcome === "nothing" && !x.considered ? `Останній запуск (${clock(x.at)}): немає двох сусідніх вільних кусків у межах розміру злиття${x.diskLimited ? ` (${bytes(x.maxBytes)}, знижена через місце на диску)` : ""}; призначувач засинає.`
       : x.outcome === "nothing" ? `Останній запуск (${clock(x.at)}): перевірено ${INT.format(x.considered)} діапазонів, жоден не пройшов умову допуску; призначувач засинає.`
       : `Останній запуск (${clock(x.at)}) призначив злиття №${x.task}.`;
@@ -2531,6 +2698,7 @@ class PoolView {
       const fill = node.lastElementChild.firstElementChild;
       if (!task) {
         node.className = "slot free" + (i >= pool.maxTasks ? " over" : "");
+        node.title = "";
         label.textContent = "вільно";
         pct.textContent = "";
         fill.style.width = "0";
@@ -2571,15 +2739,17 @@ class Sampler {
     table.engine.schedule(1, () => this.sample());
   }
 
-  // called by the lab for every model event
+  // called by the lab for every model event; a delayed insert counts as delayed when it commits, so an insert that
+  // waits out its delay and then gets NOT_ENOUGH_SPACE counts only as rejected
   observe(type, t, ...data) {
     const c = this.counts;
     if (type === "arrival") {
-      const delay = data[0];
-      if (delay === null) c.rejected++;
-      else if (delay > 0) { c.delayed++; c.maxDelay = Math.max(c.maxDelay, delay); }
-    } else if (type === "insert") c.accepted++;
-    else if (type === "nospace") c.nospace++;
+      if (data[0] === null) c.rejected++;
+    } else if (type === "insert") {
+      c.accepted++;
+      const delay = data[1];
+      if (delay > 0) { c.delayed++; c.maxDelay = Math.max(c.maxDelay, delay); }
+    } else if (type === "nospace") c.nospace++;
     else if (type === "merged") { c.merges++; c.mergeTime += t - data[0].createdAt; }
   }
 
@@ -2639,7 +2809,9 @@ const __module_14 = (() => {
 // The parts of every partition as rectangles: the row is the merge level, the horizontal position is which
 // inserts a part holds, on a log scale from the newest inserts at the right to the oldest at the left.
 
-const { cssVar, tooltip, bytes, duration, INT } = __module_7;
+const { cssVar, tooltip, bytes, duration, INT, plural } = __module_7;
+const MAX_BANDS = 8;  // newest partitions shown; with "keep all" the canvas would otherwise grow without limit
+
 class PartsTree {
   constructor(canvas, { onPick }) {
     this.canvas = canvas;
@@ -2665,7 +2837,7 @@ class PartsTree {
   }
 
   layout(width, table) {
-    this.maxBands = Math.max(this.maxBands, table.partitions.size);
+    this.maxBands = Math.min(MAX_BANDS, Math.max(this.maxBands, table.partitions.size));
     for (const parts of table.partitions.values()) for (const p of parts) if (p.level > this.maxLevel) this.maxLevel = p.level;
     const levels = Math.min(this.maxLevel, 11) + 1;
     const bands = this.maxBands, gap = 3, bandPad = 18;
@@ -2699,7 +2871,7 @@ class PartsTree {
     this.rects = [];
     ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
     ctx.textBaseline = "middle";
-    const keys = [...table.partitions.keys()].sort((a, b) => b - a);  // newest on top
+    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);  // newest on top
     keys.forEach((key, b) => {
       const top = L.top + b * L.bandH;
       const bottom = top + L.levels * (L.rowH + L.gap);
@@ -2709,7 +2881,6 @@ class PartsTree {
       ctx.fillText(table.cfg.partition_seconds || table.partitions.size > 1 ? `партиція ${key}` : "таблиця", 0, top + 7);
       ctx.fillStyle = muted;
       ctx.fillText(`${INT.format(parts.length)} шт.`, 0, top + 21);
-      if (table.pendingDrops.has(key)) { ctx.fillStyle = active; ctx.fillText("видаляється", 0, top + 35); }
       ctx.textAlign = "right";
       ctx.fillStyle = muted;
       for (let lv = 0; lv < L.levels; lv++) {
@@ -2731,6 +2902,12 @@ class PartsTree {
         ctx.globalAlpha = sources && !sources.has(p) ? 0.28 : 1;
         ctx.fillStyle = colors[Math.min(p.level, 4)];
         ctx.fillRect(x0, y, drawW, L.rowH);
+        if (p.level === 0 && drawW > 2 && !p.merging) {
+          // the lightest level is below 3:1 against the surface: an outline keeps it visible
+          ctx.strokeStyle = colors[2];
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x0 + 0.5, y + 0.5, drawW - 1, L.rowH - 1);
+        }
         if (p.merging) {
           ctx.strokeStyle = active;
           ctx.lineWidth = sources && sources.has(p) ? 2.5 : 1.5;
@@ -2757,6 +2934,11 @@ class PartsTree {
     ctx.textAlign = "left";
     ctx.fillStyle = secondary;
     ctx.fillText("вставок тому", L.left, axisY + 14);
+    const hidden = table.partitions.size - keys.length;
+    if (hidden > 0) {
+      ctx.textAlign = "right";
+      ctx.fillText(`ще ${hidden} ${plural(hidden, "старша партиція", "старші партиції", "старших партицій")} не показано`, L.right, axisY + 14);
+    }
     this.table = table;
   }
 
@@ -2810,8 +2992,10 @@ const { Sampler } = __module_13;
 const { PartsTree } = __module_14;
 const FRAME_BUDGET_MS = 14;
 const SIGNIFICANT = new Set(["insert", "assign", "merged", "drop", "rotate", "arrival", "nospace"]);
-// aux keeps its items: the panel recognises the index and the projection by identity
-const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])] });
+// aux keeps its items: the panel recognises the index and the projection by identity; a burst started from the
+// toolbar is an event of that run, not a parameter, so a new run does not replay it
+const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])], burst: null });
+const STEP_LIMIT = 600;  // model seconds a step may skip when nothing visible happens
 
 class Lab {
   constructor() {
@@ -2895,7 +3079,7 @@ class Lab {
       table.engine.schedule(at, () => {
         if (name === "burst") {
           table.burst(...args);
-          this.log.push(m.log, table.engine.now, "throttle", `Сплеск: потік ×${args[0]} на ${args[1]} с`);
+          this.log.push(m.log, table.engine.now, "action", `Сплеск: потік ×${args[0]} на ${args[1]} с`);
         }
       });
     }
@@ -2903,10 +3087,9 @@ class Lab {
     return m;
   }
 
-  // a new run from time zero: with the preset, or with both current configurations while comparing
+  // a new run from time zero with the current configurations (a preset choice resets them)
   restart() {
-    if (this.a) this.start({ ...this.b.table.cfg, seed: this.seed }, { ...this.a.table.cfg, seed: this.seed });
-    else this.load(this.presetKey);
+    this.start({ ...this.b.table.cfg, seed: this.seed }, this.a ? { ...this.a.table.cfg, seed: this.seed } : null);
   }
 
   toggleCompare() {
@@ -2935,7 +3118,12 @@ class Lab {
     button.setAttribute("aria-pressed", String(on));
     button.textContent = on ? "Вимкнути порівняння" : "Порівняти A і B";
     this.$("compare-bar").hidden = !on;
-    this.$("log-title").textContent = on ? `Журнал подій моделі ${this.view}` : "Журнал подій";
+    const suffix = on ? ` · модель ${this.view}` : "";
+    this.$("log-title").textContent = "Журнал подій" + suffix;
+    this.$("tree-title").textContent = "Активні куски даних" + suffix;
+    this.$("pool-title").textContent = "Пул фонових задач" + suffix;
+    this.$("inspector-title").textContent = "Вибране" + suffix;
+    this.$("explain-title").textContent = "Останнє рішення селектора" + suffix;
     for (const b of this.$("compare-view").children) b.setAttribute("aria-pressed", String(b.dataset.value === this.view));
     if (!on) return;
     const diff = describeDifferences(this.a.table.cfg, this.b.table.cfg);
@@ -2949,20 +3137,20 @@ class Lab {
       const [factor, length] = this.controls.burstSettings();
       for (const m of models) {
         m.table.burst(factor, length);
-        this.log.push(m.log, m.table.engine.now, "throttle", `Сплеск: потік ×${factor} на ${length} с`);
+        this.log.push(m.log, m.table.engine.now, "action", `Сплеск: потік ×${factor} на ${length} с`);
       }
     } else if (name === "pause") {
       this.paused = !this.paused;
       for (const m of models) {
         m.table.setInsertsPaused(this.paused);
-        this.log.push(m.log, m.table.engine.now, "insert", this.paused ? "Вставки зупинено" : "Вставки відновлено");
+        this.log.push(m.log, m.table.engine.now, "action", this.paused ? "Вставки зупинено" : "Вставки відновлено");
       }
       this.controls.setPaused(this.paused);
     } else if (name === "rotate") {
       for (const m of models) m.table.newPartitionNow();
     } else if (name === "drop") {
       for (const m of models) {
-        if (!m.table.dropOldestPartition()) this.log.push(m.log, m.table.engine.now, "partition", "Найстарішу партицію не видалено: у ній ще йдуть злиття, її видалять після них");
+        if (!m.table.dropOldestPartition()) this.log.push(m.log, m.table.engine.now, "action", "Партицію не видалено: це єдина партиція таблиці");
       }
     }
     this.controls.sync();
@@ -2984,7 +3172,8 @@ class Lab {
     });
     this.$("window").addEventListener("change", e => { this.window = +e.target.value; this.updateCharts(); });
     document.addEventListener("keydown", e => {
-      if (this.$("tab-lab").hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+      // keys of a focused control stay with it: Space presses a button, opens a group, picks a log entry
+      if (this.$("tab-lab").hidden || document.activeElement.closest("input, select, textarea, button, summary, a, [role=button]")) return;
       if (e.code === "Space") { e.preventDefault(); this.toggle(); }
       if (e.code === "ArrowRight") { e.preventDefault(); this.step(); }
     });
@@ -3002,10 +3191,11 @@ class Lab {
   // the shown model to its next event that changes something visible, the other one to the same time
   step() {
     this.pause();
-    const m = this.shown();
+    const m = this.shown(), engine = m.table.engine, limit = engine.now + STEP_LIMIT;
     this.lastSignificant = null;
-    for (let i = 0; i < 100000 && !this.lastSignificant; i++) if (!m.table.engine.step()) break;
-    for (const other of this.models()) if (other !== m) other.table.engine.run(m.table.engine.now);
+    while (!this.lastSignificant && engine.peekTime() <= limit) engine.step();
+    if (!this.lastSignificant) engine.run(limit);  // an idle model: at most STEP_LIMIT seconds, not a day of samples
+    for (const other of this.models()) if (other !== m) other.table.engine.run(engine.now);
     this.drawAll();
     this.slowUpdate();
   }
@@ -3078,6 +3268,14 @@ class Lab {
     const m = tb.lastMerge;
     set("live-selector", m ? (m.tiered ? `${m.count} шт` : `${m.count} шт, base′ ${NUM2.format(m.loweredBase)}`) : "—");
     set("live-pool", `${NUM.format(tb.pool.busyThreads())} з ${tb.pool.threads} потоків`);
+    // the rules on the diagram with the parameters of the running model
+    const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert, maxMs = cfg.max_delay_to_insert * 1000;
+    set("live-throw", `n ≥ ${INT.format(cfg.parts_to_throw_insert)}: відхилити (TOO_MANY_PARTS)`);
+    set("live-delay", `n ≥ ${INT.format(cfg.parts_to_delay_insert)}: затримати на`);
+    set("live-formula", `max(${cfg.min_delay_to_insert_ms}, ${INT.format(maxMs)}·(n−${INT.format(cfg.parts_to_delay_insert - 1)})/${INT.format(allowed)}) мс`);
+    set("live-base", `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
+    set("live-pool-size", `${tb.pool.threads} потоків, ${tb.pool.maxTasks} задач`);
+    set("live-cost", `(${NUM.format(cfg.merge_fixed_seconds * 1000)} мс + D/${NUM.format(cfg.merge_bytes_per_second / 1e6)} МБ/с)·ε·(1+δ)`);
     // the newest partition as a row of parts: width by the logarithm of the size, colour by level
     const parts = [...tb.partitions.values()].pop() || [];
     const shown = parts.slice(-40);
@@ -3124,64 +3322,75 @@ class Lab {
   buildCharts() {
     const minutes = v => clock(v * 60);
     const title = x => "момент " + clock(x * 60);
-    const opts = extra => ({ height: 190, x: { format: minutes }, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [], ...extra });
+    this.xAxis = { format: minutes };
+    const chart = (id, extra) => new Chart(this.$(id), { height: 190, x: this.xAxis, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [],
+                                                         ariaLabel: this.$(id).previousElementSibling.textContent, ...extra });
     this.charts = {
-      parts: new Chart(this.$("c-parts"), opts({ valueFormat: v => INT.format(v) })),
-      busy: new Chart(this.$("c-busy"), opts({ valueFormat: v => NUM.format(v) })),
-      inserts: new Chart(this.$("c-inserts"), opts({ valueFormat: v => NUM.format(v) + "/с" })),
-      wa: new Chart(this.$("c-wa"), opts({ y: { min: 0, format: v => NUM.format(v) }, valueFormat: v => NUM2.format(v) })),
-      disk: new Chart(this.$("c-disk"), opts({ y: { min: 0, format: v => bytes(v) }, valueFormat: v => bytes(v) })),
-      cap: new Chart(this.$("c-cap"), opts({ y: { log: true, format: v => bytes(v) }, valueFormat: v => bytes(v) })),
+      parts: chart("c-parts", { valueFormat: v => INT.format(v) }),
+      busy: chart("c-busy", { valueFormat: v => NUM.format(v) }),
+      inserts: chart("c-inserts", { valueFormat: v => NUM.format(v) + "/с" }),
+      wa: chart("c-wa", { y: { min: 0, format: v => NUM.format(v) }, valueFormat: v => NUM2.format(v) }),
+      disk: chart("c-disk", { y: { min: 0, format: v => bytes(v) }, valueFormat: v => bytes(v) }),
+      cap: chart("c-cap", { y: { log: true, format: v => bytes(v) }, valueFormat: v => bytes(v) }),
     };
   }
 
   updateCharts() {
     const B = this.view_(this.b), cfgB = this.b.table.cfg;
+    // every chart spans the whole window, also when a series has no values for part of it
+    const x = { x: { ...this.xAxis, min: B.T.length ? B.T[0] : null, max: B.T.length ? B.T[B.T.length - 1] : null } };
     if (this.a) {
       const A = this.view_(this.a), cfgA = this.a.table.cfg;
-      const pair = f => [{ name: "A: базова", short: "A", color: S(1), points: f(A) }, { name: "B: змінена", short: "B", color: S(2), points: f(B) }];
+      const pair = (metric, f) => [{ name: `A: ${metric}`, short: "A", color: S(1), points: f(A) }, { name: `B: ${metric}`, short: "B", color: S(2), points: f(B) }];
       const marks = (label, va, vb) => (va === vb ? [{ y: vb, label }] : [{ y: va, label: "A: " + label }, { y: vb, label: "B: " + label }]);
-      this.charts.parts.setSeries(pair(v => v.pts(v.col("parts"))), {
+      // the thresholds count the parts of one partition, so with several partitions the chart shows the largest one
+      const split = A.w.some(s => s.partitions > 1) || B.w.some(s => s.partitions > 1);
+      this.charts.parts.setSeries(pair(split ? "найбільша партиція" : "усі куски", v => v.pts(v.col(split ? "largest" : "parts"))), { ...x,
         thresholds: [...marks("parts_to_delay_insert", cfgA.parts_to_delay_insert, cfgB.parts_to_delay_insert),
                      ...marks("parts_to_throw_insert", cfgA.parts_to_throw_insert, cfgB.parts_to_throw_insert)] });
-      this.charts.busy.setSeries(pair(v => v.pts(v.smooth("busy"))), { thresholds: marks("потоків у пулі", this.a.table.pool.threads, this.b.table.pool.threads) });
-      this.charts.inserts.setSeries(pair(v => v.pts(v.smooth("accepted"))));
-      this.charts.wa.setSeries(pair(v => v.wa()));
-      this.charts.disk.setSeries(pair(v => v.pts(v.col("used"))), { thresholds: marks("disk_bytes", cfgA.disk_bytes, cfgB.disk_bytes).filter(t => t.y > 0) });
-      this.charts.cap.setSeries(pair(v => v.cap()));
+      this.charts.busy.setSeries(pair("зайняті потоки", v => v.pts(v.smooth("busy"))), { ...x, thresholds: marks("потоків у пулі", this.a.table.pool.threads, this.b.table.pool.threads) });
+      this.charts.inserts.setSeries(pair("прийняті вставки", v => v.pts(v.smooth("accepted"))), x);
+      this.charts.wa.setSeries(pair("підсилення записів", v => v.wa()), x);
+      this.charts.disk.setSeries(pair("зайнято", v => v.pts(v.col("used"))), { ...x, thresholds: marks("disk_bytes", cfgA.disk_bytes, cfgB.disk_bytes).filter(t => t.y > 0) });
+      this.charts.cap.setSeries(pair("межа розміру злиття", v => v.cap()), x);
       return;
     }
     const partsSeries = [{ name: "усі куски", short: "усі", color: S(1), points: B.pts(B.col("parts")) }];
     if (B.w.some(s => s.partitions > 1)) partsSeries.push({ name: "найбільша партиція", short: "найбільша", color: S(2), points: B.pts(B.col("largest")) });
     partsSeries.push({ name: "свіжі куски (рівень 0)", short: "свіжі", color: S(3), points: B.pts(B.col("fresh")) });
-    this.charts.parts.setSeries(partsSeries, { thresholds: [{ y: cfgB.parts_to_delay_insert, label: "parts_to_delay_insert" }, { y: cfgB.parts_to_throw_insert, label: "parts_to_throw_insert" }] });
+    this.charts.parts.setSeries(partsSeries, { ...x, thresholds: [{ y: cfgB.parts_to_delay_insert, label: "parts_to_delay_insert" }, { y: cfgB.parts_to_throw_insert, label: "parts_to_throw_insert" }] });
     this.charts.busy.setSeries([
       { name: "зайняті потоки", short: "потоки", color: S(1), points: B.pts(B.smooth("busy")) },
       { name: "задачі в пулі", short: "задачі", color: S(2), points: B.pts(B.smooth("tasks")) },
-    ], { thresholds: [{ y: this.b.table.pool.threads, label: "потоків у пулі" }] });
+    ], { ...x, thresholds: [{ y: this.b.table.pool.threads, label: "потоків у пулі" }] });
     const accepted = B.smooth("accepted"), delayed = B.smooth("delayed"), rejected = B.smooth("rejected"), nospace = B.smooth("nospace");
     this.charts.inserts.setSeries([
       { name: "прийняті без затримки", short: "без затримки", color: S(1), points: B.pts(accepted.map((v, i) => Math.max(0, v - delayed[i]))) },
       { name: "затримані", short: "затримані", color: "var(--warning)", points: B.pts(delayed) },
       { name: "відхилені", short: "відхилені", color: "var(--critical)", points: B.pts(rejected.map((v, i) => v + nospace[i])) },
-    ]);
-    this.charts.wa.setSeries([{ name: "підсилення записів за хвилину", color: S(1), points: B.wa() }]);
+    ], x);
+    this.charts.wa.setSeries([{ name: "підсилення записів за хвилину", color: S(1), points: B.wa() }], x);
     this.charts.disk.setSeries([
       { name: "зайнято", short: "зайнято", color: S(1), points: B.pts(B.col("used")) },
       { name: "з них застарілі куски", short: "застарілі", color: S(2), points: B.pts(B.col("outdated")) },
-    ], { thresholds: cfgB.disk_bytes ? [{ y: cfgB.disk_bytes, label: "disk_bytes" }] : [] });
-    this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }]);
+    ], { ...x, thresholds: cfgB.disk_bytes ? [{ y: cfgB.disk_bytes, label: "disk_bytes" }] : [] });
+    this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }], x);
   }
 
   // the samples of one model in the chart window, with helpers to turn them into points
   view_(m) {
-    const w = m.sampler.window(this.window), T = w.map(s => s.t / 60);
+    const all = m.sampler.samples, w = m.sampler.window(this.window), offset = all.length - w.length, T = w.map(s => s.t / 60);
     const pts = arr => T.map((t, i) => [t, arr[i]]);
     const col = key => w.map(s => s[key]);
-    const smooth = (key, k = 5) => w.map((_, i) => { let sum = 0, n = 0; for (let j = Math.max(0, i - k + 1); j <= i; j++) { sum += w[j][key]; n++; } return sum / n; });
+    // trailing means over the whole sample history, so a value at a moment does not change as the window scrolls
+    const smooth = (key, k = 5) => {
+      const prefix = [0];
+      for (const s of all) prefix.push(prefix[prefix.length - 1] + s[key]);
+      return w.map((_, i) => { const j = offset + i + 1, from = Math.max(0, j - k); return (prefix[j] - prefix[from]) / (j - from); });
+    };
     const wa = () => { const merged = smooth("merged", 60), inserted = smooth("inserted", 60); return pts(merged.map((x, i) => (inserted[i] ? x / inserted[i] : null))); };
     const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: a gap on the log axis
-    return { w, pts, col, smooth, wa, cap };
+    return { w, T, pts, col, smooth, wa, cap };
   }
 }
 
@@ -3235,6 +3444,9 @@ const __module_17 = (() => {
 const { RESULTS } = __module_16;
 const { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } = __module_7;
 const { Chart, Bars, table, card, ci, niceTicks, S } = __module_8;
+// a model-time interval as "53 ± 2 хв", or "ніколи" for an event that did not happen in every replication
+const minutes = v => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : "ніколи");
+
 function results() {
   const R = RESULTS, root = document.getElementById("tab-results");
   const grid = el("div", { class: "grid two" });
@@ -3272,10 +3484,23 @@ function results() {
     show("parts");
   }
 
+  if (R.e2) {
+    const names = { parts_mean: "активні куски", write_amplification: "підсилення записів", busy_threads_mean: "зайняті потоки" };
+    const { card: c, body } = card("E2. Розмір вставки за однакового потоку даних",
+      "180 МБ/с вставлених даних дрібними або великими вставками, пул 4 і 16 потоків.", { tableView: () => table(
+        ["пул", "вставка, МБ", ...Object.values(names)],
+        R.e2.pools.flatMap((pool, i) => R.e2.sizes.map((size, j) => [String(pool), NUM3.format(size), ...Object.keys(names).map(k => ci(R.e2.metrics[k][i][j]))]))) });
+    new Chart(body, { height: 260, x: { label: "розмір вставки, МБ", log: true, format: v => NUM3.format(v) }, y: { min: 0 },
+      valueFormat: v => INT.format(v), tooltipTitle: x => `вставки по ${NUM3.format(x)} МБ`,
+      series: R.e2.pools.map((pool, i) => ({ name: `пул ${pool}: активні куски`, short: `пул ${pool}`, color: S(i + 1), markers: true,
+                                              points: R.e2.sizes.map((size, j) => [size, R.e2.metrics.parts_mean[i][j][0]]) })) });
+    grid.append(c);
+  }
+
   if (R.e3) {
     const names = { "pool 16": "пул 16", "pool 4": "пул 4", "pool 16 + projection": "пул 16 + проєкція" };
     const { card: c, body } = card("E3. Межа стійкості",
-      `Найбільший потік даних, за якого за ${R.e3.until / 60} хв не затримано жодної вставки в жодній з 6 реплік.`, { tableView: () => table(
+      `Найбільший потік даних, за якого за ${R.e3.until / 60} хв жодна партиція не дійшла до parts_to_delay_insert в жодній з 6 реплік (обмеження за середнім розміром куска вимкнене). У таблиці: інтервал бісекції.`, { tableView: () => table(
         ["варіант", "вставка, МБ", "вставок/с", "МБ/с"], R.e3.variants.flatMap(v => v.points.map(p => [names[v.name] || v.name, NUM.format(p[0]), `${INT.format(p[1])}–${INT.format(p[2])}`, INT.format(p[3])]))) });
     new Chart(body, { height: 260, x: { label: "розмір вставки, МБ", log: true, format: v => NUM3.format(v) }, y: { min: 0, label: "МБ/с" },
       valueFormat: v => INT.format(v) + " МБ/с", tooltipTitle: x => `вставки по ${NUM3.format(x)} МБ`,
@@ -3354,9 +3579,9 @@ function results() {
     const short = { "no limit": "без обмеження", "2 TB, old_parts_lifetime 480 s": "480 с", "2 TB, old_parts_lifetime 60 s": "60 с" };
     const { card: c, body } = card("E11. Диск, що заповнюється",
       `Одна партиція, 100 вставок/с, місця для таблиці ${bytes(R.e11.disk_bytes)}. Злиття стартує, лише коли вільно вдвічі більше за його джерела, а злиті джерела ще old_parts_lifetime лежать на диску. Тому злиття дробляться задовго до першої відхиленої вставки.`,
-      { wide: true, tableView: () => table(["варіант", "перша NOT_ENOUGH_SPACE", "куски", "підсилення", "затримано", "TOO_MANY_PARTS", "NOT_ENOUGH_SPACE"],
-        R.e11.variants.map(v => [names[v.name] || v.name, v.first_nospace ? `${NUM.format(v.first_nospace[0] / 60)} ± ${NUM.format(v.first_nospace[1] / 60)} хв` : "немає",
-          ci(v.stats.parts_mean), ci(v.stats.write_amplification), PCT.format(v.stats.delayed_fraction[0]), PCT.format(v.stats.rejected_fraction[0]), PCT.format(v.stats.nospace_fraction[0])])) });
+      { wide: true, tableView: () => table(["варіант", "межа злиття падає", "перша NOT_ENOUGH_SPACE", "NOT_ENOUGH_SPACE в останні 10 хв", "куски", "підсилення"],
+        R.e11.variants.map(v => [names[v.name] || v.name, minutes(v.cap_drop), minutes(v.first_nospace),
+          v.nospace_last_10_min ? PCT.format(v.nospace_last_10_min[0]) : "0%", ci(v.stats.parts_mean), ci(v.stats.write_amplification)])) });
     const row = el("div", { class: "grid two" });
     body.append(row);
     const d = R.e11;
@@ -3391,14 +3616,14 @@ function results() {
     const factors = { "insert size": "вставка 0.9 → 3.6 МБ", "threads": "пул 8 → 16", "base": "base 3 → 8", "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією" };
     const responses = { parts_mean: "активні куски", write_amplification: "підсилення записів", fresh_lifetime_mean: "час життя свіжого куска, с", busy_threads_mean: "зайняті потоки" };
     const { card: c, body } = card("E9. Головні ефекти факторного плану 2⁵",
-      "180 МБ/с вставлених даних, 6 реплік на кожну з 32 конфігурацій. Ефект: зміна середнього при переході фактора з нижнього рівня на верхній.", { wide: true, tableView: () => table(
-        ["фактор", ...R.e9.responses.map(r => responses[r] || r)], R.e9.factors.map(f => [factors[f] || f, ...R.e9.responses.map(r => NUM3.format(R.e9.effects[r].main[f]))])) });
+      "180 МБ/с вставлених даних, 6 реплік на кожну з 32 конфігурацій. Ефект: зміна середнього при переході фактора з нижнього рівня на верхній, з 95% інтервалом за парними ефектами реплік.", { wide: true, tableView: () => table(
+        ["фактор", ...R.e9.responses.map(r => responses[r] || r)], R.e9.factors.map(f => [factors[f] || f, ...R.e9.responses.map(r => ci(R.e9.effects[r].main[f]))])) });
     const row = el("div", { class: "grid two" });
     body.append(row);
     for (const r of R.e9.responses) {
       const holder = el("div");
       row.append(el("div", {}, el("h3", {}, responses[r] || r), holder));
-      new Bars(holder, { name: responses[r] || r, color: S(1), labels: R.e9.factors.map(f => factors[f] || f), values: R.e9.factors.map(f => R.e9.effects[r].main[f]) });
+      new Bars(holder, { name: responses[r] || r, color: S(1), labels: R.e9.factors.map(f => factors[f] || f), values: R.e9.factors.map(f => R.e9.effects[r].main[f][0]) });
     }
     grid.append(c);
   }

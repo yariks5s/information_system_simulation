@@ -1,5 +1,6 @@
 // The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
 // of delayed inserts is one line, not thousands. Each model has its own entries (newState); the log shows one of them.
+// Only the kinds that are switched on are kept, so the hidden per-insert lines do not push the others out.
 
 import { el, bytes, clock, duration, INT, NUM2, partsText } from "./dom.js";
 
@@ -10,13 +11,14 @@ export const KINDS = {
   assignee: "призначувач",
   insert: "вставки",
   disk: "диск",
+  action: "дії",
 };
 
 export class EventLog {
   constructor(root, onPick) {
     this.root = root;
     this.onPick = onPick;
-    this.enabled = new Set(["merge", "throttle", "partition", "disk"]);
+    this.enabled = new Set(["merge", "throttle", "partition", "disk", "action"]);
     this.s = EventLog.newState();
     this.dirty = true;
     const filters = el("div", { class: "log-filters" });
@@ -30,7 +32,7 @@ export class EventLog {
   }
 
   static newState() {
-    return { entries: [], throttleSecond: null, diskSecond: null };
+    return { entries: [], throttleSecond: null, diskSecond: null, cancelled: null };
   }
 
   show(state) {
@@ -39,6 +41,7 @@ export class EventLog {
   }
 
   push(state, t, kind, text, ref = null) {
+    if (!this.enabled.has(kind)) return;
     add(state, { t, kind, text, ref });
     this.dirty = true;
   }
@@ -56,7 +59,7 @@ export class EventLog {
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
     } else if (type === "arrival") {
       const delay = data[0];
-      if (delay === null || delay > 0) {
+      if ((delay === null || delay > 0) && this.enabled.has("throttle")) {
         const second = Math.floor(t);
         let e = state.throttleSecond;
         if (!e || e.second !== second) {
@@ -70,7 +73,7 @@ export class EventLog {
         if (e.rejected) parts.push(`відхилено ${INT.format(e.rejected)} з TOO_MANY_PARTS`);
         e.entry.text = "Вставки за секунду: " + parts.join(", ");
       }
-    } else if (type === "nospace") {
+    } else if (type === "nospace" && this.enabled.has("disk")) {
       // summed per second, like throttling
       const second = Math.floor(t);
       let e = state.diskSecond;
@@ -88,12 +91,22 @@ export class EventLog {
     } else if (type === "rotate") {
       this.push(state, t, "partition", `Почалась партиція ${data[0]}`);
     } else if (type === "drop") {
-      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}`);
+      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}; її куски лежать на диску ще old_parts_lifetime`);
+    } else if (type === "cancel" && this.enabled.has("partition")) {
+      // DROP PARTITION cancels every running merge at once: one line per drop
+      let e = state.cancelled;
+      if (!e || e.t !== t) {
+        e = state.cancelled = { t, count: 0, entry: { t, kind: "partition", text: "", ref: null } };
+        add(state, e.entry);
+      }
+      e.count++;
+      e.entry.text = `DROP PARTITION скасував ${INT.format(e.count)} ${e.count === 1 ? "злиття" : "злиттів"}, що йшли в пулі; їхня робота втрачена`;
     }
   }
 
   render() {
-    if (!this.dirty) return;
+    // a list rebuilt under the pointer would swallow clicks
+    if (!this.dirty || this.list.matches(":hover")) return;
     this.dirty = false;
     const shown = [];
     const entries = this.s.entries;
@@ -105,7 +118,10 @@ export class EventLog {
       const item = el("li", { class: "log-" + e.kind }, el("span", { class: "log-time" }, clock(e.t)), el("span", { class: "log-kind" }, KINDS[e.kind]), el("span", {}, e.text));
       if (e.ref) {
         item.classList.add("pick");
+        item.tabIndex = 0;
+        item.setAttribute("role", "button");
         item.addEventListener("click", () => this.onPick(e.ref));
+        item.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); this.onPick(e.ref); } });
       }
       return item;
     }));

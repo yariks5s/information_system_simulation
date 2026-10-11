@@ -10,6 +10,7 @@
    "log_residual_skew": -0.21665469844926297,
    "log_residual_excess_kurtosis": 0.20590336317897462,
    "result_to_sources_size": 0.9924331580222736,
+   "result_to_sources_size_by_bytes": 0.9335019487732431,
    "source_mib_range": [
     14.869882583618164,
     2337.555914878845
@@ -19,16 +20,17 @@
   "insert_bytes_cv": 0.3514333577709221
  },
  "index": {
-  "merge_fixed_seconds": 0.003595729817040614,
-  "merge_bytes_per_second": 223508755.50548258,
+  "merge_fixed_seconds": 0.003595729817121768,
+  "merge_bytes_per_second": 223508755.5000545,
   "merge_noise_cv": 0.08634494753483375,
   "checks": {
    "merges": 376,
    "log_residual_sigma": 0.08618465909784145,
    "residual_size_spearman": -0.09054836860377294,
-   "log_residual_skew": -0.07074766446360602,
-   "log_residual_excess_kurtosis": 1.4442467897637146,
+   "log_residual_skew": -0.07074766446446241,
+   "log_residual_excess_kurtosis": 1.4442467897625235,
    "result_to_sources_size": 0.9922136710316851,
+   "result_to_sources_size_by_bytes": 0.9300976979810455,
    "source_mib_range": [
     14.976439476013184,
     1996.3367385864258
@@ -55,7 +57,7 @@
   },
   "insert_bytes_mean": 7184421.780155642,
   "insert_bytes_cv": 0.3537193332356586,
-  "projection_time_share": 0.8770580296896087
+  "projection_time_ratio": 0.8770580296896087
  },
  "small": {
   "merge_fixed_seconds": 0.0033462518187959904,
@@ -101,11 +103,15 @@
   "insert_bytes_cv": 0.3514333577709221,
   "index_aux": [
    0.007155583071234206,
-   0.062429390588294886
+   0.10176512260370196
   ],
   "projection_aux": [
    0.9912682104579509,
-   0.9304387282149285
-  ]
+   1.0019119207924843
+  ],
+  "result_ratio": 0.9924737500565795,
+  "result_ratio_large": 0.7945592504794639,
+  "large_merge_bytes": 105187814,
+  "large_merge_time_factor": 1.1370079621788785
  }
 }

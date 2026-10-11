@@ -106,7 +106,7 @@ with sync_playwright() as p:
     assert abs(ev("lab.a.table.engine.now - lab.b.table.engine.now")) < 1
     assert abs(ev("lab.a.table.arrivals - lab.b.table.arrivals")) <= 2, "common random numbers: the same arrivals"
     page.click('#compare-view [data-value="A"]')
-    assert ev("lab.view") == "A" and "моделі A" in page.inner_text("#log-title")
+    assert ev("lab.view") == "A" and "модель A" in page.inner_text("#log-title") and "модель A" in page.inner_text("#tree-title")
     page.keyboard.press("Space")
     ev("lab.a.table.checkInvariants(); lab.b.table.checkInvariants()")
     page.screenshot(path=os.path.join(shots, f"lab_compare_{scheme}.png"), full_page=True)

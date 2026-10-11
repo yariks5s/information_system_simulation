@@ -64,9 +64,25 @@ def fit(merges):
             log_residual_skew=float(stats.skew(log_residual)),
             log_residual_excess_kurtosis=float(stats.kurtosis(log_residual)),
             result_to_sources_size=float(np.median(merges[:, 1] / merges[:, 3])),
+            result_to_sources_size_by_bytes=float(merges[:, 1].sum() / merges[:, 3].sum()),
             source_mib_range=[float(source_bytes.min() / 2**20), float(source_bytes.max() / 2**20)],
         ),
     )
+
+
+def large_merges(merges, c0, speed):
+    """RFC 3.1, 3.7: a merged part keeps result_ratio of its sources, but merges from a threshold of about 100 MiB up
+    shrink the bytes that never went through such a merge once more, to result_ratio_large, and take
+    large_merge_time_factor longer than the cost line gives for the same data."""
+    ratio, size, duration = merges[:, 1] / merges[:, 3], merges[:, 3], merges[:, 0]
+    split = (ratio.max() + ratio.min()) / 2
+    threshold = float(size[ratio < split].min())  # the smallest merge in the second regime
+    small, fresh = size < threshold, ratio < split  # all bytes of a merge with the second ratio are fresh
+    residual = np.log(duration) - np.log(c0 + size / speed)
+    return dict(result_ratio=float(np.median(ratio[small])),
+                result_ratio_large=float(np.median(ratio[fresh])),
+                large_merge_bytes=int(threshold),
+                large_merge_time_factor=float(np.exp(residual[fresh].mean() - residual[small].mean())))
 
 
 def insert_sizes(inserts):
@@ -88,25 +104,48 @@ def report():
     result, all_merges = {}, {}
     for name in WORKLOADS:
         merges, inserts = collect(f"default.cal_{name}")
+        np.save(f"runs/calibration_{name}/merges.npy", merges)
         all_merges[name] = merges
         result[name] = {**fit(merges), **insert_sizes(inserts)}
         if name == "projection":
-            # share of the merge spent rebuilding the projection, a cross-check of its δ
+            # projection time over the rest of the merge, a cross-check of its δ
             projection, total = merges[:, 4], merges[:, 0]
-            result[name]["projection_time_share"] = float(np.median(projection / (total - projection)))
+            result[name]["projection_time_ratio"] = float(np.median(projection / (total - projection)))
     # the base cost line over small and large merges of the same schema
     result["base_and_small"] = fit(np.concatenate([all_merges["base"], all_merges["small"]]))
-    base = result["base"]
-    cost = result["base_and_small"]
+    result["model"] = model_params(result, all_merges["base"])
+    return result
+
+
+def model_params(result, base_merges):
+    """The parameters the model takes: cost line, insert sizes, auxiliary structures, merged part size."""
+    base, cost = result["base"], result["base_and_small"]
     model = {k: cost[k] for k in ("merge_fixed_seconds", "merge_bytes_per_second", "merge_noise_cv")}
     model.update({k: base[k] for k in ("insert_bytes_mean", "insert_bytes_cv")})
     for name in ("index", "projection"):
-        # s: extra bytes on disk per base byte; δ: extra merge time at equal base bytes
+        # s: extra bytes on disk per base byte; δ: extra merge time at equal base bytes, against the speed
+        # the model uses, so that the modelled table merges as fast as the measured one
         storage = result[name]["insert_bytes_mean"] / base["insert_bytes_mean"] - 1
-        time = (1 + storage) * base["merge_bytes_per_second"] / result[name]["merge_bytes_per_second"] - 1
+        time = (1 + storage) * cost["merge_bytes_per_second"] / result[name]["merge_bytes_per_second"] - 1
         model[f"{name}_aux"] = [storage, time]
-    result["model"] = model
-    return result
+    model.update(large_merges(base_merges, cost["merge_fixed_seconds"], cost["merge_bytes_per_second"]))
+    return model
+
+
+def refit():
+    """Recomputes calibration.json from the stored merges of the base and index workloads, without a server.
+    The small and projection workloads kept only their fits, so those are taken as stored."""
+    with open("calibration.json") as f:
+        result = json.load(f)
+    merges = {name: np.load(f"runs/calibration_{name}/merges.npy") for name in ("base", "index")}
+    for name, m in merges.items():
+        result[name].update(fit(m))
+    if "projection_time_share" in result["projection"]:
+        result["projection"]["projection_time_ratio"] = result["projection"].pop("projection_time_share")
+    result["model"] = model_params(result, merges["base"])
+    with open("calibration.json", "w") as f:
+        json.dump(result, f, indent=1)
+    print(json.dumps(result["model"], indent=1))
 
 
 def main():
@@ -129,7 +168,8 @@ def calibrated_config(path="calibration.json", **overrides):
 
     with open(path) as f:
         model = json.load(f)["model"]
-    keys = ("merge_fixed_seconds", "merge_bytes_per_second", "merge_noise_cv", "insert_bytes_mean", "insert_bytes_cv")
+    keys = ("merge_fixed_seconds", "merge_bytes_per_second", "merge_noise_cv", "insert_bytes_mean", "insert_bytes_cv",
+            "result_ratio", "result_ratio_large", "large_merge_bytes", "large_merge_time_factor")
     return Config(**{**{k: model[k] for k in keys}, **overrides})
 
 
@@ -143,6 +183,8 @@ def run_workload(name):
 if __name__ == "__main__":
     if sys.argv[1:] == ["--report"]:
         write_report()
+    elif sys.argv[1:] == ["--refit"]:
+        refit()
     elif sys.argv[1:2] == ["--workload"]:
         run_workload(sys.argv[2])
     else:

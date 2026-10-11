@@ -5,7 +5,7 @@ import itertools
 import math
 
 from engine import Engine
-from inputs import MIB, daily_rate, lognormal, next_arrival, streams
+from inputs import MIB, burst_rate, daily_rate, lognormal, next_arrival, streams
 from pool import Pool, Task
 from selector import RESERVE_RATIO, SELECTORS, max_source_parts_bytes, select_across
 from throttle import check_insert
@@ -18,7 +18,7 @@ class Config:
     insert_rate: float = 2.0  # open: mean inserts per second
     rate_amplitude: float = 0.0  # open: daily profile rate * (1 + a * cos(...))
     rate_peak_at: float = 14 * 3600  # open: seconds since midnight
-    burst: tuple = None  # open: (start, duration, factor)
+    burst: tuple = None  # open: (start, duration, factor), factor > 1, a separate Poisson process on top (RFC 3.2)
     clients: int = 4  # closed
     think_time: float = 2.0  # closed: mean seconds between the end of an insert and the next one
     insert_bytes_mean: float = 10 * MIB
@@ -49,9 +49,15 @@ class Config:
     merge_noise_cv: float = 0.3
     # projections and skip indices (RFC 3.7): (storage overhead s, merge time overhead δ) relative to the base data
     aux: tuple = ()
+    # size of a merged part (RFC 3.1): result_ratio of the sources, and result_ratio_large once per byte
+    # in merges of at least large_merge_bytes (0: no such regime)
+    result_ratio: float = 1.0
+    result_ratio_large: float = 1.0
+    large_merge_bytes: int = 0
+    large_merge_time_factor: float = 1.0  # such merges take this much longer (RFC 3.7)
     # partitions (RFC 3.9): a new partition every partition_seconds (0: one partition for the whole run)
     partition_seconds: float = 0.0
-    late_insert_fraction: float = 0.0  # share of inserts that go to the previous partition
+    late_insert_fraction: float = 0.0  # share of inserts whose data belongs to the previous partition
     retention_partitions: int = 0  # keep this many newest partitions, the current one included (0: keep all)
     # seconds between a trigger and the assignee run; 0 in ClickHouse terms means "as soon as a thread is free"
     assign_latency: float = 0.0
@@ -72,8 +78,9 @@ class Part:
     _: KW_ONLY  # the rest by keyword: a positional flag once landed in the wrong field
     partition: int = 0
     blocks: int = 1  # inserts it holds
+    fresh: int = 0  # bytes that never went through a large merge (RFC 3.1)
     merging: bool = False
-    picked_at: float = None  # a merge took it
+    picked_at: float = None  # a merge took it (reset if DROP PARTITION cancels that merge)
     removed_at: float = None  # that merge finished, or the partition was dropped
     dropped: bool = False
 
@@ -84,9 +91,12 @@ class Table:
         self.engine = Engine()
         if config.arrivals not in ("open", "closed"):
             raise ValueError(f"unknown arrivals {config.arrivals}")
-        self.rng = streams(config.seed, "arrival", "thinning", "size", "merge", "assignee", "partition")
+        self.rng = streams(config.seed, "arrival", "thinning", "size", "merge", "assignee", "partition",
+                           "burst_arrival", "burst_thinning", "burst_size", "burst_partition")
         self.think = [streams(config.seed, f"think:{c}")[f"think:{c}"] for c in range(config.clients)]
-        self.rate, self.peak_rate = daily_rate(config.insert_rate, config.rate_amplitude, config.rate_peak_at, config.burst)
+        self.rate, self.peak_rate = daily_rate(config.insert_rate, config.rate_amplitude, config.rate_peak_at)
+        if config.burst and config.burst[2] > 1:
+            self.burst_rate, self.burst_peak = burst_rate(self.rate, self.peak_rate, config.burst)
         self.aux_storage = 1 + sum(s for s, _ in config.aux)
         self.aux_time = 1 + sum(d for _, d in config.aux)
         if config.selector not in SELECTORS:
@@ -96,14 +106,15 @@ class Table:
         self.partitions = {0: []}  # partition key -> its active parts ordered by block number, keys ascending
         self.partition_bytes = {0: 0}
         self.part_count = 0
+        self.current_partition = 0  # the number of rotations so far
         self.dropped_partitions = []  # (key, dropped at)
-        self.pending_drops = set()  # partitions to drop once their merges finish
         self._ids = itertools.count(1)
         self.last_block = 0
         self.inserted_bytes = 0
         self.dropped_bytes = 0
         self.dropped_blocks = 0
-        self.trace = None  # a list to record events into, see trace.py
+        self.saved_bytes = 0  # sources minus merged parts (RFC 3.1)
+        self.trace = None  # a list to record events into, see app/tools/record_python.py
         self.arrivals = 0
         self.in_flight = 0  # accepted inserts waiting out their delay
         self.rejected = 0
@@ -114,6 +125,7 @@ class Table:
         self.delay_total_ms = 0
         self.merged_bytes = 0
         self.merges_done = 0
+        self.merges_aborted = 0
         self.selector_runs = 0
         # BackgroundJobsAssignee: one pending run at a time, exponential backoff when idle
         self.no_work_count = 0
@@ -125,6 +137,7 @@ class Table:
         # raw facts for stats.py
         self.history_parts = []  # every part ever created
         self.history_merges = []  # (assigned_at, done_at, source bytes)
+        self.history_aborted = []  # (assigned_at, cancelled_at, source bytes) of merges that DROP PARTITION cancelled
         self.history_inserts = []  # (arrival_at, delay_ms or None if rejected)
         self.history_nospace = []  # commit times of inserts rejected with NOT_ENOUGH_SPACE
 
@@ -134,10 +147,12 @@ class Table:
         return [p for parts in self.partitions.values() for p in parts]
 
     def start(self):
-        if self.cfg.partition_seconds and self.cfg.retention_partitions:
-            self.engine.schedule(self.cfg.partition_seconds, self.on_partition_rotate)
+        if self.cfg.partition_seconds:
+            self.engine.schedule(self.cfg.partition_seconds, self.on_partition_rotate, 1)
         if self.cfg.arrivals == "open":
             self._schedule_arrival()
+            if self.cfg.burst and self.cfg.burst[2] > 1:
+                self._schedule_burst_arrival(self.cfg.burst[0])
         else:
             for client in range(self.cfg.clients):
                 self._think(client)
@@ -149,17 +164,31 @@ class Table:
         at = next_arrival(self.engine.now, self.rate, self.peak_rate, self.rng["arrival"], self.rng["thinning"])
         self.engine.schedule(at - self.engine.now, self.on_insert_arrival, None)
 
+    def _schedule_burst_arrival(self, after):
+        start, duration, _ = self.cfg.burst
+        at = next_arrival(max(after, start), self.burst_rate, self.burst_peak, self.rng["burst_arrival"],
+                          self.rng["burst_thinning"], start + duration)
+        if at is not None:
+            self.engine.schedule(at - self.engine.now, self.on_insert_arrival, None, True)
+
     def _think(self, client):
         self.engine.schedule(self.think[client].expovariate(1 / self.cfg.think_time), self.on_insert_arrival, client)
 
-    def on_insert_arrival(self, client):
-        """client is None in the open model."""
+    def on_insert_arrival(self, client, burst=False):
+        """client is None in the open model; burst marks the extra arrivals of a burst."""
         if client is None:
-            self._schedule_arrival()
+            self._schedule_burst_arrival(self.engine.now) if burst else self._schedule_arrival()
         self.arrivals += 1
-        # drawn before the throttling decision, so that the i-th insert has the same size in every configuration
-        size = max(1, round(lognormal(self.rng["size"], self.cfg.insert_bytes_mean, self.cfg.insert_bytes_cv) * self.aux_storage))
-        key = max(self.partitions, key=lambda k: (len(self.partitions[k]), k))
+        # drawn before the throttling decision, so that the i-th insert is the same in every configuration:
+        # its size, and whether its data belongs to the previous partition
+        stream = "burst_" if burst else ""
+        size = max(1, round(lognormal(self.rng[stream + "size"], self.cfg.insert_bytes_mean, self.cfg.insert_bytes_cv) * self.aux_storage))
+        target = self.current_partition
+        if self.cfg.partition_seconds and self.cfg.late_insert_fraction:
+            if self.rng[stream + "partition"].random() < self.cfg.late_insert_fraction:
+                target -= 1
+        # getMaxPartsCountAndSizeForPartition: on a tie the first partition wins
+        key = max(self.partitions, key=lambda k: len(self.partitions[k]))
         delay_ms = check_insert(len(self.partitions[key]), self.partition_bytes[key], self.cfg, self.part_count)
         self.history_inserts.append((self.engine.now, delay_ms))
         if self.trace is not None:
@@ -173,20 +202,17 @@ class Table:
             self.delayed += 1
             self.delay_total_ms += delay_ms
         self.in_flight += 1
-        self.engine.schedule(delay_ms / 1000, self.on_insert_commit, size, client)
+        self.engine.schedule(delay_ms / 1000, self.on_insert_commit, size, client, target)
 
-    def _partition_for_insert(self):
-        if not self.cfg.partition_seconds:
-            return 0
-        key = int(self.engine.now // self.cfg.partition_seconds)
-        if self.cfg.late_insert_fraction and self.rng["partition"].random() < self.cfg.late_insert_fraction:
-            if key - 1 in self.partitions and key - 1 not in self.pending_drops:
-                return key - 1
-        return key
+    def _partition_for_insert(self, target):
+        """The partition of the insert's data; data of an already dropped partition goes to the current one."""
+        if target in self.partitions or target > max(self.partitions):
+            return target
+        return self.current_partition
 
-    def on_insert_commit(self, size, client):
+    def on_insert_commit(self, size, client, target):
         self.in_flight -= 1
-        key = self._partition_for_insert()
+        key = self._partition_for_insert(target)
         # MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
         if self.cfg.disk_bytes and size > self.disk_free():
             self.rejected_disk += 1
@@ -201,7 +227,7 @@ class Table:
             self.partitions[key] = []
             self.partition_bytes[key] = 0
         self._account_parts()
-        part = Part(next(self._ids), self.last_block, self.last_block, 0, size, self.engine.now, partition=key)
+        part = Part(next(self._ids), self.last_block, self.last_block, 0, size, self.engine.now, partition=key, fresh=size)
         self.partitions[key].append(part)
         self.partition_bytes[key] += size
         self.part_count += 1
@@ -222,7 +248,8 @@ class Table:
 
     def postpone(self):
         self.no_work_count += 1
-        delay = min(600.0, 0.1 * 1.1**self.no_work_count) + self.rng["assignee"].uniform(0, 1)
+        # std::pow saturates to inf in ClickHouse; the cap avoids an OverflowError and gives the same 600 s
+        delay = min(600.0, 0.1 * 1.1 ** min(self.no_work_count, 200)) + self.rng["assignee"].uniform(0, 1)
         self._schedule_assignee(delay)
 
     def _schedule_assignee(self, delay):
@@ -237,7 +264,8 @@ class Table:
         self.trigger() if self.try_assign_merge() else self.postpone()
 
     def try_assign_merge(self):
-        # a full pool rejects the task, so the selection would be discarded anyway
+        # ClickHouse selects on a full pool too and postpones twice when the pool refuses the merge; skipping that
+        # selection changes only the backoff counter, which every insert halves (RFC 3.6)
         if not self.pool.has_capacity():
             return False
         self.selector_runs += 1
@@ -254,14 +282,33 @@ class Table:
             part.merging = True
             part.picked_at = self.engine.now
         size = sum(p.size for p in sources)
+        fresh = sum(p.fresh for p in sources)
         noise = lognormal(self.rng["merge"], 1.0, self.cfg.merge_noise_cv)
-        base_size = size / self.aux_storage
-        work = (self.cfg.merge_fixed_seconds + base_size / self.cfg.merge_bytes_per_second) * noise * self.aux_time
-        task = Task(next(self._ids), work, size, sources)
+        work = self._merge_work(size, fresh) * noise
+        result_size, result_fresh = self._merged_size(size, fresh)
+        task = Task(next(self._ids), work, size, sources, result_size=result_size, result_fresh=result_fresh)
         self.pool.add(task)
         if self.trace is not None:
             self.trace.append(("assign", self.engine.now, task.id, key, begin, end - begin, work))
         return True
+
+    def _merge_work(self, size, fresh):
+        """Thread-seconds of a merge before noise (RFC 3.7). The cost line is per byte of fresh data; a byte that went
+        through a large merge holds 1 / result_ratio_large times more data, and large merges are slower."""
+        cfg = self.cfg
+        data = (fresh + (size - fresh) / cfg.result_ratio_large) / self.aux_storage
+        work = (cfg.merge_fixed_seconds + data / cfg.merge_bytes_per_second) * self.aux_time
+        if cfg.large_merge_bytes and size >= cfg.large_merge_bytes:
+            work *= cfg.large_merge_time_factor
+        return work
+
+    def _merged_size(self, size, fresh):
+        """Size of the merged part and its fresh bytes (RFC 3.1): a merge of at least large_merge_bytes shrinks
+        the fresh bytes by result_ratio_large and the others by result_ratio; a smaller merge shrinks all by result_ratio."""
+        cfg = self.cfg
+        if cfg.large_merge_bytes and size >= cfg.large_merge_bytes:
+            return max(1, round(cfg.result_ratio * (size - fresh) + cfg.result_ratio_large * fresh)), 0
+        return max(1, round(cfg.result_ratio * size)), round(cfg.result_ratio * fresh)
 
     # merges
 
@@ -271,11 +318,13 @@ class Table:
         parts = self.partitions[key]
         begin = parts.index(sources[0])
         level = max(p.level for p in sources) + 1
-        merged = Part(task.id, sources[0].min_block, sources[-1].max_block, level, task.priority, self.engine.now,
-                      partition=key, blocks=sum(p.blocks for p in sources))
+        merged = Part(task.id, sources[0].min_block, sources[-1].max_block, level, task.result_size, self.engine.now,
+                      partition=key, blocks=sum(p.blocks for p in sources), fresh=task.result_fresh)
         self._account_parts()
         parts[begin : begin + len(sources)] = [merged]
         self.part_count -= len(sources) - 1
+        self.partition_bytes[key] += task.result_size - task.priority
+        self.saved_bytes += task.priority - task.result_size
         for part in sources:
             part.removed_at = self.engine.now
         self._remove_outdated()
@@ -285,41 +334,60 @@ class Table:
         self.history_merges.append((task.created_at, self.engine.now, task.priority))
         self.merged_bytes += task.priority
         self.merges_done += 1
+        self.no_work_count += 1  # MergePlainMergeTreeTask::onCompleted postpones the assignee after a successful merge
         if self.trace is not None:
-            self.trace.append(("merged", self.engine.now, task.id, level))
-        if key in self.pending_drops:
-            self._try_drop(key)
+            self.trace.append(("merged", self.engine.now, task.id, level, task.result_size))
 
     # partitions
 
-    def on_partition_rotate(self):
-        self.engine.schedule(self.cfg.partition_seconds, self.on_partition_rotate)
-        current = int(self.engine.now // self.cfg.partition_seconds)
-        for key in list(self.partitions):
-            if key <= current - self.cfg.retention_partitions:
-                self.pending_drops.add(key)
-                self._try_drop(key)
+    def on_partition_rotate(self, number):
+        # the rotation number, not now // partition_seconds: float time drifts from multiples of a fractional period
+        self.current_partition = number
+        self.engine.schedule(self.cfg.partition_seconds, self.on_partition_rotate, number + 1)
+        if self.cfg.retention_partitions:
+            for key in list(self.partitions):
+                if key <= number - self.cfg.retention_partitions:
+                    self._drop(key)
 
-    def _try_drop(self, key):
-        """DROP PARTITION, once no merge of this partition is running."""
-        parts = self.partitions[key]
-        if any(p.merging for p in parts):
-            return
+    def _drop(self, key):
+        """DROP PARTITION: stopMergesAndWait cancels every running merge of the table first, then the parts
+        of the partition become outdated."""
+        self._cancel_merges()
         self._account_parts()
+        parts = self.partitions.pop(key)
+        del self.partition_bytes[key]
+        size = 0
         for part in parts:
             part.removed_at = self.engine.now
             part.dropped = True
-            self.dropped_bytes += part.size
+            size += part.size
             self.dropped_blocks += part.blocks
+        self.dropped_bytes += size
         self.part_count -= len(parts)
-        del self.partitions[key], self.partition_bytes[key]
+        self._remove_outdated()
+        self.outdated.append((self.engine.now, size))
+        self.outdated_bytes += size
         if not self.partitions:
-            self.partitions[key + 1] = []
-            self.partition_bytes[key + 1] = 0
-        self.pending_drops.discard(key)
+            self.partitions[self.current_partition] = []
+            self.partition_bytes[self.current_partition] = 0
         self.dropped_partitions.append((key, self.engine.now))
         if self.trace is not None:
             self.trace.append(("drop", self.engine.now, key))
+
+    def _cancel_merges(self):
+        tasks = self.pool.cancel_all()
+        for task in tasks:
+            for part in task.payload:
+                part.merging = False
+                part.picked_at = None
+            self.history_aborted.append((task.created_at, self.engine.now, task.priority))
+            self.merges_aborted += 1
+            if self.trace is not None:
+                self.trace.append(("cancel", self.engine.now, task.id))
+        if tasks:
+            # the cancelled tasks wake the assignee, which finds merges blocked by the DROP and goes to sleep
+            self.no_work_count //= 2
+            self.postpone()
 
     # disk (RFC 3.10)
 
@@ -335,8 +403,8 @@ class Table:
         for task in self.pool.tasks:
             # MergeTask shrinks the reservation to (1 - progress) of the initial one as it writes the new part
             progress = min(1.0, max(0.0, 1.0 - self.pool.remaining_now(task) / task.work)) if task.work > 0 else 1.0
-            merging += task.priority * (progress + (1 - progress) * RESERVE_RATIO)
-        return self.inserted_bytes - self.dropped_bytes + self.outdated_bytes + merging
+            merging += task.result_size * progress + task.priority * RESERVE_RATIO * (1 - progress)
+        return self.inserted_bytes - self.dropped_bytes - self.saved_bytes + self.outdated_bytes + merging
 
     def disk_free(self):
         """getMaxUnreservedFreeSpace for the table."""
@@ -353,7 +421,7 @@ class Table:
     def check_invariants(self):
         """RFC section 7."""
         parts = self.parts
-        assert sum(p.size for p in parts) == self.inserted_bytes - self.dropped_bytes
+        assert sum(p.size for p in parts) == self.inserted_bytes - self.dropped_bytes - self.saved_bytes
         assert sum(p.blocks for p in parts) == self.last_block - self.dropped_blocks
         assert len(parts) == self.part_count
         assert self.arrivals == self.last_block + self.in_flight + self.rejected + self.rejected_disk
@@ -364,6 +432,7 @@ class Table:
             assert self.partition_bytes[key] == sum(p.size for p in partition)
             for i, part in enumerate(partition):
                 assert part.partition == key and part.max_block >= part.min_block and not part.dropped
+                assert 0 <= part.fresh <= part.size
                 assert part.blocks <= part.max_block - part.min_block + 1
                 if i:
                     assert partition[i - 1].max_block < part.min_block

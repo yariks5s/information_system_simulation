@@ -1,5 +1,5 @@
 // Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded. The delay grows linearly with the
-// number of parts over parts_to_delay_insert; the doc string of max_delay_to_insert still shows an older formula.
+// number of parts over parts_to_delay_insert (the formula the doc string of max_delay_to_insert gives "starting from version 23.1").
 
 // Returns null if the insert is rejected with TOO_MANY_PARTS, otherwise its delay in milliseconds.
 // partsCount and partitionBytes are of the partition with the most parts; totalParts counts all partitions.
@@ -13,5 +13,5 @@ export function checkInsert(partsCount, partitionBytes, cfg, totalParts = partsC
   const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert;
   const maxMs = cfg.max_delay_to_insert > 0 ? cfg.max_delay_to_insert * 1000 : 1000;
   if (over >= allowed) return maxMs;
-  return Math.max(cfg.min_delay_to_insert_ms, Math.trunc(maxMs * over / allowed));
+  return Math.max(cfg.min_delay_to_insert_ms, Math.trunc(maxMs * (over / allowed)));
 }

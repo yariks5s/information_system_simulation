@@ -45,7 +45,9 @@ const FIELDS = [
     visible: c => c.arrivals === "closed" },
   { key: "insert_bytes_mean", label: "Розмір вставки", type: "range", ...log(0.05 * MB, 500 * MB), round: v => Math.round(v / 1e4) * 1e4, format: v => bytes(v) },
   { key: "insert_bytes_cv", label: "Розкид розміру (cv)", type: "range", ...lin(0, 2), round: v => Math.round(v * 20) / 20, format: v => NUM2.format(v) },
-  { actions: [["burst", "Сплеск"], ["pause", "Зупинити вставки"]] },
+  { actions: [["burst", "Сплеск"]], visible: c => c.arrivals === "open",
+    hint: "Сплеск додає до відкритого потоку окремий пуасонівський потік, тож базові вставки лишаються тими самими." },
+  { actions: [["pause", "Зупинити вставки"]] },
 
   { group: "Пул фонових задач" },
   { key: "threads", label: "Потоки (background_pool_size)", type: "range", ...lin(1, 64), round: Math.round, format: v => INT.format(v) },
@@ -153,8 +155,9 @@ export class Controls {
           this.burstLength = el("select", { "aria-label": "Тривалість сплеску" }, ...[[30, "30 с"], [60, "1 хв"], [180, "3 хв"]].map(([v, t]) => el("option", { value: v, selected: v === 60 }, t)));
           row.insertBefore(el("span", { class: "burst" }, this.burstFactor, this.burstLength), row.children[1]);
         }
-        group.append(row);
-        this.inputs.push({ f, node: row });
+        const node = f.hint ? el("div", {}, row, el("p", { class: "hint" }, f.hint)) : row;
+        group.append(node);
+        this.inputs.push({ f, node });
         continue;
       }
       const id = "f-" + f.key;
