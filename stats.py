@@ -213,6 +213,19 @@ def welch(curves, window):
     return smoothed
 
 
+def warmup_end(curve, window=5, tolerance=0.05):
+    """Welch's procedure on a mean curve: index where the warm-up ends, or len(curve) - window if it never does.
+    The band is the relative tolerance, but at least 3 standard errors of a smoothed point: with few replications the
+    smoothed curve is still noisy, and a narrower band reads noise as a trend. The noise of the curve is estimated from
+    the spread of its first differences in the second half, which a slow trend barely affects."""
+    smoothed = welch([curve], window)
+    target = smoothed[len(smoothed) // 2 :].mean()
+    if not target:
+        return 0
+    noise = np.std(np.diff(np.asarray(curve, dtype=float)[len(curve) // 2 :])) / math.sqrt(2)
+    return warmup_index(smoothed, max(tolerance, 3 * noise / math.sqrt(2 * window + 1) / target))
+
+
 def warmup_index(smoothed, tolerance=0.05):
     """First index after which the smoothed curve stays within tolerance of its second-half mean."""
     target = smoothed[len(smoothed) // 2 :].mean()

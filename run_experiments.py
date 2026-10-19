@@ -56,7 +56,7 @@ def save(name, payload):
 
 def welch_warmup(fresh, grid):
     """End of the warm-up by Welch's procedure on the mean number of fresh parts, or None if it never settles."""
-    index = stats.warmup_index(stats.welch([fresh], window=5), tolerance=0.05)
+    index = stats.warmup_end(fresh, window=5)
     return float(grid[index]) if index < len(grid) - 5 else None
 
 
@@ -72,7 +72,9 @@ def sweep(configs, until=HORIZON, warmups=WARMUPS):
         warmup = next((w for w in warmups if welch is not None and w >= welch), warmups[0] if welch is None else warmups[-1])
         per_seed = [s[warmup] for s in summaries]
         runs.append(dict(stats=aggregate(per_seed), series=series, per_seed=per_seed, warmup=warmup, welch_warmup=welch,
-                         stationary=welch is not None and welch <= warmups[-1], per_warmup=summaries))
+                         stationary=welch is not None and welch <= warmups[-1], per_warmup=summaries,
+                         # the same characteristics after every warm-up, so the choice can be revisited without a rerun
+                         stats_by_warmup={str(int(w)): aggregate([s[w] for s in summaries]) for w in warmups}))
     return runs, g
 
 

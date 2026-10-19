@@ -8,7 +8,7 @@ from inputs import MIB
 from model import Config, Part, Table
 from pool import Task
 from selector import _max_parts_to_merge, select_simple, select_tiered
-from stats import summary, warmup_index, welch
+from stats import summary, warmup_end, warmup_index, welch
 from throttle import check_insert
 
 SHRINK = dict(result_ratio=0.99, result_ratio_large=0.8, large_merge_bytes=100 * MIB, large_merge_time_factor=1.1)
@@ -146,6 +146,14 @@ def test_welch_does_not_judge_by_the_unsmoothed_end():
     curve[-1] = 12.0
     smoothed = welch([curve], window=5)
     assert len(smoothed) == 116 and warmup_index(smoothed) == 0
+
+
+def test_welch_band_covers_the_noise_of_the_curve():
+    rng = np.random.default_rng(1)
+    noisy = 10 + rng.normal(0, 1.5, 121)  # stationary from the start, but noisy: a 5% band would read noise as a trend
+    assert warmup_end(noisy) <= 6
+    rising = np.concatenate([np.linspace(0, 20, 40), np.full(81, 20.0)]) + rng.normal(0, 0.5, 121)
+    assert 30 <= warmup_end(rising) <= 45
 
 
 def test_postpone_does_not_overflow():
