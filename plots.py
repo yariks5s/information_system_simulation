@@ -198,15 +198,15 @@ def e6(d):
     grid = np.array(d["grid"]) / 60
     runs = dict(zip(d["variants"], d["runs"]))
     fig, axes = plt.subplots(1, 2, figsize=(12, 3.9), sharey=True)
-    for ax, guard, title in ((axes[0], "guard", "З обмеженням за середнім розміром куска (дефолт)"),
+    for ax, guard, title in ((axes[0], "guard", "З обмеженням за середнім розміром куска (за замовчуванням)"),
                              (axes[1], "no guard", "max_avg_part_size_for_too_many_parts = 0")):
         ends = []
         for i, (inp, label) in enumerate((("open", "відкритий вхід"), ("closed", "замкнений вхід"))):
             run = runs[f"{inp}, {guard}"]
             y = run["series"]["parts"]
-            rate = run["stats"]["insert_rate"][0]
+            rate = run["stats"]["fresh_rate"][0]  # accepted, not offered
             rejected = run["stats"]["rejected_fraction"][0]
-            text = f"{label}: {rate:.0f}/с, відхилено {rejected:.1%}"
+            text = f"{label}: прийнято {rate:.0f}/с, відхилено {rejected:.1%}"
             ax.plot(grid, y, color=SERIES[i], label=text)
             ends.append((grid[-1], y[-1], label))
         for level, name in ((1000, "parts_to_delay_insert"), (3000, "parts_to_throw_insert")):
@@ -215,7 +215,7 @@ def e6(d):
         ax.set_title(title, fontsize=9)
         ax.set_xlabel("модельний час, хв")
         ax.set_ylim(bottom=0)
-        ax.legend(loc="upper left")
+        ax.legend(loc="center right")
         end_labels(ax, ends)
     axes[0].set_ylabel("активні куски")
     fig.suptitle(f"Пропонований потік {d['offered']} вставок/с", x=0.01, ha="left", fontsize=10, color=INK, fontweight="bold")
@@ -258,7 +258,7 @@ def e9(d):
                 error_kw=dict(ecolor=INK2, elinewidth=0.8, capsize=2))
         ax.set_yticks(range(len(factors)), [names[f] for f in factors] if ax is axes[0] else [""] * len(factors))
         ax.axvline(0, color=AXIS, linewidth=0.8)
-        ax.set_title(METRIC_NAMES[response], fontsize=9)
+        ax.set_title(METRIC_NAMES[response] + (", с" if response.endswith(("lifetime_mean", "waiting_mean")) else ""), fontsize=9)
         ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
         ax.invert_yaxis()
     fig.suptitle("Головні ефекти факторного плану 2^5: зміна середнього при переході фактора з рівня −1 на +1, з 95% інтервалом",

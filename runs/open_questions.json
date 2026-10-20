@@ -1,272 +1,278 @@
-[
- {
-  "case": "open",
-  "latency": 0.0,
-  "model": {
-   "parts_mean": 10.364977129545673,
-   "write_amplification": 4.344166602087585,
-   "fresh_waiting_mean": 0.25536969635584894,
-   "delayed_fraction": 0.0,
-   "parts_p99": 17.0
+{
+ "latency": [
+  {
+   "case": "open",
+   "latency": 0.0,
+   "model": {
+    "parts_mean": 10.372509203685388,
+    "write_amplification": 3.9914160802671526,
+    "fresh_waiting_mean": 0.25698415631612365,
+    "delayed_fraction": 0.0,
+    "parts_p99": 18.0
+   },
+   "live": {
+    "parts_mean": 10.130597014925373,
+    "write_amplification": 4.0042493905645875,
+    "fresh_waiting_mean": 0.2613592524557908,
+    "delayed_fraction": 0.0,
+    "parts_p99": 16.219999999999988
+   }
   },
-  "live": {
-   "parts_mean": 10.130597014925373,
-   "write_amplification": 4.0042493905645875,
-   "fresh_waiting_mean": 0.2613592524557908,
-   "delayed_fraction": 0.0,
-   "parts_p99": 16.219999999999988
-  }
- },
- {
-  "case": "open",
-  "latency": 0.01,
-  "model": {
-   "parts_mean": 10.609980737543342,
-   "write_amplification": 4.47963983251252,
-   "fresh_waiting_mean": 0.2615140012968436,
-   "delayed_fraction": 0.0,
-   "parts_p99": 17.4
+  {
+   "case": "open",
+   "latency": 0.01,
+   "model": {
+    "parts_mean": 10.531799912779146,
+    "write_amplification": 3.9945107454604276,
+    "fresh_waiting_mean": 0.261023383429158,
+    "delayed_fraction": 0.0,
+    "parts_p99": 18.0
+   },
+   "live": {
+    "parts_mean": 10.130597014925373,
+    "write_amplification": 4.0042493905645875,
+    "fresh_waiting_mean": 0.2613592524557908,
+    "delayed_fraction": 0.0,
+    "parts_p99": 16.219999999999988
+   }
   },
-  "live": {
-   "parts_mean": 10.130597014925373,
-   "write_amplification": 4.0042493905645875,
-   "fresh_waiting_mean": 0.2613592524557908,
-   "delayed_fraction": 0.0,
-   "parts_p99": 16.219999999999988
-  }
- },
- {
-  "case": "open",
-  "latency": 0.03,
-  "model": {
-   "parts_mean": 10.946400779144986,
-   "write_amplification": 4.54870092832043,
-   "fresh_waiting_mean": 0.2693840763781905,
-   "delayed_fraction": 0.0,
-   "parts_p99": 17.8
+  {
+   "case": "open",
+   "latency": 0.03,
+   "model": {
+    "parts_mean": 10.713941087088168,
+    "write_amplification": 4.046612489909914,
+    "fresh_waiting_mean": 0.2697102759772595,
+    "delayed_fraction": 0.0,
+    "parts_p99": 17.9
+   },
+   "live": {
+    "parts_mean": 10.130597014925373,
+    "write_amplification": 4.0042493905645875,
+    "fresh_waiting_mean": 0.2613592524557908,
+    "delayed_fraction": 0.0,
+    "parts_p99": 16.219999999999988
+   }
   },
-  "live": {
-   "parts_mean": 10.130597014925373,
-   "write_amplification": 4.0042493905645875,
-   "fresh_waiting_mean": 0.2613592524557908,
-   "delayed_fraction": 0.0,
-   "parts_p99": 16.219999999999988
-  }
- },
- {
-  "case": "open",
-  "latency": 0.1,
-  "model": {
-   "parts_mean": 11.517698138056062,
-   "write_amplification": 4.222905977536607,
-   "fresh_waiting_mean": 0.300631228172711,
-   "delayed_fraction": 0.0,
-   "parts_p99": 18.3
+  {
+   "case": "open",
+   "latency": 0.1,
+   "model": {
+    "parts_mean": 11.507279459529501,
+    "write_amplification": 3.8887298736484746,
+    "fresh_waiting_mean": 0.30182295119956276,
+    "delayed_fraction": 0.0,
+    "parts_p99": 18.9
+   },
+   "live": {
+    "parts_mean": 10.130597014925373,
+    "write_amplification": 4.0042493905645875,
+    "fresh_waiting_mean": 0.2613592524557908,
+    "delayed_fraction": 0.0,
+    "parts_p99": 16.219999999999988
+   }
   },
-  "live": {
-   "parts_mean": 10.130597014925373,
-   "write_amplification": 4.0042493905645875,
-   "fresh_waiting_mean": 0.2613592524557908,
-   "delayed_fraction": 0.0,
-   "parts_p99": 16.219999999999988
-  }
- },
- {
-  "case": "open",
-  "latency": 0.3,
-  "model": {
-   "parts_mean": 12.29054859805597,
-   "write_amplification": 3.669641542688308,
-   "fresh_waiting_mean": 0.37033946410917096,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.9
+  {
+   "case": "open",
+   "latency": 0.3,
+   "model": {
+    "parts_mean": 12.409173110699983,
+    "write_amplification": 3.421682927014152,
+    "fresh_waiting_mean": 0.3715522453018864,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.9
+   },
+   "live": {
+    "parts_mean": 10.130597014925373,
+    "write_amplification": 4.0042493905645875,
+    "fresh_waiting_mean": 0.2613592524557908,
+    "delayed_fraction": 0.0,
+    "parts_p99": 16.219999999999988
+   }
   },
-  "live": {
-   "parts_mean": 10.130597014925373,
-   "write_amplification": 4.0042493905645875,
-   "fresh_waiting_mean": 0.2613592524557908,
-   "delayed_fraction": 0.0,
-   "parts_p99": 16.219999999999988
-  }
- },
- {
-  "case": "closed",
-  "latency": 0.0,
-  "model": {
-   "parts_mean": 12.378450600719068,
-   "write_amplification": 4.365714303176346,
-   "fresh_waiting_mean": 0.12576810518447334,
-   "delayed_fraction": 0.0,
-   "parts_p99": 20.0
+  {
+   "case": "closed",
+   "latency": 0.0,
+   "model": {
+    "parts_mean": 12.736170196764714,
+    "write_amplification": 4.090406876045794,
+    "fresh_waiting_mean": 0.1254547530295898,
+    "delayed_fraction": 0.0,
+    "parts_p99": 20.8
+   },
+   "live": {
+    "parts_mean": 12.322139303482587,
+    "write_amplification": 4.062745085979626,
+    "fresh_waiting_mean": 0.12905897057807073,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.666666666666668
+   }
   },
-  "live": {
-   "parts_mean": 12.322139303482587,
-   "write_amplification": 4.062745085979626,
-   "fresh_waiting_mean": 0.12905897057807073,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.666666666666668
-  }
- },
- {
-  "case": "closed",
-  "latency": 0.01,
-  "model": {
-   "parts_mean": 12.504394586089877,
-   "write_amplification": 4.489297033105418,
-   "fresh_waiting_mean": 0.13247333703341121,
-   "delayed_fraction": 0.0,
-   "parts_p99": 20.1
+  {
+   "case": "closed",
+   "latency": 0.01,
+   "model": {
+    "parts_mean": 12.729920907899771,
+    "write_amplification": 4.037951746140971,
+    "fresh_waiting_mean": 0.13191233277246003,
+    "delayed_fraction": 0.0,
+    "parts_p99": 21.2
+   },
+   "live": {
+    "parts_mean": 12.322139303482587,
+    "write_amplification": 4.062745085979626,
+    "fresh_waiting_mean": 0.12905897057807073,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.666666666666668
+   }
   },
-  "live": {
-   "parts_mean": 12.322139303482587,
-   "write_amplification": 4.062745085979626,
-   "fresh_waiting_mean": 0.12905897057807073,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.666666666666668
-  }
- },
- {
-  "case": "closed",
-  "latency": 0.03,
-  "model": {
-   "parts_mean": 12.984444081257507,
-   "write_amplification": 4.636755570724157,
-   "fresh_waiting_mean": 0.14223939767188487,
-   "delayed_fraction": 0.0,
-   "parts_p99": 21.0
+  {
+   "case": "closed",
+   "latency": 0.03,
+   "model": {
+    "parts_mean": 13.168889314123472,
+    "write_amplification": 4.161515246648395,
+    "fresh_waiting_mean": 0.14313886464284115,
+    "delayed_fraction": 0.0,
+    "parts_p99": 21.5
+   },
+   "live": {
+    "parts_mean": 12.322139303482587,
+    "write_amplification": 4.062745085979626,
+    "fresh_waiting_mean": 0.12905897057807073,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.666666666666668
+   }
   },
-  "live": {
-   "parts_mean": 12.322139303482587,
-   "write_amplification": 4.062745085979626,
-   "fresh_waiting_mean": 0.12905897057807073,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.666666666666668
-  }
- },
- {
-  "case": "closed",
-  "latency": 0.1,
-  "model": {
-   "parts_mean": 13.806982225715103,
-   "write_amplification": 4.261753261982004,
-   "fresh_waiting_mean": 0.16997277890193935,
-   "delayed_fraction": 0.0,
-   "parts_p99": 22.1
+  {
+   "case": "closed",
+   "latency": 0.1,
+   "model": {
+    "parts_mean": 13.954958280998985,
+    "write_amplification": 3.9839158867881723,
+    "fresh_waiting_mean": 0.17096198803753576,
+    "delayed_fraction": 0.0,
+    "parts_p99": 23.1
+   },
+   "live": {
+    "parts_mean": 12.322139303482587,
+    "write_amplification": 4.062745085979626,
+    "fresh_waiting_mean": 0.12905897057807073,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.666666666666668
+   }
   },
-  "live": {
-   "parts_mean": 12.322139303482587,
-   "write_amplification": 4.062745085979626,
-   "fresh_waiting_mean": 0.12905897057807073,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.666666666666668
-  }
- },
- {
-  "case": "closed",
-  "latency": 0.3,
-  "model": {
-   "parts_mean": 19.90528058098766,
-   "write_amplification": 3.742962055079018,
-   "fresh_waiting_mean": 0.25030408357395206,
-   "delayed_fraction": 0.0,
-   "parts_p99": 39.4
+  {
+   "case": "closed",
+   "latency": 0.3,
+   "model": {
+    "parts_mean": 19.70829361545622,
+    "write_amplification": 3.4696965200325236,
+    "fresh_waiting_mean": 0.2541059831534909,
+    "delayed_fraction": 0.0,
+    "parts_p99": 39.1
+   },
+   "live": {
+    "parts_mean": 12.322139303482587,
+    "write_amplification": 4.062745085979626,
+    "fresh_waiting_mean": 0.12905897057807073,
+    "delayed_fraction": 0.0,
+    "parts_p99": 19.666666666666668
+   }
   },
-  "live": {
-   "parts_mean": 12.322139303482587,
-   "write_amplification": 4.062745085979626,
-   "fresh_waiting_mean": 0.12905897057807073,
-   "delayed_fraction": 0.0,
-   "parts_p99": 19.666666666666668
-  }
- },
- {
-  "case": "throttled",
-  "latency": 0.0,
-  "model": {
-   "parts_mean": 11.943588854069143,
-   "write_amplification": 5.608205916671159,
-   "fresh_waiting_mean": 0.04967605837499715,
-   "delayed_fraction": 0.17974616451597902,
-   "parts_p99": 18.1
+  {
+   "case": "throttled",
+   "latency": 0.0,
+   "model": {
+    "parts_mean": 12.07653312517081,
+    "write_amplification": 5.272388076580684,
+    "fresh_waiting_mean": 0.04994120744134121,
+    "delayed_fraction": 0.19129369278317246,
+    "parts_p99": 18.0
+   },
+   "live": {
+    "parts_mean": 11.819651741293532,
+    "write_amplification": 5.302200901797815,
+    "fresh_waiting_mean": 0.05043227929279095,
+    "delayed_fraction": 0.21063233312200194,
+    "parts_p99": 19.77666666666666
+   }
   },
-  "live": {
-   "parts_mean": 11.819651741293532,
-   "write_amplification": 5.302200901797815,
-   "fresh_waiting_mean": 0.05043227929279095,
-   "delayed_fraction": 0.21063233312200194,
-   "parts_p99": 19.77666666666666
-  }
- },
- {
-  "case": "throttled",
-  "latency": 0.01,
-  "model": {
-   "parts_mean": 13.568125782343937,
-   "write_amplification": 5.519380722523554,
-   "fresh_waiting_mean": 0.05501520235589184,
-   "delayed_fraction": 0.41157691806407604,
-   "parts_p99": 20.9
+  {
+   "case": "throttled",
+   "latency": 0.01,
+   "model": {
+    "parts_mean": 13.011103270607256,
+    "write_amplification": 5.22730306330296,
+    "fresh_waiting_mean": 0.054633828255449546,
+    "delayed_fraction": 0.3313677851098117,
+    "parts_p99": 20.1
+   },
+   "live": {
+    "parts_mean": 11.819651741293532,
+    "write_amplification": 5.302200901797815,
+    "fresh_waiting_mean": 0.05043227929279095,
+    "delayed_fraction": 0.21063233312200194,
+    "parts_p99": 19.77666666666666
+   }
   },
-  "live": {
-   "parts_mean": 11.819651741293532,
-   "write_amplification": 5.302200901797815,
-   "fresh_waiting_mean": 0.05043227929279095,
-   "delayed_fraction": 0.21063233312200194,
-   "parts_p99": 19.77666666666666
-  }
- },
- {
-  "case": "throttled",
-  "latency": 0.03,
-  "model": {
-   "parts_mean": 13.801678721831834,
-   "write_amplification": 5.185416047333122,
-   "fresh_waiting_mean": 0.06176629401801666,
-   "delayed_fraction": 0.4422640389095309,
-   "parts_p99": 21.6
+  {
+   "case": "throttled",
+   "latency": 0.03,
+   "model": {
+    "parts_mean": 13.799952156612743,
+    "write_amplification": 4.963308901765478,
+    "fresh_waiting_mean": 0.06176808140329838,
+    "delayed_fraction": 0.44263618795284765,
+    "parts_p99": 21.4
+   },
+   "live": {
+    "parts_mean": 11.819651741293532,
+    "write_amplification": 5.302200901797815,
+    "fresh_waiting_mean": 0.05043227929279095,
+    "delayed_fraction": 0.21063233312200194,
+    "parts_p99": 19.77666666666666
+   }
   },
-  "live": {
-   "parts_mean": 11.819651741293532,
-   "write_amplification": 5.302200901797815,
-   "fresh_waiting_mean": 0.05043227929279095,
-   "delayed_fraction": 0.21063233312200194,
-   "parts_p99": 19.77666666666666
-  }
- },
- {
-  "case": "throttled",
-  "latency": 0.1,
-  "model": {
-   "parts_mean": 14.846233177493634,
-   "write_amplification": 5.077122938632498,
-   "fresh_waiting_mean": 0.0839865209406028,
-   "delayed_fraction": 0.5631327358848379,
-   "parts_p99": 24.4
+  {
+   "case": "throttled",
+   "latency": 0.1,
+   "model": {
+    "parts_mean": 14.641995847798313,
+    "write_amplification": 4.673984962638618,
+    "fresh_waiting_mean": 0.08384427336309251,
+    "delayed_fraction": 0.5433748372976075,
+    "parts_p99": 23.8
+   },
+   "live": {
+    "parts_mean": 11.819651741293532,
+    "write_amplification": 5.302200901797815,
+    "fresh_waiting_mean": 0.05043227929279095,
+    "delayed_fraction": 0.21063233312200194,
+    "parts_p99": 19.77666666666666
+   }
   },
-  "live": {
-   "parts_mean": 11.819651741293532,
-   "write_amplification": 5.302200901797815,
-   "fresh_waiting_mean": 0.05043227929279095,
-   "delayed_fraction": 0.21063233312200194,
-   "parts_p99": 19.77666666666666
+  {
+   "case": "throttled",
+   "latency": 0.3,
+   "model": {
+    "parts_mean": 37.50796034618418,
+    "write_amplification": 3.787174565684974,
+    "fresh_waiting_mean": 0.544566328936418,
+    "delayed_fraction": 0.6663179860529739,
+    "parts_p99": 64.9
+   },
+   "live": {
+    "parts_mean": 11.819651741293532,
+    "write_amplification": 5.302200901797815,
+    "fresh_waiting_mean": 0.05043227929279095,
+    "delayed_fraction": 0.21063233312200194,
+    "parts_p99": 19.77666666666666
+   }
   }
- },
- {
-  "case": "throttled",
-  "latency": 0.3,
-  "model": {
-   "parts_mean": 37.827571268269416,
-   "write_amplification": 3.6256136433709214,
-   "fresh_waiting_mean": 0.5441129599356811,
-   "delayed_fraction": 0.6638797057779388,
-   "parts_p99": 65.6
-  },
-  "live": {
-   "parts_mean": 11.819651741293532,
-   "write_amplification": 5.302200901797815,
-   "fresh_waiting_mean": 0.05043227929279095,
-   "delayed_fraction": 0.21063233312200194,
-   "parts_p99": 19.77666666666666
-  }
+ ],
+ "own_part": {
+  "without": 0.19129369278317246,
+  "with": 0.28556281879776535
  }
-]
+}

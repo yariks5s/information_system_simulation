@@ -6,6 +6,9 @@ import { el, sv, tooltip, NUM3, INT } from "./dom.js";
 
 export const S = i => `var(--series-${i})`;
 
+// a point is drawn only when both coordinates are numbers; a missing value leaves a gap
+const drawable = p => p[1] != null && Number.isFinite(p[1]) && Number.isFinite(p[0]);
+
 function niceStep(min, max, count = 5) {
   const span = max - min, step0 = span / count;
   const mag = Math.pow(10, Math.floor(Math.log10(step0)));
@@ -97,7 +100,7 @@ export class Chart {
 
   yValues() {
     const o = this.o, ys = [];
-    for (const s of o.series) for (const p of s.points) if (p[1] != null && isFinite(p[1])) ys.push(p[1]);
+    for (const s of o.series) for (const p of s.points) if (drawable(p)) ys.push(p[1]);
     for (const s of o.series) if (s.band) for (const b of s.band) if (isFinite(b[2])) ys.push(b[2]);
     const top = ys.length ? Math.max(...ys) : 1;
     for (const t of o.thresholds || []) if (t.y <= top * 1.5) ys.push(t.y);
@@ -112,7 +115,7 @@ export class Chart {
     svg.setAttribute("height", height);
     svg.replaceChildren();
     const xs = [];
-    for (const s of o.series) for (const p of s.points) if (p[1] != null && isFinite(p[1])) xs.push(p[0]);
+    for (const s of o.series) for (const p of s.points) if (drawable(p)) xs.push(p[0]);
     const [x0, x1] = this.extent(o.x, xs, false);
     const [y0, y1] = this.extent(o.y, this.yValues(), true);
     const direct = this.directLabels(width, y0, y1, height);
@@ -155,7 +158,8 @@ export class Chart {
         const bottom = s.band.slice().reverse().map(b => `${X(b[0])},${clampY(b[1])}`);
         svg.append(sv("polygon", { points: top.concat(bottom).join(" "), style: `fill:${s.color};opacity:0.12` }));
       }
-      const pts = s.points.filter(p => p[1] != null && isFinite(p[1]));
+      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // with the original index, for labels
+      const pts = kept.map(([p]) => p);
       if (!pts.length) continue;
       if (o.mode !== "scatter" || s.connect) {
         const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1)).join("");
@@ -166,7 +170,7 @@ export class Chart {
       }
       if (s.labels) {
         const [dx, dy] = s.labelOffset || [7, -6];
-        pts.forEach((p, i) => { if (s.labels[i] != null) svg.append(sv("text", { class: "point-label", x: X(p[0]) + dx, y: Y(p[1]) + dy }, s.labels[i])); });
+        kept.forEach(([p, i]) => { if (s.labels[i] != null) svg.append(sv("text", { class: "point-label", x: X(p[0]) + dx, y: Y(p[1]) + dy }, s.labels[i])); });
       }
     }
     if (direct) for (const d of direct) svg.append(sv("text", { class: "end-label", x: width - m.r + 8, y: d.y + 4 }, d.name));
@@ -189,7 +193,7 @@ export class Chart {
     const Y = this.scale(o.y, y0, y1, height - 38, 10);
     const ends = [];
     for (const s of o.series) {
-      const pts = s.points.filter(p => p[1] != null && isFinite(p[1]));
+      const pts = s.points.filter(drawable);
       if (!pts.length) return null;
       ends.push({ name: s.short || s.name, y: Y(pts[pts.length - 1][1]) });
     }
