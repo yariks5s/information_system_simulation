@@ -1,7 +1,4 @@
-"""M7 validation (RFC section 8): the same workload on the live server and in the calibrated model.
-
-Merge cost comes from the calibration workloads; the insert sizes are the input of each run and
-are taken from its own NewPart events."""
+"""live server vs model (RFC section 8): python3 validate.py live|compare open|closed|throttled"""
 import csv
 import json
 import math
@@ -21,7 +18,7 @@ MODEL_RUNS = 20
 CASES = {
     "open": dict(load=dict(mode="open", rate=8, rows=10000), model=dict(arrivals="open", insert_rate=8)),
     "closed": dict(load=dict(mode="closed", clients=8, think=0.5, rows=10000), model=dict(arrivals="closed", clients=8, think_time=0.5)),
-    # thresholds near the natural number of parts, so that throttling is frequent but sensitive to the tail
+    # thresholds near the natural part count: throttling is frequent and sensitive to the tail
     "throttled": dict(load=dict(mode="open", rate=40, rows=2000, settings="parts_to_delay_insert = 15, parts_to_throw_insert = 45"),
                       model=dict(arrivals="open", insert_rate=40, parts_to_delay_insert=15, parts_to_throw_insert=45)),
 }
@@ -47,11 +44,7 @@ FORMAT TSV"""
 
 
 def insert_delays(table, start, end):
-    """Per accepted insert: was it delayed, and its delay by the formula of RFC 3.3.
-
-    system.events over-counts: an INSERT SELECT runs several parallel sinks (max_insert_threads is
-    auto(32)) and every sink, also an empty one, calls delayInsertOrThrowIfNeeded and sleeps.
-    So the delay of one insert is DelayedInsertsMilliseconds / DelayedInserts of its own query."""
+    # per query: system.events counts a sleep for every parallel sink of the INSERT SELECT, empty ones too
     rows = np.array([[float(x) for x in line.split("\t")] for line in loadgen.query(INSERTS_SQL.format(
         table=table, start=int(start * 1e6), end=int(end * 1e6))).splitlines()]).reshape(-1, 3)
     count, ms, duration = rows.T
@@ -74,7 +67,7 @@ def live_summary(table, run_dir):
     fresh = np.array([[math.nan if x == "\\N" else float(x) for x in line.split("\t")]
                       for line in loadgen.query(FRESH_SQL.format(latest=latest)).splitlines()])
     start, end = fresh[:, 0].min() + WARMUP, fresh[:, 0].max()
-    window = fresh[(fresh[:, 0] >= start) & (fresh[:, 0] <= end - 60)]  # the last minute is still unmerged
+    window = fresh[(fresh[:, 0] >= start) & (fresh[:, 0] <= end - 60)]  # parts of the last minute may be unmerged
     lifetime = window[:, 3] - window[:, 0]
     waiting = window[:, 2] - window[:, 0]
     merges, _ = calibrate.collect(table)
@@ -83,7 +76,7 @@ def live_summary(table, run_dir):
     delayed, delay, duration = insert_delays(table, start, end)
     return dict(
         parts_mean=float(parts.mean()),
-        parts_quantiles={q: float(np.quantile(parts, q)) for q in (0.5, 0.9, 0.99)},
+        parts_quantiles={q: float(np.quantile(parts, q, method="inverted_cdf")) for q in (0.5, 0.9, 0.99)},
         busy_threads_mean=float(np.mean([min(row["pool_tasks"], 16) for row in steady])),
         fresh_lifetime_mean=float(np.nanmean(lifetime)),
         fresh_lifetime_quantiles=stats.quantiles(lifetime[~np.isnan(lifetime)]),
@@ -95,7 +88,7 @@ def live_summary(table, run_dir):
         delayed_fraction=float(delayed.mean()),
         rejected_fraction=(len(inserts) - accepted) / len(inserts),
         delay_mean_ms=float(delay.mean()),
-        # wall time added by the delay: the sinks sleep partly in sequence, so this is more than delay_mean_ms
+        # sinks sleep partly in sequence, so this exceeds delay_mean_ms
         latency_added_ms=float(duration.mean() - np.median(duration[~delayed])) if (~delayed).any() else math.nan,
         system_events_delayed_per_insert=(last["DelayedInserts"] - first["DelayedInserts"]) / len(inserts),
         insert_bytes=fresh[:, 1].tolist(),
@@ -121,6 +114,7 @@ def run_live(name):
 def compare(name):
     with open(f"runs/validation_{name}_live.json") as f:
         live = json.load(f)
+    # insert sizes are an input of the run, so the model takes them from its NewPart events
     sizes = np.concatenate([s.pop("insert_bytes") for s in live])
     config = calibrate.calibrated_config(**CASES[name]["model"], insert_bytes_mean=float(sizes.mean()),
                                          insert_bytes_cv=float(sizes.std() / sizes.mean()))
@@ -143,30 +137,9 @@ def show(name, rows):
         print(f"{row['metric']:22} {row['live']:12.4g} ± {row['live_half']:<7.2g} {row['model']:12.4g} ± {row['model_half']:<7.2g} {diff:+7.1%}")
 
 
-def fix_delays(name):
-    """Recompute the delay metrics of stored live runs from query_log (one table_uuid per run, in time order)."""
-    with open(f"runs/validation_{name}_live.json") as f:
-        live = json.load(f)
-    uuids = loadgen.query(f"SELECT table_uuid, min(toUnixTimestamp64Micro(event_time_microseconds)) / 1e6 AS t0, "
-                          f"max(toUnixTimestamp64Micro(event_time_microseconds)) / 1e6 FROM system.part_log "
-                          f"WHERE table = 'val_{name}' AND event_type = 'NewPart' GROUP BY table_uuid ORDER BY t0 FORMAT TSV").splitlines()
-    assert len(uuids) == len(live), (len(uuids), len(live))
-    for run, line in zip(live, uuids):
-        _, t0, t1 = line.split("\t")
-        delayed, delay, duration = insert_delays(f"default.val_{name}", float(t0) + WARMUP, float(t1))
-        run["system_events_delayed_per_insert"] = run["delayed_fraction"]
-        run["delayed_fraction"] = float(delayed.mean())
-        run["delay_mean_ms"] = float(delay.mean())
-        run["latency_added_ms"] = float(duration.mean() - np.median(duration[~delayed]))
-    with open(f"runs/validation_{name}_live.json", "w") as f:
-        json.dump(live, f, indent=1)
-
-
 if __name__ == "__main__":
     action, name = sys.argv[1:3]
     if action == "live":
         run_live(name)
-    elif action == "fix-delays":
-        fix_delays(name)
     else:
         show(name, compare(name))

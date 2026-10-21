@@ -1,4 +1,4 @@
-"""M8 experiment designs (RFC section 9): factorial screening and the stability boundary."""
+"""experiment designs of RFC section 9: 2^k factorial screening and the stability boundary"""
 import itertools
 import math
 from dataclasses import replace
@@ -9,14 +9,10 @@ import stats
 
 
 def apply_level(config, name, level):
-    """A level is a value of the Config field `name`, or a callable config -> config."""
     return level(config) if callable(level) else replace(config, **{name: level})
 
 
-def factorial(base_config, factors, until, warmup, responses, seeds):
-    """Full 2^k design. factors: {name: (low, high)}. Returns the runs and, per response, the main effects and
-    two-factor interactions (difference of means between the +1 and -1 halves), each as (mean, CI half-width) over
-    seeds: every seed is a full replicate of the design on common random numbers, so its effects are paired."""
+def factorial(base_config, factors, until, warmup, responses, seeds, grid=None, choose=None):
     names = list(factors)
     design = list(itertools.product((-1, 1), repeat=len(names)))
     configs = []
@@ -25,26 +21,30 @@ def factorial(base_config, factors, until, warmup, responses, seeds):
         for name, sign in zip(names, signs):
             config = apply_level(config, name, factors[name][0 if sign < 0 else 1])
         configs.append(config)
+    replicated = stats.replicate_many(configs, until, warmup, seeds, grid=grid)
+    if choose:  # one warm-up for every cell, picked from all their curves
+        warmup = choose([curves for _, curves in replicated])
+        replicated = [([s[warmup] for s in summaries], curves) for summaries, curves in replicated]
     results = []
-    for signs, (summaries, _) in zip(design, stats.replicate_many(configs, until, warmup, seeds)):
+    for signs, (summaries, _) in zip(design, replicated):
         results.append(dict(signs=signs, summaries=summaries,
                             means={r: float(np.mean([s[r] for s in summaries])) for r in responses}))
     effects = {}
     x = np.array([row["signs"] for row in results], dtype=float)
     for response in responses:
-        y = np.array([[s[response] for s in row["summaries"]] for row in results])  # design rows x seeds
+        y = np.array([[s[response] for s in row["summaries"]] for row in results])  # rows x seeds
 
+        # 2 * mean(contrast * y) is mean(+) - mean(-), per seed because each seed runs the whole design
         def effect(contrast):
             return stats.confidence_interval((contrast[:, None] * y).mean(axis=0) * 2)
 
         effects[response] = dict(
             main={n: effect(x[:, i]) for i, n in enumerate(names)},
             interactions={f"{a} x {b}": effect(x[:, i] * x[:, j]) for (i, a), (j, b) in itertools.combinations(enumerate(names), 2)})
-    return results, effects
+    return results, effects, warmup
 
 
 def _time_to_throttle(job):
-    """Model time of the first delayed or rejected insert, or inf if none before `until`."""
     from model import Table
 
     config, until = job
@@ -60,9 +60,7 @@ def _time_to_throttle(job):
 
 
 def boundaries(configs, low, high, until, seeds, tolerance=0.05):
-    """Largest insert rate at which no replication throttles within `until`, for every config at once.
-    Bisection on a log scale; all configs advance together so one process pool serves all of them.
-    low and high are per-config initial guesses, widened until they bracket the boundary."""
+    """log-scale bisection for the largest rate where no seed throttles; configs step together to share one pool"""
     seeds = list(seeds)
     low, high = list(low), list(high)
     history = [[] for _ in configs]

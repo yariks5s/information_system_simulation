@@ -1,12 +1,9 @@
-// The other tabs: the model diagram with the calibrated parameters, the experiment results and the validation,
-// drawn from the data the Python side exported (tools/export_data.py).
-
 import { RESULTS } from "../data/results.js";
 import { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } from "./dom.js";
 import { Chart, Bars, table, card, ci, niceTicks, S } from "./charts.js";
 
 
-// a model-time interval as "53 ± 2 хв", or "ніколи" for an event that did not happen in every replication
+// null: the event did not happen in every replication
 const minutes = v => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : "ніколи");
 
 export function results() {
@@ -30,14 +27,16 @@ export function results() {
           .map(k => ci(R.e1.metrics[k][i]))])) });
     const seg = el("div", { class: "seg", role: "group", "aria-label": "Характеристика" });
     const holder = el("div");
+    let chart = null;
     const show = key => {
       for (const b of seg.children) b.setAttribute("aria-pressed", String(b.dataset.key === key));
       const m = metrics[key];
-      new Chart(holder, { height: 260, x: { label: "вставок за секунду" }, y: { min: 0, max: m.max }, valueFormat: v => m.fmt(v),
-        tooltipTitle: x => `${x} вставок/с`,
-        series: m.keys.map(([k, name], i) => ({ name, color: S(i + 1), markers: true,
-          points: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0]]),
-          band: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0] - R.e1.metrics[k][j][1], R.e1.metrics[k][j][0] + R.e1.metrics[k][j][1]]) })) });
+      const series = m.keys.map(([k, name], i) => ({ name, color: S(i + 1), markers: true,
+        points: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0]]),
+        band: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0] - R.e1.metrics[k][j][1], R.e1.metrics[k][j][0] + R.e1.metrics[k][j][1]]) }));
+      const view = { y: { min: 0, max: m.max }, valueFormat: v => m.fmt(v) };
+      if (chart) chart.setSeries(series, view);
+      else chart = new Chart(holder, { height: 260, x: { label: "вставок за секунду" }, tooltipTitle: x => `${x} вставок/с`, series, ...view });
     };
     for (const [key, m] of Object.entries(metrics)) seg.append(el("button", { type: "button", "data-key": key, onclick: () => show(key) }, m.name));
     body.append(seg, el("div", { style: "height:10px" }), holder);
@@ -104,14 +103,14 @@ export function results() {
   if (R.e7) {
     const { card: c, body } = card("E7. Відновлення після сплеску",
       "150 вставок/с і 5-хвилинний сплеск. Відновлення: перший момент, коли кусків не більше ніж на 10% більше, ніж у прогоні з тими самими випадковими числами без сплеску.",
-      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв`])) });
+      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), r.recovery ? `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв` : "не відновилось"])) });
     const [start, length] = R.e7.burst;
     const shown = R.e7.runs;
     new Chart(body, { height: 260, x: { label: "модельний час, хв", format: v => INT.format(v) },
       y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
       series: shown.map((r, i) => ({ name: r.factor === 1 ? "без сплеску" : `сплеск ×${r.factor}`, color: r.factor === 1 ? "var(--axis)" : S(i),
         points: R.e7.grid.map((t, j) => [t / 60, r.series[j]]).filter(p => p[0] >= start / 60 - 10 && p[0] <= start / 60 + 45) })) });
-    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${NUM.format(r.recovery[0] / 60)} хв`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
+    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${r.recovery ? NUM.format(r.recovery[0] / 60) + " хв" : "не відновилось"}`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
     grid.append(c);
   }
 

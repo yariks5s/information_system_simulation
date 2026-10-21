@@ -1,13 +1,8 @@
-"""Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded for one partition.
-
-The delay grows linearly with the number of parts over parts_to_delay_insert (the formula the doc string
-of max_delay_to_insert gives "starting from version 23.1")."""
+"""mirrors MergeTreeData::delayInsertOrThrowIfNeeded with the linear delay used since 23.1"""
 
 
 def check_insert(parts_count, partition_bytes, cfg, total_parts=None):
-    """None if the insert is rejected with TOO_MANY_PARTS, otherwise its delay in milliseconds.
-    parts_count and partition_bytes are of the partition with the most parts (getMaxPartsCountAndSizeForPartition);
-    total_parts counts all partitions."""
+    """None means TOO_MANY_PARTS, else the delay in ms; parts_count and partition_bytes are of the fullest partition"""
     if (parts_count if total_parts is None else total_parts) >= cfg.max_parts_in_total:
         return None
     average = partition_bytes // parts_count if parts_count else 0

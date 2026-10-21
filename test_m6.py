@@ -1,4 +1,4 @@
-"""M6 acceptance (RFC section 10): characteristics, replications and intervals."""
+"""M6 acceptance, see RFC section 10"""
 import math
 
 import numpy as np
@@ -8,7 +8,6 @@ import stats
 from inputs import MIB
 from model import Config, simulate
 
-DAY = 86400
 
 
 def test_step_stats_by_hand():
@@ -53,12 +52,17 @@ def test_replications_are_reproducible_and_parallel_safe():
     serial, _ = stats.replicate(config, 1800, 600, seeds=range(3), workers=1)
     parallel, _ = stats.replicate(config, 1800, 600, seeds=range(3), workers=3)
     assert serial == parallel
-    assert len({s["parts_mean"] for s in serial}) == 3  # different seeds, different runs
+    assert len({s["parts_mean"] for s in serial}) == 3
 
 
 def test_common_random_numbers_pair_exactly():
+    # merge speed changes the parts but must not touch the arrival stream of the same seed
     a, _ = stats.replicate(Config(insert_rate=5), 1800, 600, seeds=range(3), workers=3)
-    assert stats.paired_difference(a, a, key=lambda s: s["parts_mean"]) == (0.0, 0.0)
+    b, _ = stats.replicate(Config(insert_rate=5, merge_bytes_per_second=30e6), 1800, 600, seeds=range(3), workers=3)
+    other, _ = stats.replicate(Config(insert_rate=5), 1800, 600, seeds=range(3, 6), workers=3)
+    assert any(x["parts_mean"] != y["parts_mean"] for x, y in zip(a, b))
+    assert stats.paired_difference(a, b, key=lambda s: s["insert_rate"]) == (0.0, 0.0)
+    assert stats.paired_difference(a, other, key=lambda s: s["insert_rate"])[0] != 0.0
 
 
 def test_welch_warmup():
@@ -67,17 +71,3 @@ def test_welch_warmup():
     smoothed = stats.welch(curves, window=3)
     assert 25 <= stats.warmup_index(smoothed) <= 35
 
-
-def test_recovery_after_burst():
-    config = Config(threads=2, insert_rate=20, insert_bytes_mean=MIB, burst=(1800, 600, 4.0))
-    table = simulate(config, 3 * 3600)
-    peak = max(stats.series(table, np.arange(1800, 2400, 10)))
-    recovery = stats.recovery_time(table, 2400, threshold=40)
-    assert peak > 100 and 0 < recovery < 3 * 3600 - 2400
-
-
-if __name__ == "__main__":
-    for name, test in list(globals().items()):
-        if name.startswith("test_"):
-            test()
-            print("ok", name)

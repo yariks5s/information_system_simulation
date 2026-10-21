@@ -1,9 +1,6 @@
-// The parts of every partition as rectangles: the row is the merge level, the horizontal position is which
-// inserts a part holds, on a log scale from the newest inserts at the right to the oldest at the left.
-
 import { cssVar, tooltip, bytes, duration, INT, plural } from "./dom.js";
 
-const MAX_BANDS = 8;  // newest partitions shown; with "keep all" the canvas would otherwise grow without limit
+const MAX_BANDS = 8;  // newest partitions only, with "keep all" the canvas would grow without limit
 
 export class PartsTree {
   constructor(canvas, { onPick }) {
@@ -64,7 +61,7 @@ export class PartsTree {
     this.rects = [];
     ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
     ctx.textBaseline = "middle";
-    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);  // newest on top
+    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);
     keys.forEach((key, b) => {
       const top = L.top + b * L.bandH;
       const bottom = top + L.levels * (L.rowH + L.gap);
@@ -91,12 +88,12 @@ export class PartsTree {
         const y = bottom - (lv + 1) * (L.rowH + L.gap) + L.gap;
         const x0 = X(last - p.minBlock + 1), x1 = X(last - p.maxBlock);
         const w = x1 - x0;
-        const drawW = w > 3 ? w - 1 : Math.max(w, 0.8);  // 1px surface gap between neighbours
+        const drawW = w > 3 ? w - 1 : Math.max(w, 0.8);  // 1px gap between neighbours
         ctx.globalAlpha = sources && !sources.has(p) ? 0.28 : 1;
         ctx.fillStyle = colors[Math.min(p.level, 4)];
         ctx.fillRect(x0, y, drawW, L.rowH);
         if (p.level === 0 && drawW > 2 && !p.merging) {
-          // the lightest level is below 3:1 against the surface: an outline keeps it visible
+          // level 0 is below 3:1 contrast on the surface, the outline keeps it visible
           ctx.strokeStyle = colors[2];
           ctx.lineWidth = 1;
           ctx.strokeRect(x0 + 0.5, y + 0.5, drawW - 1, L.rowH - 1);

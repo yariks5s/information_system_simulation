@@ -1,6 +1,4 @@
-"""Development server for the app (ES modules need http://, not file://).
-
-    python3 tools/serve.py [port]   then open http://localhost:8765/"""
+"""dev server: es modules need http://, not file://"""
 import functools
 import http.server
 import os

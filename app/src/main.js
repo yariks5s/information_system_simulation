@@ -1,5 +1,3 @@
-// Entry point: tabs, theme, and the laboratory.
-
 import { Lab } from "./ui/lab.js";
 import { model, results, validation } from "./ui/results.js";
 import { tooltip } from "./ui/dom.js";
@@ -43,7 +41,7 @@ function theme(lab) {
 }
 
 const lab = new Lab();
-window.lab = lab;  // for the browser tests and for curious readers in the console
+window.lab = lab;  // for the browser tests and the console
 model();
 tabs(lab);
 theme(lab);

@@ -1,6 +1,3 @@
-// Discrete-event engine: model clock and event calendar (RFC section 4).
-// The calendar is a binary heap ordered by (time, seq); seq keeps events at equal times in scheduling order.
-
 export class Engine {
   constructor() {
     this.now = 0;
@@ -46,7 +43,6 @@ export class Engine {
   }
 
   step() {
-    // one event; false if the calendar is empty
     if (!this.heap.length) return false;
     const item = this.pop();
     if (item.time < this.now) throw new Error("time went backwards");
@@ -66,6 +62,7 @@ export class Engine {
   }
 }
 
+// seq breaks ties, so equal-time events fire in scheduling order like heapq in engine.py
 function less(a, b) {
   return a.time < b.time || (a.time === b.time && a.seq < b.seq);
 }

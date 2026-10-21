@@ -1,4 +1,4 @@
-"""M4 acceptance (RFC section 10): throttling, rejection, closed clients and λ(t)."""
+"""M4 acceptance, see RFC section 10"""
 import math
 import random
 
@@ -20,9 +20,9 @@ def run(config, until=math.inf, max_events=math.inf):
 def test_delay_formula():
     small = 10 * MIB
     assert check_insert(999, 999 * small, CFG) == 0
-    assert check_insert(1000, 1000 * small, CFG) == 10  # 1000 * 1 / 2000 rounds to 0, min_delay_to_insert_ms wins
-    assert check_insert(2000, 2000 * small, CFG) == 500  # 1000 * 1001 / 2000
-    assert check_insert(2999, 2999 * small, CFG) == 1000  # over == allowed, max delay
+    assert check_insert(1000, 1000 * small, CFG) == 10  # 1000 * 1 / 2000 rounds down to 0, so min_delay_to_insert_ms wins
+    assert check_insert(2000, 2000 * small, CFG) == 500  # 1000 * 1001 / 2000 truncates to 500
+    assert check_insert(2999, 2999 * small, CFG) == 1000  # over == allowed gives the max delay
     assert check_insert(3000, 3000 * small, CFG) is None
 
 
@@ -42,7 +42,7 @@ def test_one_client_without_merges_sums_every_delay():
 
 
 def test_open_model_overshoots_the_rejection_threshold():
-    # inserts accepted just below the threshold are still waiting out their delay when others arrive
+    # about 20 inserts are still in their 1 s delay when the count reaches 3000
     table = run(Config(insert_rate=20, **NO_MERGES), until=600)
     assert 3000 < len(table.parts) < 3100 and table.rejected > 0
 
@@ -54,13 +54,13 @@ def test_large_parts_never_throttle():
 
 
 def test_closed_throughput_is_clients_over_think_time():
-    # no throttling, zero response time: X = N / Z
+    # no throttling and zero response time, so X = N / Z = 4 / 2
     table = run(Config(arrivals="closed", clients=4, think_time=2.0), until=10**4)
     assert math.isclose(table.arrivals / 10**4, 2.0, rel_tol=0.03)
 
 
 def test_throttling_slows_closed_clients_down():
-    # Little's law for the client cycle: X = N / (Z + R) with R the mean delay, stopped before any rejection
+    # by Little's law X = N / (Z + R), R the mean delay
     config = Config(arrivals="closed", clients=4, think_time=0.5, parts_to_delay_insert=10, **NO_MERGES)
     table = run(config, until=400)
     delay = table.delay_total_ms / 1000 / table.last_block
@@ -76,7 +76,6 @@ def count_arrivals(amplitude, burst, days):
         t = next_arrival(t, rate, peak, candidates, thinning)
         times.append(t)
     if burst:
-        # the burst is a second process on top of the first, with its own streams
         extra, extra_peak = burst_rate(rate, peak, burst)
         candidates, thinning = random.Random(3), random.Random(4)
         t = burst[0]
@@ -90,8 +89,8 @@ def test_daily_profile():
     times = count_arrivals(0.5, None, 30)
     peak = sum(1 for t in times if abs(t % 86400 - 14 * 3600) < 1800)
     trough = sum(1 for t in times if abs(t % 86400 - 2 * 3600) < 1800)
-    # the cosine averages to 0.989 over the hour, so the ratio is 1.4945 / 0.5055
-    assert 2.8 < peak / trough < 3.1
+    # cos averages 0.997 over the 1 h window, so the ratio is about 1.4986 / 0.5014 = 2.99
+    assert 2.92 < peak / trough < 3.06
     assert math.isclose(len(times), 30 * 86400, rel_tol=0.01)
 
 

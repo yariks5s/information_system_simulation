@@ -1,9 +1,4 @@
-"""Open questions of the validation (RFC section 8): does a delay between a trigger and the assignee run explain the
-gaps, and how much of the delayed-insert gap can the way the server counts delays explain? On the server a query counts
-as delayed if any of its parallel sinks slept, and a sink that starts late can see the part of its own query; the model
-checks once, without that part.
-
-    python3 open_questions.py   (no server needed: compares with the stored live runs)"""
+"""assignee latency and own-part counting vs stored live runs (RFC section 8): python3 open_questions.py"""
 import json
 from dataclasses import replace
 
@@ -28,8 +23,10 @@ def live(case):
 
 
 def main(seeds=range(10)):
-    with open("runs/validation_open.json") as f:
-        cases = {c: json.load(open(f"runs/validation_{c}.json"))["case"]["model"] for c in CASES}
+    cases = {}
+    for c in CASES:
+        with open(f"runs/validation_{c}.json") as f:
+            cases[c] = json.load(f)["case"]["model"]
     rows = []
     for case in CASES:
         target, mean, cv = live(case)
@@ -56,12 +53,12 @@ def _own_part_job(job):
     times, counts = np.array([c[0] for c in changes]), np.cumsum([c[1] for c in changes])
     accepted = [t for t, delay in table.history_inserts if 90 <= t <= 360 and delay is not None]
     before = np.array([counts[np.searchsorted(times, t, side="left") - 1] for t in accepted])
+    # a late sink of the same query on the server can already see the insert's own part
     return float((before >= threshold).mean()), float((before + 1 >= threshold).mean())
 
 
 def own_part_bounds(case_model, seeds):
-    """Share of accepted inserts that find the partition at parts_to_delay_insert, without and with their own part."""
-    target, mean, cv = live("throttled")
+    _, mean, cv = live("throttled")
     config = calibrated_config(**case_model, insert_bytes_mean=mean, insert_bytes_cv=cv)
     shares = np.array(stats.pmap(_own_part_job, [(replace(config, seed=s), config.parts_to_delay_insert) for s in seeds]))
     return {"without": float(shares[:, 0].mean()), "with": float(shares[:, 1].mean())}

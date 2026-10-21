@@ -1,13 +1,9 @@
-"""Bundles the app into one self-contained file, dist/index.html, that opens straight from disk.
-
-Browsers do not load ES modules from file://, so every module becomes a function scope in one classic script:
-its exports are returned from the scope, and its imports read them from the scopes built before it.
-
-    python3 tools/build.py   (from app/)"""
+"""one-file dist/index.html, since browsers do not load es modules from file://"""
 import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# only one-line named imports and plain export declarations are handled
 IMPORT = re.compile(r'^import\s+\{([^}]*)\}\s+from\s+"(\.{1,2}/[^"]+)";\s*$', re.M)
 EXPORT = re.compile(r"^export\s+((?:async\s+)?(?:function\*?|class|const|let))\s+(\w+)", re.M)
 

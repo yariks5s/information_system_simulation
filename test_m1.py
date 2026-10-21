@@ -1,4 +1,4 @@
-"""M1 acceptance (RFC section 10): invariants hold after every event."""
+"""M1 acceptance, see RFC section 10"""
 import math
 
 from model import Config, Table, simulate
@@ -17,7 +17,6 @@ def test_invariants_million_events():
 
 
 def test_invariants_overloaded():
-    # one slow thread cannot keep up, parts pile up
     table = run_events(Config(selector="tiered", threads=1, merge_bytes_per_second=5e6), 10**4)
     assert len(table.parts) > 100
 
@@ -28,7 +27,6 @@ def test_reproducible():
 
 
 def test_merge_speed_does_not_shift_insert_stream():
-    # common random numbers: the insert stream depends only on its own generators
     fast = simulate(Config(merge_bytes_per_second=1e9), 3600)
     slow = simulate(Config(merge_bytes_per_second=1e7), 3600)
     assert (fast.last_block, fast.inserted_bytes) == (slow.last_block, slow.inserted_bytes)

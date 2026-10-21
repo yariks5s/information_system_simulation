@@ -1,7 +1,4 @@
-"""Figures for the report from results/*.json (or results_quick with --quick). Static PNG, light mode.
-
-Colors follow the validated reference palette: slots 1-3 pass all-pairs CVD checks; slot 3 (aqua) and 4
-(yellow) are below 3:1 on the surface, so every series is also labeled directly."""
+"""report figures from results/*.json: python3 plots.py [--quick]"""
 import json
 import os
 import sys
@@ -13,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 SRC = "results_quick" if "--quick" in sys.argv else "results"
+# slots 3 and 4 are below 3:1 contrast on the surface, so series are also labeled directly
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
 INK, INK2, MUTED, GRID, AXIS, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
 
@@ -53,10 +51,9 @@ METRIC_NAMES = {
 
 
 def end_labels(ax, items, gap=0.045):
-    """Direct labels at line ends, pushed apart vertically so they never overlap. items: (x, y, text)."""
     if not items:
         return
-    ax.autoscale_view()  # call after the scales and limits are final
+    ax.autoscale_view()  # callers must set scales and limits first
     to_axes = ax.transAxes.inverted()
     points = sorted(((to_axes.transform(ax.transData.transform((x, y)))[1], x, y, text) for x, y, text in items))
     placed = []
@@ -73,7 +70,6 @@ def ci(run, key):
 
 
 def line(ax, x, runs, key, color, label=None):
-    """Returns the end point for end_labels."""
     y = np.array([ci(r, key)[0] for r in runs])
     e = np.array([ci(r, key)[1] for r in runs])
     ax.errorbar(x, y, yerr=e, color=color, marker="o", capsize=2, elinewidth=0.8, label=label)
@@ -236,9 +232,10 @@ def e7(d):
     axes[0].set_xlabel("модельний час, хв")
     axes[0].set_xlim(start / 60 - 10, start / 60 + 45)
     axes[0].legend(loc="upper right")
-    factors = [r["factor"] for r in shown]
-    means = [r["recovery"][0] / 60 for r in shown]
-    halves = [r["recovery"][1] / 60 if np.isfinite(r["recovery"][1]) else 0 for r in shown]
+    recovered = [r for r in shown if r["recovery"]]  # none when some seed never came back below the band
+    factors = [r["factor"] for r in recovered]
+    means = [r["recovery"][0] / 60 for r in recovered]
+    halves = [r["recovery"][1] / 60 if np.isfinite(r["recovery"][1]) else 0 for r in recovered]
     axes[1].errorbar(factors, means, yerr=halves, color=SERIES[0], marker="o", capsize=2)
     axes[1].set_title("Час відновлення, хв")
     axes[1].set_xlabel("множник сплеску")
@@ -320,8 +317,6 @@ def e11(d):
 
 
 def inputs():
-    """Input data analysis: arrival gaps of a live open run against the exponential law, and the log residuals of
-    merge time (small merges of the base table) against the normal law, with Kolmogorov-Smirnov tests."""
     import csv
     from scipy import stats
 
@@ -334,8 +329,9 @@ def inputs():
     merges = np.load("runs/calibration_base/merges.npy")
     small = merges[:, 3] < cal["large_merge_bytes"]
     residual = np.log(merges[small, 0]) - np.log(cal["merge_fixed_seconds"] + merges[small, 3] / cal["merge_bytes_per_second"])
-    ks_gaps = stats.kstest(gaps, "expon", args=(0, gaps.mean()))
-    ks_noise = stats.kstest((residual - residual.mean()) / residual.std(ddof=1), "norm")
+    # parameters come from the same sample, so plain kstest p-values are too high; goodness_of_fit refits per simulated sample
+    ks_gaps = stats.goodness_of_fit(stats.expon, gaps, known_params={"loc": 0}, statistic="ks", random_state=0)
+    ks_noise = stats.goodness_of_fit(stats.norm, residual, statistic="ks", random_state=0)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
     ax = axes[0]
     ax.hist(gaps, bins=40, density=True, color=SERIES[0], alpha=0.7, label="виміряні інтервали")
@@ -375,7 +371,7 @@ def validation():
             if not r["live"]:
                 continue
             diff = (r["model"] / r["live"] - 1) * 100
-            # half-width of the relative difference from both relative half-widths
+            # relative half-widths add in quadrature
             half = 100 * r["model"] / r["live"] * np.hypot(r["model_half"] / r["model"] if r["model"] else 0, r["live_half"] / r["live"])
             ax.errorbar([diff], [j], xerr=[half], color=SERIES[0], marker="o", capsize=3)
             ax.annotate(f"{diff:+.1f}%", (diff, j), xytext=(0, 6), textcoords="offset points", ha="center", fontsize=7, color=INK2)

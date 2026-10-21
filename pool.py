@@ -1,10 +1,4 @@
-"""Background merges and mutations executor (RFC 3.4) as a rate-allocation queue.
-
-A task advances at rate 1 while it holds a thread. `round_robin` shares the threads equally
-among all tasks (processor sharing, the small-step limit of round-robin). `shortest_task_first`
-gives the threads to the tasks with the smallest priority, the sum of source part bytes,
-preempting at step boundaries. Instead of one event per step there is one event per change
-of the task set: the earliest completion under the current rates."""
+"""merge executor as processor sharing: one event per change of the task set, not one per step"""
 from dataclasses import dataclass
 
 
@@ -12,13 +6,13 @@ from dataclasses import dataclass
 class Task:
     id: int
     work: float  # thread-seconds
-    priority: int  # sum of source part bytes, smaller runs first
+    priority: int  # source part bytes, the smallest go first under shortest_task_first
     payload: object = None
     remaining: float = 0.0
     rate: float = 0.0
-    created_at: float = 0.0  # time the task entered the pool
-    result_size: int = 0  # size of the merged part
-    result_fresh: int = 0  # its bytes that never went through a large merge (RFC 3.1)
+    created_at: float = 0.0
+    result_size: int = 0
+    result_fresh: int = 0
 
 
 class Pool:
@@ -43,11 +37,10 @@ class Pool:
         return sum(t.rate for t in self.tasks)
 
     def remaining_now(self, task):
-        """Remaining work of a task at the current time, without advancing the pool."""
+        """without advancing the pool"""
         return task.remaining - task.rate * (self.engine.now - self._updated_at)
 
     def cancel_all(self):
-        """Removes every task, as when DROP PARTITION cancels the merges of the table; returns them."""
         self._advance()
         tasks, self.tasks = self.tasks, []
         self._reallocate()

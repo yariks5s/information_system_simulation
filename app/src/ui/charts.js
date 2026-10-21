@@ -1,12 +1,7 @@
-// SVG charts: line and scatter charts with a crosshair tooltip, horizontal bars, tables and cards.
-// Marks follow the dataviz rules: 2px lines, hairline grid, one axis, legend for two or more series,
-// direct end labels only when they do not collide, values in tooltips and in table views.
-
 import { el, sv, tooltip, NUM3, INT } from "./dom.js";
 
 export const S = i => `var(--series-${i})`;
 
-// a point is drawn only when both coordinates are numbers; a missing value leaves a gap
 const drawable = p => p[1] != null && Number.isFinite(p[1]) && Number.isFinite(p[0]);
 
 function niceStep(min, max, count = 5) {
@@ -35,9 +30,6 @@ function logTicks(min, max) {
 }
 
 export class Chart {
-  // options: height, x{label, log, min, max, format}, y{log, min, max, format}, series[{name, short, color, points, band, labels,
-  // labelOffset, markers, connect}], thresholds[{y, label}], mode "line" | "scatter", onClick(x), playhead,
-  // tooltipTitle(x), valueFormat(v), scatterRows(series, i)
   constructor(container, options) {
     this.container = container;
     this.o = options;
@@ -93,7 +85,7 @@ export class Chart {
     if (!(hi > lo)) hi = lo + 1;
     if (axis.max == null && pad) {
       const step = niceStep(lo, hi * 1.04);
-      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick is at or above the largest value
+      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick at or above the largest value
     }
     return [lo, hi];
   }
@@ -158,11 +150,16 @@ export class Chart {
         const bottom = s.band.slice().reverse().map(b => `${X(b[0])},${clampY(b[1])}`);
         svg.append(sv("polygon", { points: top.concat(bottom).join(" "), style: `fill:${s.color};opacity:0.12` }));
       }
-      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // with the original index, for labels
+      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // keeps the original index for labels
       const pts = kept.map(([p]) => p);
       if (!pts.length) continue;
       if (o.mode !== "scatter" || s.connect) {
-        const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1)).join("");
+        let d = "", gap = true;  // a missing value starts a new subpath instead of bridging it
+        for (const p of s.points) {
+          if (!drawable(p)) { gap = true; continue; }
+          d += (gap ? "M" : "L") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1);
+          gap = false;
+        }
         svg.append(sv("path", { d, style: `fill:none;stroke:${s.color};stroke-width:2;stroke-linejoin:round;stroke-linecap:round` }));
       }
       if (o.mode === "scatter" || s.markers) {
@@ -198,7 +195,7 @@ export class Chart {
       ends.push({ name: s.short || s.name, y: Y(pts[pts.length - 1][1]) });
     }
     ends.sort((a, b) => a.y - b.y);
-    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) return null;  // they collide: legend and tooltip only
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) return null;  // labels collide: legend and tooltip only
     return ends;
   }
 
@@ -248,7 +245,6 @@ export class Chart {
 }
 
 export class Bars {
-  // horizontal bars from zero, rounded at the data end
   constructor(container, options) {
     this.container = container;
     this.o = options;

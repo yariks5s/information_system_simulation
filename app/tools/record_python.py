@@ -1,8 +1,4 @@
-"""Records runs of the Python model for the differential test of the JavaScript port (tests/diff.test.mjs):
-every random number each stream returned with the parameters it was drawn with, and the event trace. The JavaScript
-model replays the same numbers, must ask for them with the same parameters and must produce the same trace.
-
-    python3 app/tools/record_python.py   (from the repository root)"""
+"""records the python runs diff.test.mjs replays; run from the repo root, calibration.json is read from the cwd"""
 import json
 import os
 import sys
@@ -48,7 +44,7 @@ CASES = {
     "rejections": (dict(insert_rate=400, insert_bytes_mean=MIB, threads=1, parts_to_delay_insert=60, parts_to_throw_insert=120), 150),
     "disk_full": (dict(insert_rate=100, disk_bytes=20 * 10**9, old_parts_lifetime=30.0), 150),
     "disk_partitions": (dict(insert_rate=150, partition_seconds=60.0, retention_partitions=2, disk_bytes=60 * 10**9, old_parts_lifetime=20.0), 300),
-    # the numpy selector Python uses in experiments, and paths the cases above do not reach
+    # the numpy selector python uses in experiments, and paths the cases above miss
     "fast_selector": (dict(insert_rate=260, selector="simple"), 120),
     "closed_rejections": (dict(arrivals="closed", clients=30, think_time=0.05, insert_bytes_mean=MIB, threads=1, parts_to_delay_insert=40,
                                parts_to_throw_insert=80, max_avg_part_size_for_too_many_parts=0, disk_bytes=3 * 10**9, old_parts_lifetime=5.0), 120),

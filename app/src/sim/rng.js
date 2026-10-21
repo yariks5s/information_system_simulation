@@ -1,10 +1,7 @@
-// Seeded random streams. One stream per source of randomness, like the Python model (RFC section 4),
-// so that changing one parameter does not shift the random numbers of the others.
-
 const NV_MAGICCONST = 4 * Math.exp(-0.5) / Math.sqrt(2.0);
 
 function hash(text) {
-  // cyrb128: four 32-bit words from a string
+  // cyrb128
   let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
   for (let i = 0; i < text.length; i++) {
     const k = text.charCodeAt(i);
@@ -25,7 +22,7 @@ export class Rng {
     [this.a, this.b, this.c, this.d] = hash(String(seed));
   }
 
-  // sfc32, 53-bit doubles from two outputs
+  // sfc32; random builds 53-bit doubles from two outputs like python
   next32() {
     let { a, b, c, d } = this;
     const t = (((a + b) | 0) + d) | 0;
@@ -42,7 +39,7 @@ export class Rng {
     return ((this.next32() >>> 5) * 67108864 + (this.next32() >>> 6)) / 9007199254740992;
   }
 
-  // the same algorithms as Python's random module
+  // same algorithms as python's random module
   expovariate(lambd) {
     return -Math.log(1.0 - this.random()) / lambd;
   }
@@ -65,6 +62,7 @@ export class Rng {
   }
 }
 
+// one stream per source of randomness, so changing one parameter does not shift the others' draws
 export function streams(seed, ...names) {
   const out = {};
   for (const name of names) out[name] = new Rng(`${seed}:${name}`);
@@ -72,13 +70,12 @@ export function streams(seed, ...names) {
 }
 
 export function lognormal(rng, mean, cv) {
-  // lognormal variate with the given mean and coefficient of variation
   if (cv === 0) return mean;
   const sigma2 = Math.log1p(cv * cv);
   return rng.lognormvariate(Math.log(mean) - sigma2 / 2, Math.sqrt(sigma2));
 }
 
-// Python's round(): half to even
+// python's round: half to even
 export function roundHalfEven(x) {
   const r = Math.round(x);
   return Math.abs(x % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r;

@@ -1,6 +1,4 @@
-// Differential test: the JavaScript model, fed the random numbers the Python model drew, must ask for them with the
-// same parameters, use all of them, and produce the same trace event by event, with the invariants checked after every
-// event. Generate the Python runs with app/tools/record_python.py (from the repository root) before the first run.
+// needs tests/python_runs.json: run app/tools/record_python.py from the repo root first
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";

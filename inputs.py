@@ -1,5 +1,4 @@
-"""Random inputs. One generator per source of randomness, so that changing one factor
-does not shift the random numbers of the others (common random numbers, RFC section 4)."""
+"""one stream per source of randomness, so changing one factor leaves the others' numbers alone"""
 import math
 import random
 
@@ -8,12 +7,12 @@ DAY = 86400.0
 
 
 def streams(seed, *names):
-    # str seeds are hashed with sha512, so streams are reproducible across runs
+    # str seeds go through sha512, not hash(), so runs are reproducible
     return {name: random.Random(f"{seed}:{name}") for name in names}
 
 
 def lognormal(rng, mean, cv):
-    """Lognormal variate with the given mean and coefficient of variation."""
+    """mean and cv are of the variate itself, not of the underlying normal"""
     if cv == 0:
         return mean
     sigma2 = math.log1p(cv * cv)
@@ -21,7 +20,7 @@ def lognormal(rng, mean, cv):
 
 
 def daily_rate(mean, amplitude, peak_at):
-    """Rate λ(t) with a daily cosine profile, and its maximum, for thinning."""
+    """rate(t) and its maximum, the bound for thinning"""
     def rate(t):
         return mean * (1 + amplitude * math.cos(2 * math.pi * (t - peak_at) / DAY))
 
@@ -29,8 +28,7 @@ def daily_rate(mean, amplitude, peak_at):
 
 
 def burst_rate(rate, peak, burst):
-    """Extra rate (factor - 1) λ(t) of a (start, duration, factor) burst, and its maximum. The model adds it as a
-    separate Poisson process with its own streams, so the base arrivals are the same with and without the burst."""
+    """extra rate of a burst as its own process, so base arrivals are the same with and without it"""
     start, duration, factor = burst
 
     def extra(t):
@@ -40,7 +38,7 @@ def burst_rate(rate, peak, burst):
 
 
 def next_arrival(t, rate, peak, candidates, thinning, until=math.inf):
-    """Next event of a non-homogeneous Poisson process after t, by thinning (Lewis, Shedler); None if not before until."""
+    """thinning as in Lewis-Shedler; None when nothing arrives before until"""
     while True:
         t += candidates.expovariate(peak)
         if t >= until:

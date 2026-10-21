@@ -1,7 +1,3 @@
-// The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
-// of delayed inserts is one line, not thousands. Each model has its own entries (newState); the log shows one of them.
-// Only the kinds that are switched on are kept, so the hidden per-insert lines do not push the others out.
-
 import { el, bytes, clock, duration, INT, NUM2, partsText } from "./dom.js";
 
 export const KINDS = {
@@ -41,7 +37,7 @@ export class EventLog {
   }
 
   push(state, t, kind, text, ref = null) {
-    if (!this.enabled.has(kind)) return;
+    if (!this.enabled.has(kind)) return;  // hidden per-insert lines would push the others out
     add(state, { t, kind, text, ref });
     this.dirty = true;
   }
@@ -59,6 +55,7 @@ export class EventLog {
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
     } else if (type === "arrival") {
       const delay = data[0];
+      // summed per model second, or a throttled burst is thousands of lines
       if ((delay === null || delay > 0) && this.enabled.has("throttle")) {
         const second = Math.floor(t);
         let e = state.throttleSecond;
@@ -74,7 +71,6 @@ export class EventLog {
         e.entry.text = "Вставки за секунду: " + parts.join(", ");
       }
     } else if (type === "nospace" && this.enabled.has("disk")) {
-      // summed per second, like throttling
       const second = Math.floor(t);
       let e = state.diskSecond;
       if (!e || e.second !== second) {
@@ -93,7 +89,7 @@ export class EventLog {
     } else if (type === "drop") {
       this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}; її куски лежать на диску ще old_parts_lifetime`);
     } else if (type === "cancel" && this.enabled.has("partition")) {
-      // DROP PARTITION cancels every running merge at once: one line per drop
+      // a drop cancels every running merge at once, so one line per drop
       let e = state.cancelled;
       if (!e || e.t !== t) {
         e = state.cancelled = { t, count: 0, entry: { t, kind: "partition", text: "", ref: null } };
@@ -106,7 +102,7 @@ export class EventLog {
 
   render() {
     // a list rebuilt under the pointer would swallow clicks
-    if (!this.dirty || this.list.matches(":hover")) return;
+    if (!this.dirty || this.list.matches(":hover, :focus-within")) return;
     this.dirty = false;
     const shown = [];
     const entries = this.s.entries;

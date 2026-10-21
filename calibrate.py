@@ -1,8 +1,4 @@
-"""M5 calibration (RFC 3.7): fit the merge cost to system.part_log of the live server.
-
-    work = (c0 + c1 * bytes) * ε,  ε lognormal with mean 1
-
-bytes is the sum of source part sizes on disk, the same quantity the model merges."""
+"""merge cost fit of RFC 3.7 from system.part_log: python3 calibrate.py [--report | --refit | --workload name]"""
 import json
 import math
 import sys
@@ -12,7 +8,7 @@ from scipy import optimize, stats
 
 import loadgen
 
-# only the latest table with this name: part names repeat across re-created tables
+# part names repeat across re-created tables, so take the latest uuid
 LATEST = "(SELECT table_uuid FROM system.part_log WHERE database = '{db}' AND table = '{name}' ORDER BY event_time_microseconds DESC LIMIT 1)"
 
 MERGES_SQL = """
@@ -33,9 +29,9 @@ def collect(table):
     db, name = table.split(".")
     latest = LATEST.format(db=db, name=name)
     rows = [line.split("\t") for line in loadgen.query(MERGES_SQL.format(latest=latest)).splitlines()]
+    # columns: duration_s, result_bytes, sources, source_bytes, projections_s, finished_at
     merges = np.array([[float(r[1]) / 1000, float(r[2]), float(r[3]), float(r[4]), float(r[5]) / 1000, float(r[6])] for r in rows])
     inserts = np.array([float(x) for x in loadgen.query(NEW_PARTS_SQL.format(latest=latest)).split()])
-    # columns: duration_s, result_bytes, sources, source_bytes, projections_s, finished_at
     return merges, inserts
 
 
@@ -50,7 +46,7 @@ def fit(merges):
     c0, c1 = result.x
     log_residual = residuals(result.x)
     sigma = log_residual.std(ddof=2)
-    # least squares on logs fits the median; the model's noise has mean 1, so scale by exp(sigma^2 / 2)
+    # log least squares fits the median, the model noise has mean 1
     mean_factor = math.exp(sigma**2 / 2)
     return dict(
         merge_fixed_seconds=c0 * mean_factor,
@@ -59,7 +55,6 @@ def fit(merges):
         checks=dict(
             merges=len(duration),
             log_residual_sigma=sigma,
-            # no trend of residuals over size, and how far they are from normal on the log scale
             residual_size_spearman=stats.spearmanr(np.log(source_bytes), log_residual).statistic,
             log_residual_skew=float(stats.skew(log_residual)),
             log_residual_excess_kurtosis=float(stats.kurtosis(log_residual)),
@@ -71,13 +66,11 @@ def fit(merges):
 
 
 def large_merges(merges, c0, speed):
-    """RFC 3.1, 3.7: a merged part keeps result_ratio of its sources, but merges from a threshold of about 100 MiB up
-    shrink the bytes that never went through such a merge once more, to result_ratio_large, and take
-    large_merge_time_factor longer than the cost line gives for the same data."""
+    """two regimes split by result ratio: large merges shrink fresh bytes more and run slower (RFC 3.1, 3.7)"""
     ratio, size, duration = merges[:, 1] / merges[:, 3], merges[:, 3], merges[:, 0]
     split = (ratio.max() + ratio.min()) / 2
     threshold = float(size[ratio < split].min())  # the smallest merge in the second regime
-    small, fresh = size < threshold, ratio < split  # all bytes of a merge with the second ratio are fresh
+    small, fresh = size < threshold, ratio < split  # a merge in the second regime has only fresh bytes
     residual = np.log(duration) - np.log(c0 + size / speed)
     return dict(result_ratio=float(np.median(ratio[small])),
                 result_ratio_large=float(np.median(ratio[fresh])),
@@ -94,13 +87,13 @@ WORKLOADS = {
     "base": ("", 25000, 4, 600),
     "index": (", INDEX idx_url url TYPE bloom_filter GRANULARITY 4", 25000, 4, 600),
     "projection": (", PROJECTION by_event (SELECT * ORDER BY event, ts)", 25000, 4, 600),
-    # small parts make small merges, without them the fixed cost per merge is not identifiable
+    # without small merges the fixed cost per merge is not identifiable
     "small": ("", 2000, 10, 300),
 }
 
 
 def report():
-    """Fits every workload from system.part_log, which keeps the history after the tables are dropped."""
+    """part_log keeps the history of the dropped tables"""
     result, all_merges = {}, {}
     for name in WORKLOADS:
         merges, inserts = collect(f"default.cal_{name}")
@@ -108,23 +101,20 @@ def report():
         all_merges[name] = merges
         result[name] = {**fit(merges), **insert_sizes(inserts)}
         if name == "projection":
-            # projection time over the rest of the merge, a cross-check of its δ
+            # projection time over the rest of the merge, to cross-check δ
             projection, total = merges[:, 4], merges[:, 0]
             result[name]["projection_time_ratio"] = float(np.median(projection / (total - projection)))
-    # the base cost line over small and large merges of the same schema
     result["base_and_small"] = fit(np.concatenate([all_merges["base"], all_merges["small"]]))
     result["model"] = model_params(result, all_merges["base"])
     return result
 
 
 def model_params(result, base_merges):
-    """The parameters the model takes: cost line, insert sizes, auxiliary structures, merged part size."""
     base, cost = result["base"], result["base_and_small"]
     model = {k: cost[k] for k in ("merge_fixed_seconds", "merge_bytes_per_second", "merge_noise_cv")}
     model.update({k: base[k] for k in ("insert_bytes_mean", "insert_bytes_cv")})
     for name in ("index", "projection"):
-        # s: extra bytes on disk per base byte; δ: extra merge time at equal base bytes, against the speed
-        # the model uses, so that the modelled table merges as fast as the measured one
+        # s: extra bytes per base byte; δ: extra time that makes the model merge at the measured speed
         storage = result[name]["insert_bytes_mean"] / base["insert_bytes_mean"] - 1
         time = (1 + storage) * cost["merge_bytes_per_second"] / result[name]["merge_bytes_per_second"] - 1
         model[f"{name}_aux"] = [storage, time]
@@ -133,8 +123,7 @@ def model_params(result, base_merges):
 
 
 def refit():
-    """Recomputes calibration.json from the stored merges of the base and index workloads, without a server.
-    The small and projection workloads kept only their fits, so those are taken as stored."""
+    """offline: only base and index kept their merges, the other fits stay as stored"""
     with open("calibration.json") as f:
         result = json.load(f)
     merges = {name: np.load(f"runs/calibration_{name}/merges.npy") for name in ("base", "index")}
@@ -163,7 +152,6 @@ def write_report():
 
 
 def calibrated_config(path="calibration.json", **overrides):
-    """Config with the merge cost and insert sizes measured on the live server."""
     from model import Config
 
     with open(path) as f:

@@ -1,5 +1,3 @@
-// The parameter panel: every control writes to the running model at once, and presets restart it.
-
 import { el, bytes, INT, NUM, NUM2 } from "./dom.js";
 import { AUX } from "../data/calibration.js";
 
@@ -98,7 +96,6 @@ const FIELDS = [
   { key: "aux_projection", label: "Проєкція", type: "toggle", get: c => c.aux.some(a => a === AUX.projection), set: (on, c) => ({ aux: toggle(c.aux, AUX.projection, on) }) },
 ];
 
-// differences between two configurations, as "label: a → b" lines for the comparison bar
 export function describeDifferences(a, b) {
   const label = key => ({ aux: "Індекс і проєкція", max_avg_part_size_for_too_many_parts: "Обмеження за середнім розміром", disk_bytes: "Місце для таблиці" })[key]
     || (FIELDS.find(f => f.key === key) || {}).label || key;
@@ -126,7 +123,6 @@ function toggle(list, item, on) {
 }
 
 export class Controls {
-  // lab: { config(), configure(changes), action(name), load(presetKey) }
   constructor(root, lab) {
     this.root = root;
     this.lab = lab;
@@ -168,10 +164,11 @@ export class Controls {
         input.addEventListener("input", () => {
           const v = f.round(f.fromSlider(+input.value));
           value.textContent = f.format(v);
+          input.setAttribute("aria-valuetext", value.textContent);
           this.apply(f, v);
         });
       } else if (f.type === "seg") {
-        input = el("div", { class: "seg", role: "group", id }, ...f.options.map(([v, t]) => el("button", { type: "button", "data-value": v }, t)));
+        input = el("div", { class: "seg", role: "group", id, "aria-label": f.label }, ...f.options.map(([v, t]) => el("button", { type: "button", "data-value": v }, t)));
         for (const b of input.children) b.addEventListener("click", () => this.apply(f, b.dataset.value));
       } else if (f.type === "select") {
         input = el("select", { id }, ...f.options.map(([v, t]) => el("option", { value: v }, t)));
@@ -191,13 +188,12 @@ export class Controls {
   apply(f, v) {
     const changes = { [f.key]: v };
     const c = this.lab.config();
-    // parts_to_throw_insert stays above parts_to_delay_insert, as the server requires
+    // the server requires parts_to_throw_insert above parts_to_delay_insert
     if (f.key === "parts_to_delay_insert" && v >= c.parts_to_throw_insert) changes.parts_to_throw_insert = v + 1;
     if (f.key === "parts_to_throw_insert" && v <= c.parts_to_delay_insert) changes.parts_to_delay_insert = Math.max(1, v - 1);
     this.lab.configure(changes);
   }
 
-  // shows the current configuration
   sync(presetKey) {
     const c = this.lab.config();
     if (presetKey) {
@@ -210,6 +206,7 @@ export class Controls {
       if (f.type === "range") {
         if (document.activeElement !== input) input.value = f.toSlider(c[f.key]);
         value.textContent = f.format(c[f.key]);
+        input.setAttribute("aria-valuetext", value.textContent);
         input.disabled = f.disabledWhen ? f.disabledWhen(c) : false;
       } else if (f.type === "seg") {
         for (const b of input.children) b.setAttribute("aria-pressed", String(b.dataset.value === String(c[f.key])));

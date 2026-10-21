@@ -1,5 +1,3 @@
-"""Fixes from the review of 2026-10-11: merged part size and cost, DROP PARTITION, the assignee counter,
-common random numbers for bursts and late inserts, and details of SimpleMergeSelector and throttling."""
 import math
 
 import numpy as np
@@ -53,10 +51,10 @@ def test_drop_partition_cancels_every_merge_and_keeps_the_parts_on_disk():
     running = len(table.pool.tasks)
     table.engine.run(120.0)  # the rotation at 120 s drops partition 0
     assert table.dropped_partitions[0][0] == 0 and running > 0 and table.merges_aborted == running
-    assert not table.pool.tasks and not any(p.merging for p in table.parts)  # the assignee sleeps after the DROP
+    assert not table.pool.tasks and not any(p.merging for p in table.parts)  # the assignee sleeps after the drop
     table.check_invariants()
     dropped = sum(p.size for p in table.history_parts if p.dropped)
-    assert table.outdated_bytes >= dropped > 0  # outdated for old_parts_lifetime, like merge sources
+    assert table.outdated_bytes >= dropped > 0
     table.engine.run(200)
     table.check_invariants()
     assert summary(table)["merges_aborted"] == table.merges_aborted
@@ -68,14 +66,13 @@ def five_parts(table):
 
 
 def test_assignee_counter_grows_after_merges():
-    # not started: no inserts and no assignee runs, only the merge below
+    # not started, so the merge below is the only event
     table = Table(Config())
     five_parts(table)
     table.no_work_count = 4
     assert table.try_assign_merge()
     table.engine.run()
     assert table.merges_done == 1 and table.no_work_count == 5
-    # a full pool skips the selection and postpones once
     full = Table(Config(threads=1, concurrency_ratio=1))
     full.pool.add(Task(0, 1e9, 0, []))
     five_parts(full)
@@ -98,23 +95,27 @@ def test_burst_adds_arrivals_without_moving_the_base_ones():
 
 
 def test_late_inserts_are_decided_at_arrival():
+    # slow merges throttle, so commits move and some cross a rotation; sizes identify the inserts
     def partitions(speed):
-        cfg = Config(insert_rate=20, insert_bytes_mean=MIB, partition_seconds=30, late_insert_fraction=0.3, merge_bytes_per_second=speed)
+        cfg = Config(insert_rate=20, insert_bytes_mean=MIB, partition_seconds=30, late_insert_fraction=0.3, merge_bytes_per_second=speed,
+                     parts_to_delay_insert=10, parts_to_throw_insert=10**5)
         table = run(cfg, until=200)
-        return [p.partition for p in sorted((p for p in table.history_parts if p.level == 0), key=lambda p: p.min_block)]
+        return table.delayed, sorted((p.size, p.partition) for p in table.history_parts if p.level == 0)
 
-    assert partitions(150e6) == partitions(20e6)
+    fast_delayed, fast = partitions(150e6)
+    slow_delayed, slow = partitions(2e6)
+    assert slow_delayed > fast_delayed and fast == slow
 
 
 def test_whole_second_ages():
     import selector
 
-    size = 10 * MIB  # two such parts pass the condition exactly when the base is lowered to 2, at the age `limit`
+    size = 10 * MIB  # two such parts need the base lowered to 2, which happens at age limit
     norm = selector._unit(math.log(1 + 2 * size), selector.MIN_SIZE_TO_LOWER_BASE_LOG, selector.MAX_SIZE_TO_LOWER_BASE_LOG)
     limit = selector._lerp(selector.AGE_TO_LOWER_BASE_AT_MIN_SIZE[1], selector.AGE_TO_LOWER_BASE_AT_MAX_SIZE[1], norm)
     whole = math.ceil(limit)
     now = 10.0**7
-    created = now - whole + (whole - limit + 1) / 2  # a float age just under the limit, whole seconds at it
+    created = now - whole + (whole - limit + 1) / 2  # float age just under limit, whole-second age at or above it
     assert now - created < limit <= math.floor(now) - math.floor(created)
     ps = [Part(i, i + 1, i + 1, 0, size, created) for i in range(2)]
     assert select_simple(ps, now, 10**12, Config()) == (0, 2)
@@ -122,10 +123,10 @@ def test_whole_second_ages():
 
 def test_max_parts_limit_details():
     cfg = Config(max_parts_to_merge_at_once=3)
-    assert _max_parts_to_merge(3000, cfg) == 3  # the min applies in every branch
+    assert _max_parts_to_merge(3000, cfg) == 3  # without the min this branch would give base = 5
     unlimited = Config(max_parts_to_merge_at_once=0)
     ps = [Part(i, i + 1, i + 1, 0, 10 * MIB, 0.0) for i in range(10)]
-    assert select_simple(ps, 1e7, 10**12, unlimited) == (0, 10)  # 0 means no limit
+    assert select_simple(ps, 1e7, 10**12, unlimited) == (0, 10)
 
 
 def test_tiered_merges_at_least_two_parts():
@@ -137,8 +138,8 @@ def test_tiered_merges_at_least_two_parts():
 def test_delay_rounds_like_clickhouse():
     cfg = Config(max_delay_to_insert=2, parts_to_delay_insert=1000, parts_to_throw_insert=3000)
     small = MIB
-    # static_cast<UInt64>(max_ms * (over / allowed)): 2000 * (1001 / 2000) = 1000.9999..., not 1001
-    assert check_insert(2000, 2000 * small, cfg) == int(2000 * (1001 / 2000))
+    # 2000 * (1001 / 2000) is 1000.999... in doubles, so 1000, not 1001
+    assert check_insert(2000, 2000 * small, cfg) == 1000
 
 
 def test_welch_does_not_judge_by_the_unsmoothed_end():
@@ -150,7 +151,7 @@ def test_welch_does_not_judge_by_the_unsmoothed_end():
 
 def test_welch_band_covers_the_noise_of_the_curve():
     rng = np.random.default_rng(1)
-    noisy = 10 + rng.normal(0, 1.5, 121)  # stationary from the start, but noisy: a 5% band would read noise as a trend
+    noisy = 10 + rng.normal(0, 1.5, 121)  # stationary but noisy: a plain 5% band would read the noise as a trend
     assert warmup_end(noisy) <= 6
     rising = np.concatenate([np.linspace(0, 20, 40), np.full(81, 20.0)]) + rng.normal(0, 0.5, 121)
     assert 30 <= warmup_end(rising) <= 45

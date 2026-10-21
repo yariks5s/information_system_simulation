@@ -1,5 +1,3 @@
-// What is selected (a part or a merge task) and why the selector chose the last merge.
-
 import { el, bytes, clock, duration, INT, NUM2, NUM3, PCT, partsText } from "./dom.js";
 
 const MIB = 1024 * 1024;
@@ -24,10 +22,14 @@ export class Inspector {
 
   select(selection) {
     this.selection = selection;
-    this.lastExplainKey = null;  // the model shown may have changed
+    this.fresh = true;
+    this.lastExplainKey = null;  // the shown model may have changed
   }
 
   draw(table) {
+    // a panel rebuilt every frame under the pointer would swallow clicks on its button
+    if (!this.fresh && this.root.matches(":hover, :focus-within")) { this.drawExplain(table); return; }
+    this.fresh = false;
     const s = this.selection, now = table.engine.now;
     if (!s) {
       this.root.replaceChildren(el("p", { class: "empty" }, "Клацніть на кусок у дереві або на задачу в пулі, щоб побачити подробиці. Записи журналу теж клікабельні."));
@@ -54,7 +56,7 @@ export class Inspector {
     } else if (s.task != null) {
       const task = table.pool.tasks.find(t => t.id === s.task);
       if (!task) {
-        this.root.replaceChildren(el("p", { class: "empty" }, `Злиття №${s.task} вже завершилось.`));
+        this.root.replaceChildren(el("p", { class: "empty" }, `Злиття №${s.task} вже не в пулі: воно завершилось або його скасовано.`));
       } else {
         const remaining = table.pool.remainingNow(task);
         const done = 1 - remaining / task.work;
@@ -98,7 +100,7 @@ export class Inspector {
     const lhs = (m.sumSize + m.count * 5 * MIB) / (m.maxSize + 5 * MIB);
     out.push(el("p", {}, `${partsText(m.count)} у партиції ${m.key}, позиції ${m.begin}–${m.end - 1}, разом ${bytes(m.sumSize)}.`), rows([
       ["умова допуску", `(Σ + k·5 МБ)/(max + 5 МБ) = ${NUM2.format(lhs)} ≥ base′ = ${NUM2.format(m.loweredBase)}`],
-      ["base′", `з ${NUM2.format(table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
+      ["base′", `з ${NUM2.format(m.base ?? table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
       ["оцінка", `(Σ + 5 МБ·k)/(k − 1.9) = ${bytes(m.score)}${m.aligned ? ", знижена за вирівнювання з лівим сусідом" : ""}`],
       ["відкинуто дрібних справа", String(m.trimmed || 0)],
       ["кандидатів", `${INT.format(m.allowed)} допустимих з ${INT.format(m.considered)}`],

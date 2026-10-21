@@ -1,6 +1,3 @@
-// The background pool: every task slot with the merge in it and how much of its work is done.
-// A task keeps its slot until it finishes, so the picture does not jump.
-
 import { el, bytes, PCT, partsText } from "./dom.js";
 
 const MAX_SHOWN = 64;
@@ -24,7 +21,7 @@ export class PoolView {
     this.selected = null;
   }
 
-  // keeps the task -> slot map in step with the pool
+  // a task keeps its slot until it finishes, so the picture does not jump
   sync(pool) {
     const live = new Set(pool.tasks.map(t => t.id));
     for (const [id, slot] of this.slotOf) if (!live.has(id)) { this.slotOf.delete(id); this.slots[slot] = null; }
@@ -35,7 +32,6 @@ export class PoolView {
       this.slots[slot] = t.id;
       this.slotOf.set(t.id, slot);
     }
-    // trailing free slots above the current capacity disappear
     while (this.slots.length > pool.maxTasks && this.slots[this.slots.length - 1] == null) this.slots.pop();
   }
 

@@ -1,7 +1,4 @@
-"""Drives dist/index.html in headless Chromium: plays, changes parameters live, steps, inspects, switches presets
-and tabs; fails on any page error. Saves screenshots to tests/shots/.
-
-    python3 tests/browser_check.py [light|dark]   (from app/, after tools/build.py)"""
+"""python3 tests/browser_check.py [light|dark], from app/ after tools/build.py"""
 import os
 import sys
 
@@ -29,7 +26,6 @@ with sync_playwright() as p:
     assert t > 15, f"model time after 3 s at x10: {t}"
     assert ev("lab.table.mergesDone") > 10
 
-    # live parameter change through the slider
     ev("""(() => { const s = document.getElementById('f-insert_rate'); s.value = 800; s.dispatchEvent(new Event('input')); })()""")
     rate = ev("lab.table.cfg.insert_rate")
     assert 400 < rate < 480, rate  # 2000^0.8 on the log slider
@@ -39,7 +35,6 @@ with sync_playwright() as p:
     page.keyboard.press("Space")
     assert not ev("lab.playing")
 
-    # step, then inspect a part and a task
     before = ev("lab.table.engine.events")
     page.click("#step")
     assert ev("lab.table.engine.events") > before
@@ -60,7 +55,6 @@ with sync_playwright() as p:
         assert "Злиття №" in text or "завершилось" in text, text
     assert "Останній запуск" in page.inner_text("#explain") and "умова допуску" in page.inner_text("#explain"), page.inner_text("#explain")
 
-    # actions and presets
     page.select_option("#preset", "partitions")
     assert ev("lab.playing")
     ev("lab.speed = 100")
@@ -83,17 +77,15 @@ with sync_playwright() as p:
     assert ev("lab.table.delayed") > 0
     page.screenshot(path=os.path.join(shots, f"lab_feedback_{scheme}.png"), full_page=True)
 
-    # the disk fills up: NOT_ENOUGH_SPACE, and the merge size limit follows the free space
     page.select_option("#preset", "disk")
     ev("lab.speed = 1000")
-    # merge entries can push an early NOT_ENOUGH_SPACE line out of the 400 kept ones, so wait for one in the log
+    # merge lines can push an early NOT_ENOUGH_SPACE out of the 400 kept log entries
     page.wait_for_function("lab.table.rejectedDisk > 0 && lab.log.s.entries.some(e => e.kind === 'disk' && e.text.includes('NOT_ENOUGH_SPACE'))", timeout=60000)
     page.keyboard.press("Space")
     ev("lab.table.checkInvariants()")
     assert ev("lab.table.diskUsed() <= lab.table.cfg.disk_bytes * (1 + 1e-9)")
     page.screenshot(path=os.path.join(shots, f"lab_disk_{scheme}.png"), full_page=True)
 
-    # comparison: B takes the panel's changes, A stays, both see the same inserts
     page.select_option("#preset", "normal")
     page.click("#compare")
     assert ev("lab.a !== null") and not page.locator("#compare-bar").is_hidden()

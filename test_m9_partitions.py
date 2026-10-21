@@ -1,4 +1,3 @@
-"""Partition rotation (RFC 3.9): invariants, retention, per-partition throttling, cross-partition choice."""
 from inputs import MIB
 from model import Config, Part, Table, simulate
 from selector import select_across
@@ -26,7 +25,7 @@ def test_invariants_with_rotation_late_inserts_and_retention():
 
     table.engine.run(max_events=2 * 10**5, after_event=check)
     assert len(table.dropped_partitions) >= 3 and table.merges_done > 0
-    assert most <= 3  # pending drops wait only for their running merges
+    assert most <= 3
     late = sum(1 for p in table.history_parts if p.level == 0 and p.partition < int(p.created_at // 120))
     assert late > 0
 
@@ -34,13 +33,13 @@ def test_invariants_with_rotation_late_inserts_and_retention():
 def test_retention_keeps_the_number_of_parts_bounded():
     config = Config(insert_rate=20, insert_bytes_mean=MIB, partition_seconds=60, retention_partitions=2, **NO_MERGES)
     table = run(config, until=600)
-    # no merges: a partition holds about 60 * 20 parts, and only the 2 newest are kept
-    assert len(table.parts) < 2 * 60 * 20 * 1.2 and len(table.dropped_partitions) == 9  # the rotation at t = 600 drops partition 8
+    # no merges, so a partition holds about 60 * 20 parts and only 2 are kept
+    assert len(table.parts) < 60 * 20 * 1.3 and len(table.dropped_partitions) == 9  # rotations at 120..600 s drop partitions 0..8
     assert table.dropped_bytes > 0
 
 
 def test_throttling_counts_the_largest_partition_not_all_parts():
-    # 40 inserts per partition, threshold 100: total parts grow far above it, but no partition reaches it
+    # about 40 inserts per 2 s partition, far below the threshold of 100
     config = Config(arrivals="closed", clients=1, think_time=0.05, partition_seconds=2.0, parts_to_delay_insert=100,
                     parts_to_throw_insert=200, **NO_MERGES)
     table = run(config, until=200)

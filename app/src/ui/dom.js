@@ -1,4 +1,4 @@
-// DOM helpers, number formatting and the page-wide tooltip. Text always goes in through text nodes.
+// text always goes in as text nodes, never as html
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -48,12 +48,10 @@ export function clock(seconds) {
 
 export function duration(seconds) {
   if (!isFinite(seconds)) return "∞";
-  if (seconds < 1) return INT.format(seconds * 1000) + " мс";
-  if (seconds < 60) return NUM.format(seconds) + " с";
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    return m + " хв " + Math.round(seconds - 60 * m) + " с";
-  }
+  if (Math.round(seconds * 1000) < 1000) return INT.format(seconds * 1000) + " мс";
+  if (seconds < 59.95) return NUM.format(seconds) + " с";
+  const total = Math.round(seconds);  // rounded once, so 119.6 s is 2 min 0 s, not 1 min 60 s
+  if (total < 3600) return Math.floor(total / 60) + " хв " + (total % 60) + " с";
   return NUM.format(seconds / 3600) + " год";
 }
 

@@ -1,5 +1,4 @@
-// Time series of a running model: one sample per second of model time, from an engine event that draws no
-// random numbers, so sampling does not change the model's trajectory.
+// sampling is an engine event that draws no random numbers, so it does not change the trajectory
 
 import { maxSourcePartsBytes } from "../sim/selector.js";
 
@@ -14,8 +13,7 @@ export class Sampler {
     table.engine.schedule(1, () => this.sample());
   }
 
-  // called by the lab for every model event; a delayed insert counts as delayed when it commits, so an insert that
-  // waits out its delay and then gets NOT_ENOUGH_SPACE counts only as rejected
+  // delays count at commit, so a delayed insert that then gets NOT_ENOUGH_SPACE counts only as rejected
   observe(type, t, ...data) {
     const c = this.counts;
     if (type === "arrival") {
@@ -55,7 +53,6 @@ export class Sampler {
     if (this.samples.length > this.capacity) this.samples.shift();
   }
 
-  // the last `seconds` samples
   window(seconds) {
     const n = this.samples.length;
     if (!n) return [];
@@ -65,7 +62,6 @@ export class Sampler {
     return this.samples.slice(i);
   }
 
-  // sums over the last `seconds` of model time
   totals(seconds) {
     const out = { accepted: 0, delayed: 0, rejected: 0, nospace: 0, inserted: 0, merged: 0, merges: 0, mergeTime: 0, span: 0 };
     for (const s of this.window(seconds)) {

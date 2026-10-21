@@ -1,5 +1,4 @@
-"""Load generator for the live server (RFC section 8): an open or closed insert stream into a
-MergeTree table, and a monitor that samples active parts and throttling counters every second."""
+"""insert load and a 1 s monitor for the live server (RFC section 8): python3 loadgen.py out_dir [options]"""
 import argparse
 import csv
 import json
@@ -16,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 URL = os.environ.get("SIM_CLICKHOUSE_URL", "http://127.0.0.1:19481/")
 TOO_MANY_PARTS = 252
 DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server", "data")
-MIN_FREE_BYTES = 20 * 2**30  # the disk is shared with other work on this machine
+MIN_FREE_BYTES = 20 * 2**30  # the disk is shared with other work
 EVENTS = ("DelayedInserts", "RejectedInserts", "DelayedInsertsMilliseconds")
 
 
@@ -37,17 +36,15 @@ def query(sql):
 
 
 def create_table(table, extra="", settings=""):
-    """extra: projections and indices; settings: more MergeTree settings, e.g. throttling thresholds."""
     query(f"DROP TABLE IF EXISTS {table} SYNC")
     query(f"""CREATE TABLE {table} (
         ts DateTime, user_id UInt64, event LowCardinality(String), url String, value Float64, payload String{extra})
         ENGINE = MergeTree ORDER BY (user_id, ts)
-        SETTINGS old_parts_lifetime = 10{", " + settings if settings else ""}""")  # outdated parts would otherwise hold the disk for 8 minutes
+        SETTINGS old_parts_lifetime = 10{", " + settings if settings else ""}""")  # else outdated parts hold the disk for 8 minutes
 
 
 def insert_sql(table, rows, async_insert=False):
-    # generated on the server in one block; async_insert is on by default since 26.2 and batches
-    # several inserts into one part, so it is set explicitly
+    # async_insert is on by default since 26.2 and would batch several inserts into one part
     return f"""INSERT INTO {table} SETTINGS async_insert = {int(async_insert)} SELECT now() - rand() % 86400, rand64() % 1000000,
         ['view', 'click', 'buy', 'scroll'][rand() % 4 + 1], concat('https://example.com/', toString(rand() % 100000)),
         rand() / 1e9, randomPrintableASCII(100) FROM numbers({rows})"""
@@ -63,7 +60,6 @@ def sample(table):
 
 
 def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=1.0, seed=1, extra="", settings="", async_insert=False):
-    """Returns the output directory with inserts.csv, monitor.csv and meta.json."""
     os.makedirs(out_dir, exist_ok=True)
     create_table(table, extra, settings)
     rng = random.Random(seed)
@@ -74,7 +70,8 @@ def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=
     stop = t0 + duration
     abort = threading.Event()
 
-    def insert(arrival):
+    def insert():
+        sent = time.monotonic()
         try:
             query(sql)
             status = "ok"
@@ -84,7 +81,7 @@ def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=
                 raise
             status = "rejected"
         with lock:
-            records.append((arrival - t0, time.monotonic() - t0, status))
+            records.append((sent - t0, time.monotonic() - t0, status))
 
     monitor = []
 
@@ -108,7 +105,7 @@ def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=
                 if at >= stop or abort.is_set():
                     break
                 time.sleep(max(0.0, at - time.monotonic()))
-                futures.append(pool.submit(insert, at))
+                futures.append(pool.submit(insert))
             for future in futures:
                 future.result()
     else:
@@ -118,7 +115,7 @@ def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=
                 time.sleep(local.expovariate(1 / think))
                 if time.monotonic() >= stop or abort.is_set():
                     return
-                insert(time.monotonic())
+                insert()
 
         threads = [threading.Thread(target=client, args=(c,)) for c in range(clients)]
         for thread in threads:

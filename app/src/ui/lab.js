@@ -1,8 +1,5 @@
-// The laboratory: a live model in the page, or two of them side by side (A and B) on the same random numbers.
-// The models run in the animation loop with a time budget per frame, so the page stays responsive; when they
-// cannot keep up, the real speed is shown next to the requested one.
-
 import { Table } from "../sim/model.js";
+import { checkInsert } from "../sim/throttle.js";
 import { CALIBRATED } from "../data/calibration.js";
 import { el, sv, bytes, clock, INT, NUM, NUM2, PCT, plural } from "./dom.js";
 import { Chart, S } from "./charts.js";
@@ -15,8 +12,7 @@ import { PartsTree } from "./tree.js";
 
 const FRAME_BUDGET_MS = 14;
 const SIGNIFICANT = new Set(["insert", "assign", "merged", "drop", "rotate", "arrival", "nospace"]);
-// aux keeps its items: the panel recognises the index and the projection by identity; a burst started from the
-// toolbar is an event of that run, not a parameter, so a new run does not replay it
+// the panel matches aux items by identity; a toolbar burst belongs to its run, so a new run drops it
 const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])], burst: null });
 const STEP_LIMIT = 600;  // model seconds a step may skip when nothing visible happens
 
@@ -30,7 +26,7 @@ export class Lab {
     this.seed = 1;
     this.b = null;  // the model the parameter panel edits
     this.a = null;  // the fixed baseline while comparing
-    this.view = "B";  // which model the tree, the pool and the log show
+    this.view = "B";
     this.$ = id => document.getElementById(id);
     this.tree = new PartsTree(this.$("tree"), { onPick: s => this.pick(s) });
     this.pool = new PoolView(this.$("pool"), { onPick: s => this.pick(s) });
@@ -55,7 +51,6 @@ export class Lab {
   shown() { return this.view === "A" && this.a ? this.a : this.b; }
   models() { return this.a ? [this.a, this.b] : [this.b]; }
 
-  // the API of the parameter panel
   config() { return this.b.table.cfg; }
 
   configure(changes) {
@@ -72,7 +67,6 @@ export class Lab {
     this.controls.sync(presetKey);
   }
 
-  // B and, when comparing, A from time zero
   start(bConfig, aConfig = null) {
     this.b = this.makeModel(bConfig);
     this.a = aConfig ? this.makeModel(aConfig) : null;
@@ -87,7 +81,7 @@ export class Lab {
     this.syncCompare();
     this.drawAll();
     this.slowUpdate();
-    if (!this.playing) this.toggle();  // start right away: the point is to watch it run
+    if (!this.playing) this.toggle();  // the point is to watch it run
   }
 
   makeModel(config) {
@@ -110,7 +104,6 @@ export class Lab {
     return m;
   }
 
-  // a new run from time zero with the current configurations (a preset choice resets them)
   restart() {
     this.start({ ...this.b.table.cfg, seed: this.seed }, this.a ? { ...this.a.table.cfg, seed: this.seed } : null);
   }
@@ -195,7 +188,7 @@ export class Lab {
     });
     this.$("window").addEventListener("change", e => { this.window = +e.target.value; this.updateCharts(); });
     document.addEventListener("keydown", e => {
-      // keys of a focused control stay with it: Space presses a button, opens a group, picks a log entry
+      // a focused control keeps its keys: space presses a button, opens a group, picks a log entry
       if (this.$("tab-lab").hidden || document.activeElement.closest("input, select, textarea, button, summary, a, [role=button]")) return;
       if (e.code === "Space") { e.preventDefault(); this.toggle(); }
       if (e.code === "ArrowRight") { e.preventDefault(); this.step(); }
@@ -211,13 +204,12 @@ export class Lab {
     if (this.playing) this.toggle();
   }
 
-  // the shown model to its next event that changes something visible, the other one to the same time
   step() {
     this.pause();
     const m = this.shown(), engine = m.table.engine, limit = engine.now + STEP_LIMIT;
     this.lastSignificant = null;
     while (!this.lastSignificant && engine.peekTime() <= limit) engine.step();
-    if (!this.lastSignificant) engine.run(limit);  // an idle model: at most STEP_LIMIT seconds, not a day of samples
+    if (!this.lastSignificant) engine.run(limit);  // an idle model moves STEP_LIMIT seconds, not a day of samples
     for (const other of this.models()) if (other !== m) other.table.engine.run(engine.now);
     this.drawAll();
     this.slowUpdate();
@@ -228,7 +220,7 @@ export class Lab {
     const main = this.b.table.engine, engines = this.models().map(m => m.table.engine);
     const target = main.now + dt * this.speed;
     const started = performance.now(), from = main.now;
-    // the earliest event of both models first, so that A and B stay at the same model time
+    // always step the model with the earlier event, so A and B stay at the same model time
     for (;;) {
       let e = engines[0];
       for (const x of engines) if (x.peekTime() < e.peekTime()) e = x;
@@ -244,7 +236,7 @@ export class Lab {
   pick(selection) {
     const tb = this.shown().table;
     if (selection && selection.task != null && !tb.pool.tasks.some(t => t.id === selection.task)) {
-      // a finished merge: show the part it made, if it still exists
+      // a finished merge: its part has the task's id
       const part = findPart(tb, selection.task);
       selection = part ? { part: part.id } : selection;
     }
@@ -270,28 +262,24 @@ export class Lab {
     this.$("speed-real").textContent = real;
   }
 
-  // things that need not change at frame rate
   slowUpdate() {
     this.log.render();
     this.updateCharts();
     if (!this.$("tab-model").hidden) this.updateDiagram();
   }
 
-  // live numbers on the model diagram
   updateDiagram() {
     const model = this.shown(), tb = model.table, cfg = tb.cfg, set = (id, text) => { this.$(id).textContent = text; };
     const w = model.sampler.totals(10), span = Math.max(1, w.span);
     set("live-clients", cfg.arrivals === "open" ? `${NUM.format(cfg.insert_rate)} вставок/с` : `${INT.format(tb.activeClients)} клієнтів`);
-    let n = 0;
-    for (const parts of tb.partitions.values()) n = Math.max(n, parts.length);
-    set("live-check", n >= cfg.parts_to_throw_insert ? `n = ${INT.format(n)}: відхилення`
-      : n >= cfg.parts_to_delay_insert ? `n = ${INT.format(n)}: затримка` : `n = ${INT.format(n)}: без затримки`);
+    const { n, delay } = throttleState(tb);
+    set("live-check", `n = ${INT.format(n)}: ` + (delay === null ? "відхилення" : delay > 0 ? "затримка"
+      : n >= cfg.parts_to_delay_insert ? "без затримки, кусок > 1 ГіБ" : "без затримки"));
     set("live-parts", `${INT.format(tb.partCount)} шт`);
     set("live-assignee", tb.assigneeAt === Infinity || tb.assigneeAt <= tb.engine.now ? `${INT.format(w.merges / span * 60)} злиттів/хв` : `спить ${NUM.format(tb.assigneeAt - tb.engine.now)} с`);
     const m = tb.lastMerge;
     set("live-selector", m ? (m.tiered ? `${m.count} шт` : `${m.count} шт, base′ ${NUM2.format(m.loweredBase)}`) : "—");
     set("live-pool", `${NUM.format(tb.pool.busyThreads())} з ${tb.pool.threads} потоків`);
-    // the rules on the diagram with the parameters of the running model
     const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert, maxMs = cfg.max_delay_to_insert * 1000;
     set("live-throw", `n ≥ ${INT.format(cfg.parts_to_throw_insert)}: відхилити (TOO_MANY_PARTS)`);
     set("live-delay", `n ≥ ${INT.format(cfg.parts_to_delay_insert)}: затримати на`);
@@ -299,7 +287,6 @@ export class Lab {
     set("live-base", `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
     set("live-pool-size", `${tb.pool.threads} потоків, ${tb.pool.maxTasks} задач`);
     set("live-cost", `(${NUM.format(cfg.merge_fixed_seconds * 1000)} мс + D/${NUM.format(cfg.merge_bytes_per_second / 1e6)} МБ/с)·ε·(1+δ)`);
-    // the newest partition as a row of parts: width by the logarithm of the size, colour by level
     const parts = [...tb.partitions.values()].pop() || [];
     const shown = parts.slice(-40);
     const weights = shown.map(p => Math.log10(Math.max(10, p.size / 1e5)));
@@ -321,8 +308,9 @@ export class Lab {
     text("v-parts", INT.format(b.parts));
     text("d-parts", a ? versus(a.parts, b.parts, v => INT.format(v))
       : b.partitions > 1 || cfg.partition_seconds ? `${b.partitions} ${plural(b.partitions, "партиція", "партиції", "партицій")}, найбільша ${INT.format(b.largest)}`
-      : b.largest >= cfg.parts_to_throw_insert ? `≥ ${INT.format(cfg.parts_to_throw_insert)}: вставки відхиляються`
-      : b.largest >= cfg.parts_to_delay_insert ? `≥ ${INT.format(cfg.parts_to_delay_insert)}: вставки гальмуються`
+      : b.throttle === null ? "вставки відхиляються"
+      : b.throttle > 0 ? `≥ ${INT.format(cfg.parts_to_delay_insert)}: вставки гальмуються`
+      : b.largest >= cfg.parts_to_delay_insert ? "гальмування вимкнене: середній кусок > 1 ГіБ"
       : `гальмування з ${INT.format(cfg.parts_to_delay_insert)}`);
     this.$("v-busy").replaceChildren(NUM.format(b.busy), el("small", {}, "з " + b.threads));
     meter(this.$("m-busy"), b.busy / b.threads, b.busy >= b.threads - 1e-9);
@@ -360,13 +348,13 @@ export class Lab {
 
   updateCharts() {
     const B = this.view_(this.b), cfgB = this.b.table.cfg;
-    // every chart spans the whole window, also when a series has no values for part of it
+    // every chart spans the whole window, even where a series has no values
     const x = { x: { ...this.xAxis, min: B.T.length ? B.T[0] : null, max: B.T.length ? B.T[B.T.length - 1] : null } };
     if (this.a) {
       const A = this.view_(this.a), cfgA = this.a.table.cfg;
       const pair = (metric, f) => [{ name: `A: ${metric}`, short: "A", color: S(1), points: f(A) }, { name: `B: ${metric}`, short: "B", color: S(2), points: f(B) }];
       const marks = (label, va, vb) => (va === vb ? [{ y: vb, label }] : [{ y: va, label: "A: " + label }, { y: vb, label: "B: " + label }]);
-      // the thresholds count the parts of one partition, so with several partitions the chart shows the largest one
+      // the thresholds count parts per partition, so with several partitions show the largest one
       const split = A.w.some(s => s.partitions > 1) || B.w.some(s => s.partitions > 1);
       this.charts.parts.setSeries(pair(split ? "найбільша партиція" : "усі куски", v => v.pts(v.col(split ? "largest" : "parts"))), { ...x,
         thresholds: [...marks("parts_to_delay_insert", cfgA.parts_to_delay_insert, cfgB.parts_to_delay_insert),
@@ -400,30 +388,34 @@ export class Lab {
     this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }], x);
   }
 
-  // the samples of one model in the chart window, with helpers to turn them into points
   view_(m) {
     const all = m.sampler.samples, w = m.sampler.window(this.window), offset = all.length - w.length, T = w.map(s => s.t / 60);
     const pts = arr => T.map((t, i) => [t, arr[i]]);
     const col = key => w.map(s => s[key]);
-    // trailing means over the whole sample history, so a value at a moment does not change as the window scrolls
+    // over the whole history, so a point does not change as the window scrolls
     const smooth = (key, k = 5) => {
       const prefix = [0];
       for (const s of all) prefix.push(prefix[prefix.length - 1] + s[key]);
       return w.map((_, i) => { const j = offset + i + 1, from = Math.max(0, j - k); return (prefix[j] - prefix[from]) / (j - from); });
     };
     const wa = () => { const merged = smooth("merged", 60), inserted = smooth("inserted", 60); return pts(merged.map((x, i) => (inserted[i] ? x / inserted[i] : null))); };
-    const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: a gap on the log axis
+    const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: 0 has no place on the log axis
     return { w, T, pts, col, smooth, wa, cap };
   }
 }
 
-// what the tiles show for one model
+// what the next insert would get, the same check the model runs
+function throttleState(tb) {
+  let key = null, n = -1;
+  for (const [k, parts] of tb.partitions) if (parts.length > n) { n = parts.length; key = k; }
+  return { n, delay: checkInsert(n, tb.partitionBytes.get(key), tb.cfg, tb.partCount) };
+}
+
 function metrics({ table: tb, sampler }) {
-  let largest = 0;
-  for (const parts of tb.partitions.values()) largest = Math.max(largest, parts.length);
+  const { n: largest, delay: throttle } = throttleState(tb);
   const w = sampler.totals(60), span = Math.max(1, w.span), arrivals = w.accepted + w.rejected + w.nospace;
   return {
-    parts: tb.partCount, largest, partitions: tb.partitions.size,
+    parts: tb.partCount, largest, throttle, partitions: tb.partitions.size,
     busy: tb.pool.busyThreads(), threads: tb.pool.threads, tasks: tb.pool.tasks.length, maxTasks: tb.pool.maxTasks,
     wa: w.inserted ? w.merged / w.inserted : null, waTotal: tb.insertedBytes ? tb.mergedBytes / tb.insertedBytes : null,
     rate: w.accepted / span,
@@ -435,7 +427,6 @@ function metrics({ table: tb, sampler }) {
   };
 }
 
-// "A: 120 · B +15%"
 function versus(a, b, format) {
   if (a == null) return "A: —";
   if (b == null || !a) return `A: ${format(a)}`;

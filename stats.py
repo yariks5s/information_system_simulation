@@ -1,5 +1,4 @@
-"""Probability-time characteristics (RFC section 6), computed after the run from the facts
-the model records, for any observation window [warmup, end] without re-running."""
+"""characteristics of RFC section 6 from recorded facts, for any window [warmup, end] without a rerun"""
 import math
 import multiprocessing
 from collections import defaultdict
@@ -9,8 +8,7 @@ from scipy import stats as sps
 
 
 def step_stats(changes, start, end, transform=None):
-    """Time-weighted statistics of a counter given (time, delta) changes starting from 0.
-    Returns (mean, {value: fraction of time}) over [start, end]."""
+    """time-weighted mean and {value: share of time} of a counter that starts at 0"""
     time_in = defaultdict(float)
     value, last = 0, start
     for t, delta in sorted(changes):
@@ -37,7 +35,6 @@ def quantiles(values, qs=(0.5, 0.9, 0.99)):
 
 
 def distribution_quantiles(fractions, qs=(0.5, 0.9, 0.99)):
-    """Quantiles of a discrete time-weighted distribution {value: fraction}."""
     values, weights = zip(*sorted(fractions.items()))
     cumulative = np.cumsum(weights)
     return {q: values[min(int(np.searchsorted(cumulative, q - 1e-12)), len(values) - 1)] for q in qs}
@@ -54,7 +51,6 @@ def parts_changes(table, level=None):
 
 
 def summary(table, warmup=0.0, end=None):
-    """Scalar characteristics over [warmup, end]."""
     end = table.engine.now if end is None else end
     length = end - warmup
     threads = table.cfg.threads
@@ -84,7 +80,7 @@ def summary(table, warmup=0.0, end=None):
         fresh_lifetime_quantiles=quantiles(lifetime),
         fresh_waiting_mean=float(waiting.mean()) if len(waiting) else math.nan,
         fresh_waiting_quantiles=quantiles(waiting),
-        fresh_rate=created / length,  # accepted inserts per second
+        fresh_rate=created / length,  # committed inserts per second
         merges_aborted=sum(1 for _, d, _ in table.history_aborted if warmup <= d <= end),
         merge_duration_mean=float(np.mean([d - a for a, d, _ in merges])) if merges else math.nan,
         merge_duration_quantiles=quantiles(np.array([d - a for a, d, _ in merges])),
@@ -96,27 +92,12 @@ def summary(table, warmup=0.0, end=None):
         delay_mean_ms=float(accepted.mean()) if len(accepted) else math.nan,
         delay_quantiles_ms=quantiles(accepted),
     )
-    # Little's law for the queue of fresh parts: L = λ W
+    # self-check: little's law L = λW on the fresh parts
     result["little_relative_error"] = abs(fresh_mean - result["fresh_rate"] * result["fresh_lifetime_mean"]) / fresh_mean if fresh_mean else math.nan
     return result
 
 
-def recovery_time(table, after, threshold):
-    """Time after `after` until the number of active parts first drops to `threshold` or below."""
-    return recovery_time_from(sorted(parts_changes(table)), after, threshold)
-
-
-def recovery_time_from(changes, after, threshold):
-    value = 0
-    for t, delta in changes:
-        value += delta
-        if t >= after and value <= threshold:
-            return t - after
-    return math.inf
-
-
 def series(table, grid, level=None):
-    """Number of active parts (of one level, if given) at each time of the grid."""
     changes = sorted(parts_changes(table, level))
     out, value, i = [], 0, 0
     for t in grid:
@@ -128,7 +109,6 @@ def series(table, grid, level=None):
 
 
 def largest_partition_series(table, grid):
-    """Number of active parts of the partition that has the most of them, at each time of the grid."""
     changes = []
     for part in table.history_parts:
         changes.append((part.created_at, part.partition, 1))
@@ -144,8 +124,6 @@ def largest_partition_series(table, grid):
     return np.array(out)
 
 
-# replications
-
 def _run(job):
     from model import Table
 
@@ -153,7 +131,7 @@ def _run(job):
     table = Table(config)
     table.start()
     table.engine.run(until)
-    # several warm-ups at once: the characteristics come from recorded facts, so this costs no extra run
+    # a tuple of warm-ups costs no extra run, summary only reads recorded facts
     result = {w: summary(table, w) for w in warmup} if isinstance(warmup, tuple) else summary(table, warmup)
     if grid is None:
         return result, None
@@ -161,7 +139,7 @@ def _run(job):
 
 
 def pmap(fn, jobs, workers=None):
-    """map over processes; fn must be a module-level function."""
+    """fn must be module-level, the pool pickles it by name"""
     jobs = list(jobs)
     if workers == 1:
         return list(map(fn, jobs))
@@ -170,13 +148,12 @@ def pmap(fn, jobs, workers=None):
 
 
 def replicate(config, until, warmup, seeds, grid=None, workers=None):
-    """Independent replications, one per seed; the same seeds across configurations give
-    common random numbers. Returns (summaries, series)."""
+    """one run per seed; the same seeds across configs give common random numbers"""
     return replicate_many([config], until, warmup, seeds, grid, workers)[0]
 
 
 def replicate_many(configs, until, warmup, seeds, grid=None, workers=None):
-    """replicate for several configurations in one process pool, so that all cores stay busy."""
+    """one pool for all configs keeps every core busy"""
     from dataclasses import replace
 
     seeds = list(seeds)
@@ -190,7 +167,6 @@ def replicate_many(configs, until, warmup, seeds, grid=None, workers=None):
 
 
 def confidence_interval(values, level=0.95):
-    """Mean and half-width of the Student t interval."""
     values = np.asarray(values, dtype=float)
     n = len(values)
     half = sps.t.ppf((1 + level) / 2, n - 1) * values.std(ddof=1) / math.sqrt(n) if n > 1 else math.inf
@@ -198,13 +174,12 @@ def confidence_interval(values, level=0.95):
 
 
 def paired_difference(a, b, key, level=0.95):
-    """Interval for the mean of key(b) - key(a) over replications that share seeds."""
+    """a and b must be in the same seed order"""
     return confidence_interval([key(y) - key(x) for x, y in zip(a, b)], level)
 
 
 def welch(curves, window):
-    """Welch's procedure (Law): average the replications, then a centred moving average of half-width `window`.
-    Only the first m - window points have a full right half, so the result is that much shorter."""
+    """welch's procedure (law): centred moving average of the replication mean, m - window points long"""
     mean = np.mean(curves, axis=0)
     smoothed = np.empty(max(0, len(mean) - window), dtype=float)
     for i in range(len(smoothed)):
@@ -214,20 +189,18 @@ def welch(curves, window):
 
 
 def warmup_end(curve, window=5, tolerance=0.05):
-    """Welch's procedure on a mean curve: index where the warm-up ends, or len(curve) - window if it never does.
-    The band is the relative tolerance, but at least 3 standard errors of a smoothed point: with few replications the
-    smoothed curve is still noisy, and a narrower band reads noise as a trend. The noise of the curve is estimated from
-    the spread of its first differences in the second half, which a slow trend barely affects."""
+    """index where the warm-up ends, or len(curve) - window if the curve never settles"""
     smoothed = welch([curve], window)
     target = smoothed[len(smoothed) // 2 :].mean()
     if not target:
         return 0
+    # std of first differences barely notices a slow trend
     noise = np.std(np.diff(np.asarray(curve, dtype=float)[len(curve) // 2 :])) / math.sqrt(2)
+    # band no narrower than 3 standard errors of a smoothed point, or noise reads as a trend
     return warmup_index(smoothed, max(tolerance, 3 * noise / math.sqrt(2 * window + 1) / target))
 
 
 def warmup_index(smoothed, tolerance=0.05):
-    """First index after which the smoothed curve stays within tolerance of its second-half mean."""
     target = smoothed[len(smoothed) // 2 :].mean()
     outside = np.nonzero(np.abs(smoothed - target) > tolerance * target)[0]
     return int(outside[-1] + 1) if len(outside) else 0

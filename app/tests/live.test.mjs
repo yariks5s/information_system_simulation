@@ -1,5 +1,4 @@
-// The JavaScript model with its own random numbers: invariants under live parameter changes, and statistics
-// close to the Python experiments (results/e1_load.json).
+// the js model on its own random numbers, unlike the python replay in diff.test.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -38,7 +37,6 @@ test("invariants hold while every parameter changes on the fly", () => {
   assert.ok(t.mergesDone > 1000 && t.delayed > 0 && t.droppedPartitions.length > 0 && t.rejectedDisk > 0);
 });
 
-// arrivals per second over the next `seconds` of model time
 function arrivalRate(table, seconds) {
   const before = table.arrivals, from = table.engine.now;
   table.engine.run(from + seconds, Infinity, () => table.checkInvariants());

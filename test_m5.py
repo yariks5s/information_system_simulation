@@ -1,4 +1,4 @@
-"""M5 acceptance (RFC section 10): the fit recovers known parameters; auxiliary structures scale size and time."""
+"""M5 acceptance, see RFC section 10"""
 import math
 
 import numpy as np
@@ -31,7 +31,7 @@ def test_fit_recovers_known_parameters():
 def test_aux_structures_scale_sizes_and_merge_time():
     plain = simulate(Config(insert_rate=1), 4 * 3600)
     aux = simulate(Config(insert_rate=1, aux=((1.0, 1.0),)), 4 * 3600)
-    # the same size stream, doubled on disk (each insert rounds once)
+    # sizes double, up to one byte of rounding per insert
     assert abs(aux.inserted_bytes - 2 * plain.inserted_bytes) <= aux.last_block
     ratio = stats.summary(aux, 3600)["merge_duration_mean"] / stats.summary(plain, 3600)["merge_duration_mean"]
     assert 1.6 < ratio < 2.4, ratio

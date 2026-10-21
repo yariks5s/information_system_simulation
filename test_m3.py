@@ -1,10 +1,10 @@
-"""M3 acceptance (RFC section 10): both scheduling policies give the expected completion times."""
+"""M3 acceptance, see RFC section 10"""
 from engine import Engine
 from pool import Pool, Task
 
 
 def run(policy, threads, arrivals):
-    """arrivals: (time, work, priority); returns {task id: completion time}."""
+    """arrivals are (time, work, priority), returns {task id: completion time}"""
     engine = Engine()
     done = {}
     pool = Pool(engine, threads, 32, policy, lambda task: done.__setitem__(task.id, engine.now))

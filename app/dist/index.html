@@ -295,8 +295,6 @@ table.data th { color: var(--text-secondary); font-weight: 600; }
 .loading { color: var(--text-muted); padding: 40px 0; text-align: center; }
 footer { color: var(--text-muted); font-size: 12px; max-width: 1440px; margin: 0 auto; padding: 0 32px 32px; }
 
-/* ---------- laboratory ---------- */
-
 .lab { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .lab { grid-template-columns: minmax(0, 1fr); } }
 .lab-main { display: grid; gap: 16px; min-width: 0; }
@@ -614,9 +612,6 @@ ol.log li.pick:hover { background: var(--surface-2); }
 "use strict";
 // ---- src/sim/engine.js
 const __module_0 = (() => {
-// Discrete-event engine: model clock and event calendar (RFC section 4).
-// The calendar is a binary heap ordered by (time, seq); seq keeps events at equal times in scheduling order.
-
 class Engine {
   constructor() {
     this.now = 0;
@@ -662,7 +657,6 @@ class Engine {
   }
 
   step() {
-    // one event; false if the calendar is empty
     if (!this.heap.length) return false;
     const item = this.pop();
     if (item.time < this.now) throw new Error("time went backwards");
@@ -682,6 +676,7 @@ class Engine {
   }
 }
 
+// seq breaks ties, so equal-time events fire in scheduling order like heapq in engine.py
 function less(a, b) {
   return a.time < b.time || (a.time === b.time && a.seq < b.seq);
 }
@@ -691,9 +686,7 @@ return { Engine };
 
 // ---- src/sim/pool.js
 const __module_1 = (() => {
-// Background merges and mutations executor (RFC 3.4) as a rate-allocation queue.
-// round_robin shares the threads equally among all tasks (processor sharing); shortest_task_first gives the
-// threads to the tasks with the smallest priority, the sum of source part bytes. One event per change of the task set.
+// rate-sharing executor: one event per change of the task set, not one per merge step
 
 const POLICIES = ["round_robin", "shortest_task_first"];
 
@@ -729,7 +722,6 @@ class Pool {
     this.reallocate();
   }
 
-  // removes every task, as when DROP PARTITION cancels the merges of the table; returns them
   cancelAll() {
     this.advance();
     const tasks = this.tasks;
@@ -738,7 +730,6 @@ class Pool {
     return tasks;
   }
 
-  // live changes from the UI
   configure({ threads, maxTasks, policy }) {
     this.advance();
     if (threads != null) this.threads = threads;
@@ -756,7 +747,7 @@ class Pool {
     this.updatedAt = this.engine.now;
   }
 
-  // remaining work of a task at the current model time, without advancing the pool
+  // read-only: an extra advance would change the float rounding of remaining
   remainingNow(task) {
     return task.remaining - task.rate * (this.engine.now - this.updatedAt);
   }
@@ -791,13 +782,10 @@ return { POLICIES, Pool };
 
 // ---- src/sim/rng.js
 const __module_2 = (() => {
-// Seeded random streams. One stream per source of randomness, like the Python model (RFC section 4),
-// so that changing one parameter does not shift the random numbers of the others.
-
 const NV_MAGICCONST = 4 * Math.exp(-0.5) / Math.sqrt(2.0);
 
 function hash(text) {
-  // cyrb128: four 32-bit words from a string
+  // cyrb128
   let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
   for (let i = 0; i < text.length; i++) {
     const k = text.charCodeAt(i);
@@ -818,7 +806,7 @@ class Rng {
     [this.a, this.b, this.c, this.d] = hash(String(seed));
   }
 
-  // sfc32, 53-bit doubles from two outputs
+  // sfc32; random builds 53-bit doubles from two outputs like python
   next32() {
     let { a, b, c, d } = this;
     const t = (((a + b) | 0) + d) | 0;
@@ -835,7 +823,7 @@ class Rng {
     return ((this.next32() >>> 5) * 67108864 + (this.next32() >>> 6)) / 9007199254740992;
   }
 
-  // the same algorithms as Python's random module
+  // same algorithms as python's random module
   expovariate(lambd) {
     return -Math.log(1.0 - this.random()) / lambd;
   }
@@ -858,6 +846,7 @@ class Rng {
   }
 }
 
+// one stream per source of randomness, so changing one parameter does not shift the others' draws
 function streams(seed, ...names) {
   const out = {};
   for (const name of names) out[name] = new Rng(`${seed}:${name}`);
@@ -865,13 +854,12 @@ function streams(seed, ...names) {
 }
 
 function lognormal(rng, mean, cv) {
-  // lognormal variate with the given mean and coefficient of variation
   if (cv === 0) return mean;
   const sigma2 = Math.log1p(cv * cv);
   return rng.lognormvariate(Math.log(mean) - sigma2 / 2, Math.sqrt(sigma2));
 }
 
-// Python's round(): half to even
+// python's round: half to even
 function roundHalfEven(x) {
   const r = Math.round(x);
   return Math.abs(x % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r;
@@ -882,15 +870,13 @@ return { Rng, streams, lognormal, roundHalfEven };
 
 // ---- src/sim/selector.js
 const __module_3 = (() => {
-// Merge selection (RFC 3.5, 3.6), a port of selector.py: SimpleMergeSelector with both heuristics, the
-// pool-dependent merge size limit, and the baseline tiered selector. Besides the chosen range it returns why
-// it was chosen, for the explanation panel of the UI.
+// port of selector.py; a candidate also carries why it won, for the explain panel
 
 const MIB = 1024 * 1024;
 const FIXED_COST = 5 * MIB;  // size_fixed_cost_to_add
 const MIN_SIZE_TO_LOWER_BASE_LOG = Math.log(1 + MIB);
 const MAX_SIZE_TO_LOWER_BASE_LOG = Math.log(1 + 100 * 1024 * MIB);
-const AGE_AT_MIN_SIZE = [10, 3600];  // (min_age, max_age) to lower base, seconds
+const AGE_AT_MIN_SIZE = [10, 3600];  // [min_age, max_age] to lower base, seconds
 const AGE_AT_MAX_SIZE = [10, 30 * 86400];
 const PARTS_TO_LOWER_BASE = [10, 50];
 const REMOVE_SMALL_AT_RIGHT_RATIO = 0.01;
@@ -898,14 +884,13 @@ const ALIGN_MIN_RATIO_TO_PREV = 0.9;
 const ALIGN_MAX_POWERS_OF_TWO = 0.5;
 const ALIGN_MAX_SCORE_ADJUSTMENT = 0.75;
 
-// CompactionStatistics: a merge starts only with this much free space per source byte, and reserves RESERVE_RATIO
 const SELECT_RATIO = 2.0;  // DISK_USAGE_COEFFICIENT_TO_SELECT
 const RESERVE_RATIO = 1.1;  // DISK_USAGE_COEFFICIENT_TO_RESERVE
 
 function maxSourcePartsBytes(maxTasks, scheduled, cfg, freeDisk = null) {
-  // CompactionStatistics::getMaxSourcePartsBytesForMerge; freeDisk is the free unreserved space, null for no limit
+  // CompactionStatistics::getMaxSourcePartsBytesForMerge; freeDisk null means no disk limit
   if (cfg.max_bytes_at_max_space === 0) return 0;
-  const free = Math.max(0, maxTasks - scheduled);  // a pool shrunk from the UI can hold more tasks than it has room for
+  const free = Math.max(0, maxTasks - scheduled);  // clamped: a pool shrunk live can hold more tasks than slots
   let limit;
   if (scheduled <= 1 || free >= cfg.free_entries_to_lower_max_size) limit = cfg.max_bytes_at_max_space;
   else {
@@ -923,7 +908,7 @@ function loweredBase(sumSize, minAge, rangeSize, base) {
   const minAgeToLower = lerp(AGE_AT_MIN_SIZE[0], AGE_AT_MAX_SIZE[0], sizeNormalized);
   const maxAgeToLower = lerp(AGE_AT_MIN_SIZE[1], AGE_AT_MAX_SIZE[1], sizeNormalized);
   const ageNormalized = unit(minAge, minAgeToLower, maxAgeToLower);
-  // ClickHouse passes the size of the mergeable range here, not of the whole partition
+  // clickhouse passes the size of the mergeable range here, not of the whole partition
   const partsNormalized = unit(rangeSize, PARTS_TO_LOWER_BASE[0], PARTS_TO_LOWER_BASE[1]);
   return lerp(base, 2.0, Math.min(1.0, ageNormalized + partsNormalized));
 }
@@ -950,7 +935,7 @@ function score(segment, begin, end, sumSize) {
 }
 
 function maxPartsToMerge(partCount, cfg) {
-  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once; 0 means no limit
+  // merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once
   const limit = cfg.max_parts_to_merge_at_once;
   if (!limit) return Infinity;
   if (partCount < cfg.base) return limit;
@@ -959,7 +944,7 @@ function maxPartsToMerge(partCount, cfg) {
   return Math.min(limit, Math.trunc(cfg.base + (limit - cfg.base) * (1 - Math.pow(fill, cfg.lower_max_parts_exponent))));
 }
 
-// smaller is better: score, then the rightmost partition, then the rightmost begin, then the shortest range
+// ties go right like in python; clickhouse breaks a tie across partitions by memory address
 function better(a, b) {
   if (a.score !== b.score) return a.score < b.score;
   if (a.key !== b.key) return a.key > b.key;
@@ -970,7 +955,7 @@ function better(a, b) {
 function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) {
   const n = segment.length;
   let best = null;
-  now = Math.floor(now);  // ages are whole seconds, as time_t in ClickHouse
+  now = Math.floor(now);  // ages are whole seconds, like time_t in clickhouse
   for (let begin = Math.max(0, n - cfg.window_size); begin < n; begin++) {
     let sumSize = segment[begin].size, maxSize = sumSize, minAge = now - Math.floor(segment[begin].createdAt);
     for (let end = begin + 2; end <= n; end++) {
@@ -982,7 +967,7 @@ function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) 
       if (age < minAge) minAge = age;
       if (sumSize > maxBytes) break;
       stats.considered++;
-      const base = loweredBase(sumSize, minAge, n, cfg.base);  // n: the length of this run of free parts
+      const base = loweredBase(sumSize, minAge, n, cfg.base);
       if ((sumSize + (end - begin) * FIXED_COST) / (maxSize + FIXED_COST) >= base) {
         stats.allowed++;
         const s = score(segment, begin, end, sumSize);
@@ -996,7 +981,6 @@ function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) 
 }
 
 function segments(parts) {
-  // maximal runs of parts that are not being merged, as [offset, parts]
   const out = [];
   let start = 0;
   for (let i = 0; i <= parts.length; i++) {
@@ -1009,7 +993,7 @@ function segments(parts) {
 }
 
 function selectTieredIn(parts, maxBytes, cfg) {
-  // baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level
+  // baseline lsm tiering to compare against
   const base = Math.max(2, Math.trunc(cfg.base));
   let run = 0;
   for (let i = 0; i < parts.length; i++) {
@@ -1025,8 +1009,6 @@ function selectTieredIn(parts, maxBytes, cfg) {
   return null;
 }
 
-// One merge over all partitions (a Map of key -> parts ordered by block, keys ascending).
-// Returns { key, begin, end, ...explanation } or null, plus the counters in `stats`.
 function selectAcross(partitions, now, maxBytes, cfg, selector, stats = { considered: 0, allowed: 0 }) {
   if (selector === "tiered") {
     for (const [key, parts] of partitions) {
@@ -1056,14 +1038,13 @@ return { SELECT_RATIO, RESERVE_RATIO, maxSourcePartsBytes, maxPartsToMerge, sele
 
 // ---- src/sim/throttle.js
 const __module_4 = (() => {
-// Insert throttling (RFC 3.3): MergeTreeData::delayInsertOrThrowIfNeeded. The delay grows linearly with the
-// number of parts over parts_to_delay_insert (the formula the doc string of max_delay_to_insert gives "starting from version 23.1").
+// MergeTreeData::delayInsertOrThrowIfNeeded with the linear delay of 23.1 and later
 
-// Returns null if the insert is rejected with TOO_MANY_PARTS, otherwise its delay in milliseconds.
-// partsCount and partitionBytes are of the partition with the most parts; totalParts counts all partitions.
+// null is TOO_MANY_PARTS, otherwise the delay in ms; the counts are of the partition with the most parts
 function checkInsert(partsCount, partitionBytes, cfg, totalParts = partsCount) {
   if (totalParts >= cfg.max_parts_in_total) return null;
   const average = partsCount ? Math.floor(partitionBytes / partsCount) : 0;
+  // large parts lift both the delay and the rejection
   if (cfg.max_avg_part_size_for_too_many_parts && average > cfg.max_avg_part_size_for_too_many_parts) return 0;
   if (partsCount >= cfg.parts_to_throw_insert) return null;
   if (!cfg.parts_to_delay_insert || partsCount < cfg.parts_to_delay_insert) return 0;
@@ -1079,10 +1060,7 @@ return { checkInsert };
 
 // ---- src/sim/model.js
 const __module_5 = (() => {
-// MergeTree background merges: state and event handlers, a port of model.py (RFC sections 3 and 5).
-// The same event order and the same draws from the same streams, so that with recorded random numbers it
-// reproduces the Python model event by event (tests/diff.test.mjs). On top of that: parameters can change while
-// the model runs, and an observer sees every event.
+// port of model.py: keep its event order and draws, tests/diff.test.mjs replays python against it
 
 const { Engine } = __module_0;
 const { Pool } = __module_1;
@@ -1093,27 +1071,23 @@ const MIB = 1024 * 1024;
 const DAY = 86400;
 
 const DEFAULTS = {
-  // input (RFC 3.2, 3.8)
   arrivals: "open",
   insert_rate: 2.0,
   rate_amplitude: 0.0,
   rate_peak_at: 14 * 3600,
-  burst: null,  // [start, duration, factor], factor > 1: a separate Poisson process on top (RFC 3.2)
+  burst: null,  // [start, duration, factor], an extra poisson process on top
   clients: 4,
   think_time: 2.0,
   insert_bytes_mean: 10 * MIB,
   insert_bytes_cv: 1.0,
-  // throttling (RFC 3.3)
   parts_to_delay_insert: 1000,
   max_delay_to_insert: 1,
   min_delay_to_insert_ms: 10,
   max_avg_part_size_for_too_many_parts: 1024 * MIB,
   max_parts_in_total: 100000,
-  // pool
   threads: 16,
   concurrency_ratio: 2,
   scheduling_policy: "round_robin",
-  // selector
   selector: "simple",
   base: 5.0,
   window_size: 1000,
@@ -1123,24 +1097,18 @@ const DEFAULTS = {
   max_bytes_at_max_space: 150 * 1024 * MIB,
   max_bytes_at_min_space: MIB,
   free_entries_to_lower_max_size: 8,
-  // merge cost
   merge_fixed_seconds: 0.05,
   merge_bytes_per_second: 150e6,
   merge_noise_cv: 0.3,
-  aux: [],  // [storage overhead s, merge time overhead δ] per projection or skip index
-  // size of a merged part (RFC 3.1): result_ratio of the sources, result_ratio_large once per byte in merges of at
-  // least large_merge_bytes (0: no such regime), which also take large_merge_time_factor longer (RFC 3.7)
+  aux: [],  // [storage overhead, merge time overhead] per projection or skip index
   result_ratio: 1.0,
   result_ratio_large: 1.0,
   large_merge_bytes: 0,
   large_merge_time_factor: 1.0,
-  // partitions (RFC 3.9)
   partition_seconds: 0.0,
   late_insert_fraction: 0.0,
   retention_partitions: 0,
-  // seconds between a trigger and the assignee run
   assign_latency: 0.0,
-  // disk (RFC 3.10): bytes the table may take (0: no limit), and how long merged parts stay on disk
   disk_bytes: 0,
   old_parts_lifetime: 480.0,
   seed: 1,
@@ -1149,43 +1117,42 @@ const DEFAULTS = {
 const STREAMS = ["arrival", "thinning", "size", "merge", "assignee", "partition", "burst_arrival", "burst_thinning", "burst_size", "burst_partition"];
 
 class Table {
-  // rng: optional { streams, client(c) } to replace the random streams, used by the differential test
+  // rng replaces the random streams; the diff test passes python's recorded draws
   constructor(config = {}, rng = null) {
     this.cfg = { ...DEFAULTS, ...config };
     const cfg = this.cfg;
     if (!["open", "closed"].includes(cfg.arrivals)) throw new Error(`unknown arrivals ${cfg.arrivals}`);
     if (!["simple", "simple_reference", "tiered"].includes(cfg.selector)) throw new Error(`unknown selector ${cfg.selector}`);
+    if (!(cfg.rate_amplitude >= 0 && cfg.rate_amplitude <= 1)) throw new Error("rate_amplitude must be in [0, 1]");
     this.engine = new Engine();
     this.rngSource = rng;
     this.rng = rng ? rng.streams : streams(cfg.seed, ...STREAMS);
     this.think = [];
     for (let c = 0; c < cfg.clients; c++) this.think.push(this.clientRng(c));
-    this.clientLive = [];  // a closed client has a pending think, arrival or delayed insert
+    this.clientLive = [];  // true while a closed client has an event pending, so a restart never starts a second loop
     this.pool = new Pool(this.engine, cfg.threads, cfg.threads * cfg.concurrency_ratio, cfg.scheduling_policy, task => this.onMergeDone(task));
-    this.partitions = new Map([[0, []]]);  // key -> active parts ordered by block number, keys ascending
+    this.partitions = new Map([[0, []]]);  // keys ascending, parts ordered by block
     this.partitionBytes = new Map([[0, 0]]);
     this.partCount = 0;
-    this.currentPartition = 0;  // the number of rotations so far
+    this.currentPartition = 0;
     this.droppedPartitions = [];
     this.nextId = 1;
     this.lastBlock = 0;
     this.insertedBytes = 0;
     this.droppedBytes = 0;
     this.droppedBlocks = 0;
-    this.savedBytes = 0;  // sources minus merged parts (RFC 3.1)
+    this.savedBytes = 0;  // sources minus merged parts
     this.arrivals = 0;
     this.inFlight = 0;
     this.rejected = 0;
     this.rejectedDisk = 0;  // NOT_ENOUGH_SPACE at commit
-    this.outdated = [];  // [outdated at, bytes] of merge sources and dropped parts still on disk, oldest first, from outdatedHead on
+    this.outdated = [];  // [outdated at, bytes], oldest first, entries before outdatedHead are gone
     this.outdatedHead = 0;
     this.outdatedBytes = 0;
     this.delayed = 0;
-    this.delayTotalMs = 0;
     this.mergedBytes = 0;
     this.mergesDone = 0;
     this.mergesAborted = 0;
-    this.selectorRuns = 0;
     this.noWorkCount = 0;
     this.assigneeAt = Infinity;
     this.assigneeToken = 0;
@@ -1194,10 +1161,10 @@ class Table {
     this.rotationToken = 0;
     this.activeClients = cfg.clients;
     this.insertsPaused = false;
-    this.diskLimitChanged = false;  // a limit lowered from the UI may be below the used space
-    this.lastSelection = null;  // the outcome of the last selector run, for the UI
-    this.lastMerge = null;  // why the last merge was chosen
-    this.observer = null;  // (type, ...data) on every event, see emit
+    this.diskLimitChanged = false;  // a limit changed live may already be below the used space
+    this.lastSelection = null;
+    this.lastMerge = null;
+    this.observer = null;  // (type, now, ...data)
     this.updateDerived();
   }
 
@@ -1218,7 +1185,6 @@ class Table {
     return cfg.insert_rate * (1 + cfg.rate_amplitude * Math.cos(2 * Math.PI * (t - cfg.rate_peak_at) / DAY));
   }
 
-  // the extra rate (factor - 1) λ(t) of a burst
   burstRate(t) {
     const b = this.cfg.burst;
     return b[0] <= t && t < b[0] + b[1] ? (b[2] - 1) * this.rate(t) : 0.0;
@@ -1247,10 +1213,8 @@ class Table {
     this.trigger();
   }
 
-  // inputs
-
   scheduleArrival() {
-    // a non-homogeneous Poisson process by thinning (Lewis, Shedler)
+    // non-homogeneous poisson process by thinning (lewis and shedler)
     if (this.insertsPaused || this.cfg.insert_rate <= 0) return;
     let t = this.engine.now;
     for (;;) {
@@ -1277,7 +1241,7 @@ class Table {
     this.engine.schedule(this.think[client].expovariate(1 / this.cfg.think_time), c => this.onInsertArrival(c), client);
   }
 
-  // closed clients still in the model, the others end their loop at the next event
+  // a client that does not stay ends its loop at its next event
   clientStays(client) {
     return client < this.activeClients && !this.insertsPaused && this.cfg.arrivals === "closed";
   }
@@ -1291,13 +1255,12 @@ class Table {
       return;
     }
     this.arrivals++;
-    // drawn before the throttling decision, so that the i-th insert is the same in every configuration:
-    // its size, and whether its data belongs to the previous partition
+    // drawn before throttling, so the i-th insert is the same in every configuration
     const sizeRng = burst ? this.rng.burst_size : this.rng.size;
     const size = Math.max(1, roundHalfEven(lognormal(sizeRng, this.cfg.insert_bytes_mean, this.cfg.insert_bytes_cv) * this.auxStorage));
     let target = this.currentPartition;
     if (this.cfg.partition_seconds && this.cfg.late_insert_fraction) {
-      if ((burst ? this.rng.burst_partition : this.rng.partition).random() < this.cfg.late_insert_fraction) target -= 1;
+      if ((burst ? this.rng.burst_partition : this.rng.partition).random() < this.cfg.late_insert_fraction && target > 0) target -= 1;
     }
     // getMaxPartsCountAndSizeForPartition: on a tie the first partition wins
     let key = null, most = -1;
@@ -1309,25 +1272,14 @@ class Table {
       if (client !== null) this.thinkThen(client);
       return;
     }
-    if (delay) {
-      this.delayed++;
-      this.delayTotalMs += delay;
-    }
+    if (delay) this.delayed++;
     this.inFlight++;
     this.engine.schedule(delay / 1000, (s, c, p, d) => this.onInsertCommit(s, c, p, d), size, client, target, delay);
   }
 
-  // the partition of the insert's data; data of an already dropped partition goes to the current one
-  partitionForInsert(target) {
-    const keys = [...this.partitions.keys()];
-    if (this.partitions.has(target) || target > keys[keys.length - 1]) return target;
-    return this.currentPartition;
-  }
-
-  onInsertCommit(size, client, target, delay) {
+  onInsertCommit(size, client, key, delay) {
     this.inFlight--;
-    const key = this.partitionForInsert(target);
-    // MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
+    // MergeTreeDataWriter reserves the part size, NOT_ENOUGH_SPACE otherwise
     if (this.cfg.disk_bytes && size > this.diskFree()) {
       this.rejectedDisk++;
       this.emit("nospace", size, client, delay);
@@ -1337,7 +1289,7 @@ class Table {
     this.lastBlock++;
     if (!this.partitions.has(key)) this.addPartition(key);
     const part = { id: this.nextId++, minBlock: this.lastBlock, maxBlock: this.lastBlock, level: 0, size, createdAt: this.engine.now,
-                   partition: key, blocks: 1, fresh: size, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
+                   partition: key, blocks: 1, fresh: size, merging: false, origin: null };
     this.partitions.get(key).push(part);
     this.partitionBytes.set(key, this.partitionBytes.get(key) + size);
     this.partCount++;
@@ -1353,12 +1305,10 @@ class Table {
   }
 
   addPartition(key) {
-    // keys stay ascending: a new key is the largest one (partitionForInsert never returns an older missing key)
-    this.partitions.set(key, []);
+    // like clickhouse, data of a missing partition creates it, even one dropped before
+    this.partitions = new Map([...this.partitions, [key, []]].sort((a, b) => a[0] - b[0]));
     this.partitionBytes.set(key, 0);
   }
-
-  // assignee
 
   trigger() {
     this.noWorkCount = Math.floor(this.noWorkCount / 2);
@@ -1367,7 +1317,7 @@ class Table {
 
   postpone() {
     this.noWorkCount++;
-    // std::pow saturates to inf in ClickHouse; the cap gives the same 600 s
+    // std::pow saturates to inf in clickhouse, the cap gives the same 600 s
     const delay = Math.min(600.0, 0.1 * Math.pow(1.1, Math.min(this.noWorkCount, 200))) + this.rng.assignee.uniform(0, 1);
     this.scheduleAssignee(delay);
     this.emit("sleep", delay);
@@ -1387,13 +1337,11 @@ class Table {
   }
 
   tryAssignMerge() {
-    // ClickHouse selects on a full pool too and postpones twice when the pool refuses the merge; skipping that
-    // selection changes only the backoff counter, which every insert halves (RFC 3.6)
+    // clickhouse still selects on a full pool, skipping it only shifts the backoff
     if (!this.pool.hasCapacity()) {
       this.lastSelection = { at: this.engine.now, outcome: "pool_full" };
       return false;
     }
-    this.selectorRuns++;
     const free = this.cfg.disk_bytes ? this.diskFree() : null;
     const maxBytes = maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg, free);
     const diskLimited = free !== null && maxBytes < maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg);
@@ -1411,7 +1359,6 @@ class Table {
     let size = 0, fresh = 0;
     for (const p of sources) {
       p.merging = true;
-      p.pickedAt = this.engine.now;
       size += p.size;
       fresh += p.fresh;
     }
@@ -1420,14 +1367,13 @@ class Table {
     const [resultSize, resultFresh] = this.mergedSize(size, fresh);
     const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0, resultSize, resultFresh };
     this.pool.add(task);
-    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited,
+    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited, base: this.cfg.base,
                                             freeEntries: this.pool.maxTasks - this.pool.tasks.length + 1, ...stats, ...found, work };
     this.emit("assign", task, found);
     return true;
   }
 
-  // thread-seconds of a merge before noise (RFC 3.7): the cost line is per byte of fresh data; a byte that went through
-  // a large merge holds 1 / result_ratio_large times more data, and large merges are slower
+  // thread-seconds before noise, a large-merged byte holds 1 / result_ratio_large bytes of data
   mergeWork(size, fresh) {
     const cfg = this.cfg;
     const data = (fresh + (size - fresh) / cfg.result_ratio_large) / this.auxStorage;
@@ -1436,7 +1382,6 @@ class Table {
     return work;
   }
 
-  // size of the merged part and its fresh bytes (RFC 3.1)
   mergedSize(size, fresh) {
     const cfg = this.cfg;
     if (cfg.large_merge_bytes && size >= cfg.large_merge_bytes) {
@@ -1444,8 +1389,6 @@ class Table {
     }
     return [Math.max(1, roundHalfEven(cfg.result_ratio * size)), roundHalfEven(cfg.result_ratio * fresh)];
   }
-
-  // merges
 
   onMergeDone(task) {
     const sources = task.payload;
@@ -1456,13 +1399,12 @@ class Table {
     for (const p of sources) { if (p.level > level) level = p.level; blocks += p.blocks; }
     level += 1;
     const merged = { id: task.id, minBlock: sources[0].minBlock, maxBlock: sources[sources.length - 1].maxBlock, level, size: task.resultSize,
-                     createdAt: this.engine.now, partition: key, blocks, fresh: task.resultFresh, merging: false, pickedAt: null, removedAt: null,
-                     dropped: false, origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
+                     createdAt: this.engine.now, partition: key, blocks, fresh: task.resultFresh, merging: false,
+                     origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
     parts.splice(begin, sources.length, merged);
     this.partCount -= sources.length - 1;
     this.partitionBytes.set(key, this.partitionBytes.get(key) + task.resultSize - task.priority);
     this.savedBytes += task.priority - task.resultSize;
-    for (const p of sources) p.removedAt = this.engine.now;
     this.removeOutdated();
     this.outdated.push([this.engine.now, task.priority]);
     this.outdatedBytes += task.priority;
@@ -1471,8 +1413,6 @@ class Table {
     this.noWorkCount++;  // MergePlainMergeTreeTask::onCompleted postpones the assignee after a successful merge
     this.emit("merged", task, merged);
   }
-
-  // partitions
 
   scheduleRotation() {
     this.rotationToken++;
@@ -1492,14 +1432,12 @@ class Table {
     }
   }
 
-  // DROP PARTITION: stopMergesAndWait cancels every running merge of the table first, then the parts become outdated
+  // DROP PARTITION: stopMergesAndWait cancels every merge of the table first
   drop(key) {
     this.cancelMerges();
     const parts = this.partitions.get(key);
     let size = 0;
     for (const p of parts) {
-      p.removedAt = this.engine.now;
-      p.dropped = true;
       size += p.size;
       this.droppedBlocks += p.blocks;
     }
@@ -1518,23 +1456,13 @@ class Table {
   cancelMerges() {
     const tasks = this.pool.cancelAll();
     for (const task of tasks) {
-      for (const p of task.payload) {
-        p.merging = false;
-        p.pickedAt = null;
-      }
+      for (const p of task.payload) p.merging = false;
       this.mergesAborted++;
       this.emit("cancel", task);
     }
-    if (tasks.length) {
-      // the cancelled tasks wake the assignee, which finds merges blocked by the DROP and goes to sleep
-      this.noWorkCount = Math.floor(this.noWorkCount / 2);
-      this.postpone();
-    }
   }
 
-  // disk (RFC 3.10)
-
-  // clearOldPartsFromFilesystem: outdated parts older than old_parts_lifetime leave the disk
+  // clearOldPartsFromFilesystem
   removeOutdated() {
     const q = this.outdated, lifetime = this.cfg.old_parts_lifetime, now = this.engine.now;
     while (this.outdatedHead < q.length && q[this.outdatedHead][0] + lifetime <= now) this.outdatedBytes -= q[this.outdatedHead++][1];
@@ -1544,7 +1472,7 @@ class Table {
     }
   }
 
-  // bytes written or reserved by running merges: MergeTask shrinks the reservation to (1 - progress) of the initial one
+  // MergeTask shrinks its reservation to (1 - progress) of the initial one
   mergingBytes() {
     let merging = 0;
     for (const task of this.pool.tasks) {
@@ -1554,7 +1482,6 @@ class Table {
     return merging;
   }
 
-  // active parts, outdated parts not yet removed, and running merges
   diskUsed() {
     this.removeOutdated();
     return this.insertedBytes - this.droppedBytes - this.savedBytes + this.outdatedBytes + this.mergingBytes();
@@ -1565,20 +1492,24 @@ class Table {
     return Math.max(0.0, this.cfg.disk_bytes - this.diskUsed());
   }
 
-  // live changes from the UI; each takes effect from the current model time
 
   configure(changes) {
     const cfg = this.cfg, old = { ...cfg };
     Object.assign(cfg, changes);
     this.updateDerived();
     const open = cfg.arrivals === "open";
-    if (["insert_rate", "rate_amplitude"].some(k => k in changes) && open) this.restartArrivals();
-    if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes) && open) this.restartBurst();
     if ("arrivals" in changes && changes.arrivals !== old.arrivals) {
-      this.arrivalToken++;
-      this.burstToken++;
-      if (open) this.restartArrivals();
-      else this.startIdleClients();
+      if (open) {
+        this.restartArrivals();
+        this.restartBurst();
+      } else {
+        this.arrivalToken++;
+        this.burstToken++;
+        this.startIdleClients();
+      }
+    } else if (open) {
+      if (["insert_rate", "rate_amplitude"].some(k => k in changes)) this.restartArrivals();
+      if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes)) this.restartBurst();
     }
     if ("clients" in changes) this.setClients(cfg.clients);
     if (["threads", "concurrency_ratio", "scheduling_policy"].some(k => k in changes)) {
@@ -1589,7 +1520,7 @@ class Table {
       if (cfg.partition_seconds) this.scheduleRotation();
     }
     if ("retention_partitions" in changes && cfg.retention_partitions) this.applyRetention();
-    if ("disk_bytes" in changes && changes.disk_bytes !== old.disk_bytes) this.diskLimitChanged = true;
+    if ("disk_bytes" in changes) this.diskLimitChanged = cfg.disk_bytes > 0 && this.diskUsed() > cfg.disk_bytes;
     this.trigger();  // new selector settings may allow a merge right away
   }
 
@@ -1645,7 +1576,7 @@ class Table {
     return true;
   }
 
-  // checks of RFC section 7
+  // RFC section 7
   checkInvariants() {
     const parts = this.parts;
     let size = 0, blocks = 0, merging = 0;
@@ -1661,19 +1592,19 @@ class Table {
       let bytes = 0;
       ps.forEach((p, i) => {
         bytes += p.size;
-        assert(p.partition === key && p.maxBlock >= p.minBlock && !p.dropped, "part fields");
+        assert(p.partition === key && p.maxBlock >= p.minBlock, "part fields");
         assert(p.blocks <= p.maxBlock - p.minBlock + 1 && p.fresh >= 0 && p.fresh <= p.size, "part contents");
         if (i) assert(ps[i - 1].maxBlock < p.minBlock, "parts ordered and disjoint");
       });
       assert(bytes === this.partitionBytes.get(key), "partition bytes");
     }
     if (this.partitions.size === 1 && !this.droppedPartitions.length) {
-      // one partition, nothing dropped: the parts cover the blocks 1..lastBlock without gaps
+      // gapless blocks, keyed on state because partition_seconds can change live
       let expected = 1;
       for (const p of parts) { assert(p.minBlock === expected, "blocks without gaps"); expected = p.maxBlock + 1; }
       assert(expected === this.lastBlock + 1, "all blocks covered");
     }
-    // the pool size is not checked: a pool shrunk from the UI keeps its running tasks, and Pool.add refuses new ones
+    // no pool size check: a pool shrunk live keeps its running tasks
     assert(this.pool.busyThreads() <= this.pool.threads + 1e-9, "busy threads");
     let sources = 0;
     for (const t of this.pool.tasks) {
@@ -1683,6 +1614,7 @@ class Table {
       sources += t.payload.length;
     }
     assert(sources === merging, "merging flags");
+    if (this.diskLimitChanged && this.diskUsed() <= this.cfg.disk_bytes) this.diskLimitChanged = false;
     if (this.cfg.disk_bytes && !this.diskLimitChanged) assert(this.diskUsed() <= this.cfg.disk_bytes * (1 + 1e-9), "disk limit");
   }
 }
@@ -1724,7 +1656,7 @@ return { CALIBRATED, AUX };
 
 // ---- src/ui/dom.js
 const __module_7 = (() => {
-// DOM helpers, number formatting and the page-wide tooltip. Text always goes in through text nodes.
+// text always goes in as text nodes, never as html
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -1774,12 +1706,10 @@ function clock(seconds) {
 
 function duration(seconds) {
   if (!isFinite(seconds)) return "∞";
-  if (seconds < 1) return INT.format(seconds * 1000) + " мс";
-  if (seconds < 60) return NUM.format(seconds) + " с";
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    return m + " хв " + Math.round(seconds - 60 * m) + " с";
-  }
+  if (Math.round(seconds * 1000) < 1000) return INT.format(seconds * 1000) + " мс";
+  if (seconds < 59.95) return NUM.format(seconds) + " с";
+  const total = Math.round(seconds);  // rounded once, so 119.6 s is 2 min 0 s, not 1 min 60 s
+  if (total < 3600) return Math.floor(total / 60) + " хв " + (total % 60) + " с";
   return NUM.format(seconds / 3600) + " год";
 }
 
@@ -1820,14 +1750,9 @@ return { el, sv, cssVar, NUM, NUM2, NUM3, INT, PCT, bytes, clock, duration, plur
 
 // ---- src/ui/charts.js
 const __module_8 = (() => {
-// SVG charts: line and scatter charts with a crosshair tooltip, horizontal bars, tables and cards.
-// Marks follow the dataviz rules: 2px lines, hairline grid, one axis, legend for two or more series,
-// direct end labels only when they do not collide, values in tooltips and in table views.
-
 const { el, sv, tooltip, NUM3, INT } = __module_7;
 const S = i => `var(--series-${i})`;
 
-// a point is drawn only when both coordinates are numbers; a missing value leaves a gap
 const drawable = p => p[1] != null && Number.isFinite(p[1]) && Number.isFinite(p[0]);
 
 function niceStep(min, max, count = 5) {
@@ -1856,9 +1781,6 @@ function logTicks(min, max) {
 }
 
 class Chart {
-  // options: height, x{label, log, min, max, format}, y{log, min, max, format}, series[{name, short, color, points, band, labels,
-  // labelOffset, markers, connect}], thresholds[{y, label}], mode "line" | "scatter", onClick(x), playhead,
-  // tooltipTitle(x), valueFormat(v), scatterRows(series, i)
   constructor(container, options) {
     this.container = container;
     this.o = options;
@@ -1914,7 +1836,7 @@ class Chart {
     if (!(hi > lo)) hi = lo + 1;
     if (axis.max == null && pad) {
       const step = niceStep(lo, hi * 1.04);
-      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick is at or above the largest value
+      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick at or above the largest value
     }
     return [lo, hi];
   }
@@ -1979,11 +1901,16 @@ class Chart {
         const bottom = s.band.slice().reverse().map(b => `${X(b[0])},${clampY(b[1])}`);
         svg.append(sv("polygon", { points: top.concat(bottom).join(" "), style: `fill:${s.color};opacity:0.12` }));
       }
-      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // with the original index, for labels
+      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // keeps the original index for labels
       const pts = kept.map(([p]) => p);
       if (!pts.length) continue;
       if (o.mode !== "scatter" || s.connect) {
-        const d = pts.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1)).join("");
+        let d = "", gap = true;  // a missing value starts a new subpath instead of bridging it
+        for (const p of s.points) {
+          if (!drawable(p)) { gap = true; continue; }
+          d += (gap ? "M" : "L") + X(p[0]).toFixed(1) + "," + clampY(p[1]).toFixed(1);
+          gap = false;
+        }
         svg.append(sv("path", { d, style: `fill:none;stroke:${s.color};stroke-width:2;stroke-linejoin:round;stroke-linecap:round` }));
       }
       if (o.mode === "scatter" || s.markers) {
@@ -2019,7 +1946,7 @@ class Chart {
       ends.push({ name: s.short || s.name, y: Y(pts[pts.length - 1][1]) });
     }
     ends.sort((a, b) => a.y - b.y);
-    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) return null;  // they collide: legend and tooltip only
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) return null;  // labels collide: legend and tooltip only
     return ends;
   }
 
@@ -2069,7 +1996,6 @@ class Chart {
 }
 
 class Bars {
-  // horizontal bars from zero, rounded at the data end
   constructor(container, options) {
     this.container = container;
     this.o = options;
@@ -2151,8 +2077,6 @@ return { S, niceTicks, Chart, Bars, table, card, ci, intFormat };
 
 // ---- src/ui/controls.js
 const __module_9 = (() => {
-// The parameter panel: every control writes to the running model at once, and presets restart it.
-
 const { el, bytes, INT, NUM, NUM2 } = __module_7;
 const { AUX } = __module_6;
 const MB = 1e6, MIB = 1024 * 1024, GIB = 1024 * MIB;
@@ -2250,7 +2174,6 @@ const FIELDS = [
   { key: "aux_projection", label: "Проєкція", type: "toggle", get: c => c.aux.some(a => a === AUX.projection), set: (on, c) => ({ aux: toggle(c.aux, AUX.projection, on) }) },
 ];
 
-// differences between two configurations, as "label: a → b" lines for the comparison bar
 function describeDifferences(a, b) {
   const label = key => ({ aux: "Індекс і проєкція", max_avg_part_size_for_too_many_parts: "Обмеження за середнім розміром", disk_bytes: "Місце для таблиці" })[key]
     || (FIELDS.find(f => f.key === key) || {}).label || key;
@@ -2278,7 +2201,6 @@ function toggle(list, item, on) {
 }
 
 class Controls {
-  // lab: { config(), configure(changes), action(name), load(presetKey) }
   constructor(root, lab) {
     this.root = root;
     this.lab = lab;
@@ -2320,10 +2242,11 @@ class Controls {
         input.addEventListener("input", () => {
           const v = f.round(f.fromSlider(+input.value));
           value.textContent = f.format(v);
+          input.setAttribute("aria-valuetext", value.textContent);
           this.apply(f, v);
         });
       } else if (f.type === "seg") {
-        input = el("div", { class: "seg", role: "group", id }, ...f.options.map(([v, t]) => el("button", { type: "button", "data-value": v }, t)));
+        input = el("div", { class: "seg", role: "group", id, "aria-label": f.label }, ...f.options.map(([v, t]) => el("button", { type: "button", "data-value": v }, t)));
         for (const b of input.children) b.addEventListener("click", () => this.apply(f, b.dataset.value));
       } else if (f.type === "select") {
         input = el("select", { id }, ...f.options.map(([v, t]) => el("option", { value: v }, t)));
@@ -2343,13 +2266,12 @@ class Controls {
   apply(f, v) {
     const changes = { [f.key]: v };
     const c = this.lab.config();
-    // parts_to_throw_insert stays above parts_to_delay_insert, as the server requires
+    // the server requires parts_to_throw_insert above parts_to_delay_insert
     if (f.key === "parts_to_delay_insert" && v >= c.parts_to_throw_insert) changes.parts_to_throw_insert = v + 1;
     if (f.key === "parts_to_throw_insert" && v <= c.parts_to_delay_insert) changes.parts_to_delay_insert = Math.max(1, v - 1);
     this.lab.configure(changes);
   }
 
-  // shows the current configuration
   sync(presetKey) {
     const c = this.lab.config();
     if (presetKey) {
@@ -2362,6 +2284,7 @@ class Controls {
       if (f.type === "range") {
         if (document.activeElement !== input) input.value = f.toSlider(c[f.key]);
         value.textContent = f.format(c[f.key]);
+        input.setAttribute("aria-valuetext", value.textContent);
         input.disabled = f.disabledWhen ? f.disabledWhen(c) : false;
       } else if (f.type === "seg") {
         for (const b of input.children) b.setAttribute("aria-pressed", String(b.dataset.value === String(c[f.key])));
@@ -2388,10 +2311,6 @@ return { PRESETS, describeDifferences, Controls };
 
 // ---- src/ui/eventlog.js
 const __module_10 = (() => {
-// The event log: what the model did, in words. Throttling is summed per second of model time so that a burst
-// of delayed inserts is one line, not thousands. Each model has its own entries (newState); the log shows one of them.
-// Only the kinds that are switched on are kept, so the hidden per-insert lines do not push the others out.
-
 const { el, bytes, clock, duration, INT, NUM2, partsText } = __module_7;
 const KINDS = {
   merge: "злиття",
@@ -2430,7 +2349,7 @@ class EventLog {
   }
 
   push(state, t, kind, text, ref = null) {
-    if (!this.enabled.has(kind)) return;
+    if (!this.enabled.has(kind)) return;  // hidden per-insert lines would push the others out
     add(state, { t, kind, text, ref });
     this.dirty = true;
   }
@@ -2448,6 +2367,7 @@ class EventLog {
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
     } else if (type === "arrival") {
       const delay = data[0];
+      // summed per model second, or a throttled burst is thousands of lines
       if ((delay === null || delay > 0) && this.enabled.has("throttle")) {
         const second = Math.floor(t);
         let e = state.throttleSecond;
@@ -2463,7 +2383,6 @@ class EventLog {
         e.entry.text = "Вставки за секунду: " + parts.join(", ");
       }
     } else if (type === "nospace" && this.enabled.has("disk")) {
-      // summed per second, like throttling
       const second = Math.floor(t);
       let e = state.diskSecond;
       if (!e || e.second !== second) {
@@ -2482,7 +2401,7 @@ class EventLog {
     } else if (type === "drop") {
       this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}; її куски лежать на диску ще old_parts_lifetime`);
     } else if (type === "cancel" && this.enabled.has("partition")) {
-      // DROP PARTITION cancels every running merge at once: one line per drop
+      // a drop cancels every running merge at once, so one line per drop
       let e = state.cancelled;
       if (!e || e.t !== t) {
         e = state.cancelled = { t, count: 0, entry: { t, kind: "partition", text: "", ref: null } };
@@ -2495,7 +2414,7 @@ class EventLog {
 
   render() {
     // a list rebuilt under the pointer would swallow clicks
-    if (!this.dirty || this.list.matches(":hover")) return;
+    if (!this.dirty || this.list.matches(":hover, :focus-within")) return;
     this.dirty = false;
     const shown = [];
     const entries = this.s.entries;
@@ -2527,8 +2446,6 @@ return { KINDS, EventLog };
 
 // ---- src/ui/inspector.js
 const __module_11 = (() => {
-// What is selected (a part or a merge task) and why the selector chose the last merge.
-
 const { el, bytes, clock, duration, INT, NUM2, NUM3, PCT, partsText } = __module_7;
 const MIB = 1024 * 1024;
 
@@ -2552,10 +2469,14 @@ class Inspector {
 
   select(selection) {
     this.selection = selection;
-    this.lastExplainKey = null;  // the model shown may have changed
+    this.fresh = true;
+    this.lastExplainKey = null;  // the shown model may have changed
   }
 
   draw(table) {
+    // a panel rebuilt every frame under the pointer would swallow clicks on its button
+    if (!this.fresh && this.root.matches(":hover, :focus-within")) { this.drawExplain(table); return; }
+    this.fresh = false;
     const s = this.selection, now = table.engine.now;
     if (!s) {
       this.root.replaceChildren(el("p", { class: "empty" }, "Клацніть на кусок у дереві або на задачу в пулі, щоб побачити подробиці. Записи журналу теж клікабельні."));
@@ -2582,7 +2503,7 @@ class Inspector {
     } else if (s.task != null) {
       const task = table.pool.tasks.find(t => t.id === s.task);
       if (!task) {
-        this.root.replaceChildren(el("p", { class: "empty" }, `Злиття №${s.task} вже завершилось.`));
+        this.root.replaceChildren(el("p", { class: "empty" }, `Злиття №${s.task} вже не в пулі: воно завершилось або його скасовано.`));
       } else {
         const remaining = table.pool.remainingNow(task);
         const done = 1 - remaining / task.work;
@@ -2626,7 +2547,7 @@ class Inspector {
     const lhs = (m.sumSize + m.count * 5 * MIB) / (m.maxSize + 5 * MIB);
     out.push(el("p", {}, `${partsText(m.count)} у партиції ${m.key}, позиції ${m.begin}–${m.end - 1}, разом ${bytes(m.sumSize)}.`), rows([
       ["умова допуску", `(Σ + k·5 МБ)/(max + 5 МБ) = ${NUM2.format(lhs)} ≥ base′ = ${NUM2.format(m.loweredBase)}`],
-      ["base′", `з ${NUM2.format(table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
+      ["base′", `з ${NUM2.format(m.base ?? table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
       ["оцінка", `(Σ + 5 МБ·k)/(k − 1.9) = ${bytes(m.score)}${m.aligned ? ", знижена за вирівнювання з лівим сусідом" : ""}`],
       ["відкинуто дрібних справа", String(m.trimmed || 0)],
       ["кандидатів", `${INT.format(m.allowed)} допустимих з ${INT.format(m.considered)}`],
@@ -2643,9 +2564,6 @@ return { findPart, Inspector };
 
 // ---- src/ui/poolview.js
 const __module_12 = (() => {
-// The background pool: every task slot with the merge in it and how much of its work is done.
-// A task keeps its slot until it finishes, so the picture does not jump.
-
 const { el, bytes, PCT, partsText } = __module_7;
 const MAX_SHOWN = 64;
 
@@ -2668,7 +2586,7 @@ class PoolView {
     this.selected = null;
   }
 
-  // keeps the task -> slot map in step with the pool
+  // a task keeps its slot until it finishes, so the picture does not jump
   sync(pool) {
     const live = new Set(pool.tasks.map(t => t.id));
     for (const [id, slot] of this.slotOf) if (!live.has(id)) { this.slotOf.delete(id); this.slots[slot] = null; }
@@ -2679,7 +2597,6 @@ class PoolView {
       this.slots[slot] = t.id;
       this.slotOf.set(t.id, slot);
     }
-    // trailing free slots above the current capacity disappear
     while (this.slots.length > pool.maxTasks && this.slots[this.slots.length - 1] == null) this.slots.pop();
   }
 
@@ -2728,8 +2645,7 @@ return { PoolView };
 
 // ---- src/ui/sampler.js
 const __module_13 = (() => {
-// Time series of a running model: one sample per second of model time, from an engine event that draws no
-// random numbers, so sampling does not change the model's trajectory.
+// sampling is an engine event that draws no random numbers, so it does not change the trajectory
 
 const { maxSourcePartsBytes } = __module_3;
 class Sampler {
@@ -2743,8 +2659,7 @@ class Sampler {
     table.engine.schedule(1, () => this.sample());
   }
 
-  // called by the lab for every model event; a delayed insert counts as delayed when it commits, so an insert that
-  // waits out its delay and then gets NOT_ENOUGH_SPACE counts only as rejected
+  // delays count at commit, so a delayed insert that then gets NOT_ENOUGH_SPACE counts only as rejected
   observe(type, t, ...data) {
     const c = this.counts;
     if (type === "arrival") {
@@ -2784,7 +2699,6 @@ class Sampler {
     if (this.samples.length > this.capacity) this.samples.shift();
   }
 
-  // the last `seconds` samples
   window(seconds) {
     const n = this.samples.length;
     if (!n) return [];
@@ -2794,7 +2708,6 @@ class Sampler {
     return this.samples.slice(i);
   }
 
-  // sums over the last `seconds` of model time
   totals(seconds) {
     const out = { accepted: 0, delayed: 0, rejected: 0, nospace: 0, inserted: 0, merged: 0, merges: 0, mergeTime: 0, span: 0 };
     for (const s of this.window(seconds)) {
@@ -2810,11 +2723,8 @@ return { Sampler };
 
 // ---- src/ui/tree.js
 const __module_14 = (() => {
-// The parts of every partition as rectangles: the row is the merge level, the horizontal position is which
-// inserts a part holds, on a log scale from the newest inserts at the right to the oldest at the left.
-
 const { cssVar, tooltip, bytes, duration, INT, plural } = __module_7;
-const MAX_BANDS = 8;  // newest partitions shown; with "keep all" the canvas would otherwise grow without limit
+const MAX_BANDS = 8;  // newest partitions only, with "keep all" the canvas would grow without limit
 
 class PartsTree {
   constructor(canvas, { onPick }) {
@@ -2875,7 +2785,7 @@ class PartsTree {
     this.rects = [];
     ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
     ctx.textBaseline = "middle";
-    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);  // newest on top
+    const keys = [...table.partitions.keys()].sort((a, b) => b - a).slice(0, MAX_BANDS);
     keys.forEach((key, b) => {
       const top = L.top + b * L.bandH;
       const bottom = top + L.levels * (L.rowH + L.gap);
@@ -2902,12 +2812,12 @@ class PartsTree {
         const y = bottom - (lv + 1) * (L.rowH + L.gap) + L.gap;
         const x0 = X(last - p.minBlock + 1), x1 = X(last - p.maxBlock);
         const w = x1 - x0;
-        const drawW = w > 3 ? w - 1 : Math.max(w, 0.8);  // 1px surface gap between neighbours
+        const drawW = w > 3 ? w - 1 : Math.max(w, 0.8);  // 1px gap between neighbours
         ctx.globalAlpha = sources && !sources.has(p) ? 0.28 : 1;
         ctx.fillStyle = colors[Math.min(p.level, 4)];
         ctx.fillRect(x0, y, drawW, L.rowH);
         if (p.level === 0 && drawW > 2 && !p.merging) {
-          // the lightest level is below 3:1 against the surface: an outline keeps it visible
+          // level 0 is below 3:1 contrast on the surface, the outline keeps it visible
           ctx.strokeStyle = colors[2];
           ctx.lineWidth = 1;
           ctx.strokeRect(x0 + 0.5, y + 0.5, drawW - 1, L.rowH - 1);
@@ -2980,11 +2890,8 @@ return { PartsTree };
 
 // ---- src/ui/lab.js
 const __module_15 = (() => {
-// The laboratory: a live model in the page, or two of them side by side (A and B) on the same random numbers.
-// The models run in the animation loop with a time budget per frame, so the page stays responsive; when they
-// cannot keep up, the real speed is shown next to the requested one.
-
 const { Table } = __module_5;
+const { checkInsert } = __module_4;
 const { CALIBRATED } = __module_6;
 const { el, sv, bytes, clock, INT, NUM, NUM2, PCT, plural } = __module_7;
 const { Chart, S } = __module_8;
@@ -2996,8 +2903,7 @@ const { Sampler } = __module_13;
 const { PartsTree } = __module_14;
 const FRAME_BUDGET_MS = 14;
 const SIGNIFICANT = new Set(["insert", "assign", "merged", "drop", "rotate", "arrival", "nospace"]);
-// aux keeps its items: the panel recognises the index and the projection by identity; a burst started from the
-// toolbar is an event of that run, not a parameter, so a new run does not replay it
+// the panel matches aux items by identity; a toolbar burst belongs to its run, so a new run drops it
 const copy = cfg => ({ ...cfg, aux: [...(cfg.aux || [])], burst: null });
 const STEP_LIMIT = 600;  // model seconds a step may skip when nothing visible happens
 
@@ -3011,7 +2917,7 @@ class Lab {
     this.seed = 1;
     this.b = null;  // the model the parameter panel edits
     this.a = null;  // the fixed baseline while comparing
-    this.view = "B";  // which model the tree, the pool and the log show
+    this.view = "B";
     this.$ = id => document.getElementById(id);
     this.tree = new PartsTree(this.$("tree"), { onPick: s => this.pick(s) });
     this.pool = new PoolView(this.$("pool"), { onPick: s => this.pick(s) });
@@ -3036,7 +2942,6 @@ class Lab {
   shown() { return this.view === "A" && this.a ? this.a : this.b; }
   models() { return this.a ? [this.a, this.b] : [this.b]; }
 
-  // the API of the parameter panel
   config() { return this.b.table.cfg; }
 
   configure(changes) {
@@ -3053,7 +2958,6 @@ class Lab {
     this.controls.sync(presetKey);
   }
 
-  // B and, when comparing, A from time zero
   start(bConfig, aConfig = null) {
     this.b = this.makeModel(bConfig);
     this.a = aConfig ? this.makeModel(aConfig) : null;
@@ -3068,7 +2972,7 @@ class Lab {
     this.syncCompare();
     this.drawAll();
     this.slowUpdate();
-    if (!this.playing) this.toggle();  // start right away: the point is to watch it run
+    if (!this.playing) this.toggle();  // the point is to watch it run
   }
 
   makeModel(config) {
@@ -3091,7 +2995,6 @@ class Lab {
     return m;
   }
 
-  // a new run from time zero with the current configurations (a preset choice resets them)
   restart() {
     this.start({ ...this.b.table.cfg, seed: this.seed }, this.a ? { ...this.a.table.cfg, seed: this.seed } : null);
   }
@@ -3176,7 +3079,7 @@ class Lab {
     });
     this.$("window").addEventListener("change", e => { this.window = +e.target.value; this.updateCharts(); });
     document.addEventListener("keydown", e => {
-      // keys of a focused control stay with it: Space presses a button, opens a group, picks a log entry
+      // a focused control keeps its keys: space presses a button, opens a group, picks a log entry
       if (this.$("tab-lab").hidden || document.activeElement.closest("input, select, textarea, button, summary, a, [role=button]")) return;
       if (e.code === "Space") { e.preventDefault(); this.toggle(); }
       if (e.code === "ArrowRight") { e.preventDefault(); this.step(); }
@@ -3192,13 +3095,12 @@ class Lab {
     if (this.playing) this.toggle();
   }
 
-  // the shown model to its next event that changes something visible, the other one to the same time
   step() {
     this.pause();
     const m = this.shown(), engine = m.table.engine, limit = engine.now + STEP_LIMIT;
     this.lastSignificant = null;
     while (!this.lastSignificant && engine.peekTime() <= limit) engine.step();
-    if (!this.lastSignificant) engine.run(limit);  // an idle model: at most STEP_LIMIT seconds, not a day of samples
+    if (!this.lastSignificant) engine.run(limit);  // an idle model moves STEP_LIMIT seconds, not a day of samples
     for (const other of this.models()) if (other !== m) other.table.engine.run(engine.now);
     this.drawAll();
     this.slowUpdate();
@@ -3209,7 +3111,7 @@ class Lab {
     const main = this.b.table.engine, engines = this.models().map(m => m.table.engine);
     const target = main.now + dt * this.speed;
     const started = performance.now(), from = main.now;
-    // the earliest event of both models first, so that A and B stay at the same model time
+    // always step the model with the earlier event, so A and B stay at the same model time
     for (;;) {
       let e = engines[0];
       for (const x of engines) if (x.peekTime() < e.peekTime()) e = x;
@@ -3225,7 +3127,7 @@ class Lab {
   pick(selection) {
     const tb = this.shown().table;
     if (selection && selection.task != null && !tb.pool.tasks.some(t => t.id === selection.task)) {
-      // a finished merge: show the part it made, if it still exists
+      // a finished merge: its part has the task's id
       const part = findPart(tb, selection.task);
       selection = part ? { part: part.id } : selection;
     }
@@ -3251,28 +3153,24 @@ class Lab {
     this.$("speed-real").textContent = real;
   }
 
-  // things that need not change at frame rate
   slowUpdate() {
     this.log.render();
     this.updateCharts();
     if (!this.$("tab-model").hidden) this.updateDiagram();
   }
 
-  // live numbers on the model diagram
   updateDiagram() {
     const model = this.shown(), tb = model.table, cfg = tb.cfg, set = (id, text) => { this.$(id).textContent = text; };
     const w = model.sampler.totals(10), span = Math.max(1, w.span);
     set("live-clients", cfg.arrivals === "open" ? `${NUM.format(cfg.insert_rate)} вставок/с` : `${INT.format(tb.activeClients)} клієнтів`);
-    let n = 0;
-    for (const parts of tb.partitions.values()) n = Math.max(n, parts.length);
-    set("live-check", n >= cfg.parts_to_throw_insert ? `n = ${INT.format(n)}: відхилення`
-      : n >= cfg.parts_to_delay_insert ? `n = ${INT.format(n)}: затримка` : `n = ${INT.format(n)}: без затримки`);
+    const { n, delay } = throttleState(tb);
+    set("live-check", `n = ${INT.format(n)}: ` + (delay === null ? "відхилення" : delay > 0 ? "затримка"
+      : n >= cfg.parts_to_delay_insert ? "без затримки, кусок > 1 ГіБ" : "без затримки"));
     set("live-parts", `${INT.format(tb.partCount)} шт`);
     set("live-assignee", tb.assigneeAt === Infinity || tb.assigneeAt <= tb.engine.now ? `${INT.format(w.merges / span * 60)} злиттів/хв` : `спить ${NUM.format(tb.assigneeAt - tb.engine.now)} с`);
     const m = tb.lastMerge;
     set("live-selector", m ? (m.tiered ? `${m.count} шт` : `${m.count} шт, base′ ${NUM2.format(m.loweredBase)}`) : "—");
     set("live-pool", `${NUM.format(tb.pool.busyThreads())} з ${tb.pool.threads} потоків`);
-    // the rules on the diagram with the parameters of the running model
     const allowed = cfg.parts_to_throw_insert - cfg.parts_to_delay_insert, maxMs = cfg.max_delay_to_insert * 1000;
     set("live-throw", `n ≥ ${INT.format(cfg.parts_to_throw_insert)}: відхилити (TOO_MANY_PARTS)`);
     set("live-delay", `n ≥ ${INT.format(cfg.parts_to_delay_insert)}: затримати на`);
@@ -3280,7 +3178,6 @@ class Lab {
     set("live-base", `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
     set("live-pool-size", `${tb.pool.threads} потоків, ${tb.pool.maxTasks} задач`);
     set("live-cost", `(${NUM.format(cfg.merge_fixed_seconds * 1000)} мс + D/${NUM.format(cfg.merge_bytes_per_second / 1e6)} МБ/с)·ε·(1+δ)`);
-    // the newest partition as a row of parts: width by the logarithm of the size, colour by level
     const parts = [...tb.partitions.values()].pop() || [];
     const shown = parts.slice(-40);
     const weights = shown.map(p => Math.log10(Math.max(10, p.size / 1e5)));
@@ -3302,8 +3199,9 @@ class Lab {
     text("v-parts", INT.format(b.parts));
     text("d-parts", a ? versus(a.parts, b.parts, v => INT.format(v))
       : b.partitions > 1 || cfg.partition_seconds ? `${b.partitions} ${plural(b.partitions, "партиція", "партиції", "партицій")}, найбільша ${INT.format(b.largest)}`
-      : b.largest >= cfg.parts_to_throw_insert ? `≥ ${INT.format(cfg.parts_to_throw_insert)}: вставки відхиляються`
-      : b.largest >= cfg.parts_to_delay_insert ? `≥ ${INT.format(cfg.parts_to_delay_insert)}: вставки гальмуються`
+      : b.throttle === null ? "вставки відхиляються"
+      : b.throttle > 0 ? `≥ ${INT.format(cfg.parts_to_delay_insert)}: вставки гальмуються`
+      : b.largest >= cfg.parts_to_delay_insert ? "гальмування вимкнене: середній кусок > 1 ГіБ"
       : `гальмування з ${INT.format(cfg.parts_to_delay_insert)}`);
     this.$("v-busy").replaceChildren(NUM.format(b.busy), el("small", {}, "з " + b.threads));
     meter(this.$("m-busy"), b.busy / b.threads, b.busy >= b.threads - 1e-9);
@@ -3341,13 +3239,13 @@ class Lab {
 
   updateCharts() {
     const B = this.view_(this.b), cfgB = this.b.table.cfg;
-    // every chart spans the whole window, also when a series has no values for part of it
+    // every chart spans the whole window, even where a series has no values
     const x = { x: { ...this.xAxis, min: B.T.length ? B.T[0] : null, max: B.T.length ? B.T[B.T.length - 1] : null } };
     if (this.a) {
       const A = this.view_(this.a), cfgA = this.a.table.cfg;
       const pair = (metric, f) => [{ name: `A: ${metric}`, short: "A", color: S(1), points: f(A) }, { name: `B: ${metric}`, short: "B", color: S(2), points: f(B) }];
       const marks = (label, va, vb) => (va === vb ? [{ y: vb, label }] : [{ y: va, label: "A: " + label }, { y: vb, label: "B: " + label }]);
-      // the thresholds count the parts of one partition, so with several partitions the chart shows the largest one
+      // the thresholds count parts per partition, so with several partitions show the largest one
       const split = A.w.some(s => s.partitions > 1) || B.w.some(s => s.partitions > 1);
       this.charts.parts.setSeries(pair(split ? "найбільша партиція" : "усі куски", v => v.pts(v.col(split ? "largest" : "parts"))), { ...x,
         thresholds: [...marks("parts_to_delay_insert", cfgA.parts_to_delay_insert, cfgB.parts_to_delay_insert),
@@ -3381,30 +3279,34 @@ class Lab {
     this.charts.cap.setSeries([{ name: "межа розміру злиття", color: S(1), points: B.cap() }], x);
   }
 
-  // the samples of one model in the chart window, with helpers to turn them into points
   view_(m) {
     const all = m.sampler.samples, w = m.sampler.window(this.window), offset = all.length - w.length, T = w.map(s => s.t / 60);
     const pts = arr => T.map((t, i) => [t, arr[i]]);
     const col = key => w.map(s => s[key]);
-    // trailing means over the whole sample history, so a value at a moment does not change as the window scrolls
+    // over the whole history, so a point does not change as the window scrolls
     const smooth = (key, k = 5) => {
       const prefix = [0];
       for (const s of all) prefix.push(prefix[prefix.length - 1] + s[key]);
       return w.map((_, i) => { const j = offset + i + 1, from = Math.max(0, j - k); return (prefix[j] - prefix[from]) / (j - from); });
     };
     const wa = () => { const merged = smooth("merged", 60), inserted = smooth("inserted", 60); return pts(merged.map((x, i) => (inserted[i] ? x / inserted[i] : null))); };
-    const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: a gap on the log axis
+    const cap = () => pts(col("cap").map(v => (v > 0 ? v : null)));  // no merge fits: 0 has no place on the log axis
     return { w, T, pts, col, smooth, wa, cap };
   }
 }
 
-// what the tiles show for one model
+// what the next insert would get, the same check the model runs
+function throttleState(tb) {
+  let key = null, n = -1;
+  for (const [k, parts] of tb.partitions) if (parts.length > n) { n = parts.length; key = k; }
+  return { n, delay: checkInsert(n, tb.partitionBytes.get(key), tb.cfg, tb.partCount) };
+}
+
 function metrics({ table: tb, sampler }) {
-  let largest = 0;
-  for (const parts of tb.partitions.values()) largest = Math.max(largest, parts.length);
+  const { n: largest, delay: throttle } = throttleState(tb);
   const w = sampler.totals(60), span = Math.max(1, w.span), arrivals = w.accepted + w.rejected + w.nospace;
   return {
-    parts: tb.partCount, largest, partitions: tb.partitions.size,
+    parts: tb.partCount, largest, throttle, partitions: tb.partitions.size,
     busy: tb.pool.busyThreads(), threads: tb.pool.threads, tasks: tb.pool.tasks.length, maxTasks: tb.pool.maxTasks,
     wa: w.inserted ? w.merged / w.inserted : null, waTotal: tb.insertedBytes ? tb.mergedBytes / tb.insertedBytes : null,
     rate: w.accepted / span,
@@ -3416,7 +3318,6 @@ function metrics({ table: tb, sampler }) {
   };
 }
 
-// "A: 120 · B +15%"
 function versus(a, b, format) {
   if (a == null) return "A: —";
   if (b == null || !a) return `A: ${format(a)}`;
@@ -3435,20 +3336,17 @@ return { Lab };
 // ---- src/data/results.js
 const __module_16 = (() => {
 // generated by tools/export_data.py from results/*.json and runs/validation_*.json
-const RESULTS = {"e1":{"rates":[25,50,100,150,200,225,250,275,300],"metrics":{"parts_mean":[[30.443465,0.223777],[53.167277,0.594353],[85.727586,0.999626],[115.818183,0.507629],[250.779824,10.466558],[518.960614,14.722187],[618.725605,6.571013],[868.14861,14.691658],[1382.459202,21.170112]],"parts_quantiles_0.99":[[46.9,0.527837],[72.1,0.787254],[107.1,1.798696],[140.9,0.856439],[398.2,21.185517],[630.2,24.621398],[804.8,14.029428],[1214.5,27.953384],[2071.5,27.022549]],"busy_threads_mean":[[2.178746,0.015646],[4.352119,0.023789],[9.08194,0.152855],[13.38474,0.122372],[15.990619,0.004944],[16.0,0.0],[16.0,0.0],[16.0,0.0],[16.0,0.0]],"all_threads_busy":[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.084884,0.014439],[0.993044,0.003619],[1.0,0.0],[1.0,0.0],[1.0,0.0],[1.0,0.0]],"write_amplification":[[4.65224,0.022296],[4.530529,0.052116],[4.688704,0.074774],[4.613695,0.041206],[4.166259,0.030068],[3.854578,0.037627],[3.560241,0.008157],[3.264103,0.007124],[3.037246,0.005431]],"fresh_waiting_mean":[[0.10317,0.000442],[0.053392,0.000153],[0.027629,6.3e-05],[0.018645,3.2e-05],[0.017601,0.00093],[0.044032,0.000912],[0.044902,0.00044],[0.046484,0.000478],[0.046787,0.000326]],"fresh_waiting_quantiles_0.99":[[0.400178,0.001645],[0.201052,0.001012],[0.101555,0.000363],[0.070071,0.000165],[0.132258,0.036423],[0.532915,0.010697],[0.552067,0.005846],[0.574083,0.007222],[0.583144,0.006191]],"merge_duration_mean":[[0.501755,0.004432],[0.497167,0.0055],[0.495812,0.0093],[0.479867,0.005213],[0.693486,0.01937],[0.821908,0.006925],[0.755726,0.002323],[0.688804,0.001947],[0.634851,0.000829]],"merge_duration_quantiles_0.99":[[3.367946,0.040847],[3.639796,0.025565],[4.501645,0.010623],[4.85152,0.015799],[8.225141,0.210429],[9.881887,0.149272],[9.942602,0.11273],[9.920304,0.059917],[9.607975,0.068411]],"fresh_lifetime_mean":[[0.273023,0.000772],[0.202691,0.000701],[0.139043,0.000288],[0.119946,6.9e-05],[0.187827,0.006522],[0.297813,0.00217],[0.303261,0.000935],[0.309503,0.001112],[0.313395,0.00066]]},"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"series":{"25":[0.0,22.3,20.3,25.5,21.0,26.9,21.8,25.7,26.9,24.2,25.9,25.1,31.6,32.2,32.7,26.3,28.4,24.4,26.9,26.0,29.8,26.4,25.0,31.4,31.0,33.1,31.5,25.5,29.8,31.2,30.0,29.2,31.8,32.0,34.1,35.4,28.9,31.1,31.0,29.9,29.5,32.4,31.4,34.6,35.8,32.0,29.4,30.5,30.7,31.0,31.8,29.0,32.2,32.1,37.8,36.3,31.9,29.6,31.7,30.1,31.9],"50":[0.0,37.5,41.8,43.4,43.7,46.6,44.3,43.4,48.8,45.9,48.8,46.2,49.8,49.5,54.7,48.4,54.8,50.0,48.6,46.8,51.4,52.6,51.3,51.2,55.7,56.0,53.7,53.0,56.6,52.2,53.2,51.7,44.7,55.4,56.5,49.8,55.6,56.1,53.6,53.6,48.9,50.1,48.0,48.6,51.0,58.3,58.8,56.7,57.8,54.6,49.1,51.5,49.2,48.0,52.7,53.4,57.2,55.2,57.6,53.4,48.3],"100":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0],"150":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7],"200":[0.0,97.0,112.1,117.3,120.8,137.5,138.2,141.7,144.1,158.8,152.6,161.4,157.9,167.1,169.0,168.2,172.4,179.5,185.1,185.5,191.6,202.0,200.3,207.2,195.1,203.5,221.8,237.3,233.1,230.3,237.6,216.1,232.4,237.7,252.6,246.8,254.6,262.7,269.8,271.1,260.8,276.3,290.3,275.4,303.2,294.4,284.5,286.4,304.5,300.0,312.6,327.9,309.6,330.7,316.5,346.0,325.8,329.7,344.9,327.9,346.3],"225":[0.0,117.1,126.2,137.7,177.1,219.3,244.0,237.5,278.7,301.3,301.2,336.6,331.3,336.6,339.3,339.8,365.2,367.7,374.5,389.3,380.8,393.9,391.1,422.8,409.7,429.7,411.2,442.7,446.9,436.1,442.8,460.7,456.0,485.0,467.4,471.5,493.0,484.6,499.2,508.2,499.1,486.6,499.9,509.9,524.3,536.9,554.7,513.1,550.2,525.5,545.2,548.7,541.5,555.0,554.2,553.9,565.2,537.3,546.9,549.3,562.3],"250":[0.0,140.9,184.8,230.6,283.6,327.7,362.5,399.6,436.6,453.2,457.1,476.6,496.6,481.8,480.3,501.5,491.8,498.6,510.3,543.0,519.8,529.3,527.4,560.4,550.6,541.8,538.7,564.9,579.0,564.5,578.1,575.1,593.6,601.2,611.2,634.1,605.1,657.0,643.7,638.4,650.3,656.6,653.1,667.2,672.4,669.8,691.9,694.8,718.9,700.0,713.3,725.7,745.4,734.0,728.2,733.9,726.7,742.1,768.1,747.0,753.5],"275":[0.0,187.1,273.7,348.6,390.0,438.2,496.7,519.6,517.6,554.8,552.0,571.0,583.9,581.6,598.6,623.0,613.8,611.7,668.8,654.5,664.0,693.4,734.1,707.6,748.9,719.3,739.4,765.7,774.5,788.8,817.0,810.9,844.4,816.2,844.4,881.6,885.1,899.3,915.3,919.8,917.8,937.7,964.2,950.0,980.0,994.4,1016.3,990.6,1049.8,1033.6,1066.0,1076.3,1071.8,1087.5,1124.2,1105.5,1154.5,1156.0,1172.8,1172.5,1196.8],"300":[0.0,265.9,404.6,430.9,483.0,522.4,563.1,601.2,624.5,657.1,673.5,719.0,756.1,765.1,795.8,844.6,879.7,883.3,943.3,934.4,960.3,1003.4,1015.1,1038.7,1075.0,1109.8,1156.7,1175.7,1185.3,1204.5,1235.9,1264.0,1301.5,1322.1,1358.1,1366.4,1426.8,1436.0,1475.4,1498.4,1509.0,1535.1,1573.6,1627.0,1624.1,1638.1,1699.8,1710.0,1752.6,1765.5,1793.9,1808.4,1849.1,1906.1,1919.2,1930.2,1980.1,1968.9,2028.6,2043.9,2073.0]}},"e2":{"sizes":[0.29,0.9,3.6,14.4],"pools":[4,16],"metrics":{"parts_mean":[[[278.238674,5.637442],[127.076811,3.504503],[89.618708,2.868959],[64.025992,2.208578]],[[68.147266,0.602459],[59.240477,0.777367],[53.215522,0.419578],[48.271999,0.614381]]],"write_amplification":[[[4.546605,0.003481],[4.428491,0.019029],[4.073239,0.044306],[3.519865,0.064116]],[[5.912049,0.063286],[5.356616,0.05185],[4.506312,0.056524],[3.834078,0.057678]]],"busy_threads_mean":[[[3.994962,0.000458],[3.946388,0.014534],[3.823216,0.014138],[3.386392,0.032784]],[[5.560029,0.055662],[4.907146,0.035659],[4.319259,0.044338],[3.698523,0.05446]]]}},"e3":{"variants":[{"name":"pool 16","points":[[0.9,905.6348518886185,933.8231801802036,815.0713666997566],[3.6,280.59103830545996,289.3245717896636,1010.1277378996558],[14.4,81.76574897271071,84.31074795352906,1177.4267852070343]]},{"name":"pool 4","points":[[0.9,280.59103830545996,289.3245717896636,252.53193447491395],[3.6,86.9349612740158,90.78390083479722,312.96586058645687],[14.4,26.990215200110583,28.18517411554936,388.6590988815924]]},{"name":"pool 16 + projection","points":[[0.9,495.9555222001719,511.3923807184242,446.3599699801547],[3.6,149.02251077191983,153.66090940213485,536.4810387789114],[14.4,45.34859895277469,47.35635295619788,653.0198249199555]]}],"until":1800.0},"e4":{"rate":150,"selectors":[{"name":"SimpleMergeSelector","bases":[2,3,5,8,12,20],"wa":[[5.762808,0.023541],[5.812012,0.111276],[4.613695,0.041206],[3.865724,0.026397],[3.504062,0.008785],[2.973931,0.038899]],"parts":[[188.41528,1.632883],[159.146071,4.021423],[115.818183,0.507629],[156.333078,1.006342],[175.432479,0.751155],[233.169626,2.169679]],"busy":[[16.0,0.0],[15.999998,3e-06],[13.38474,0.122372],[10.987672,0.189473],[9.668212,0.057447],[8.105189,0.100025]]},{"name":"tiered","bases":[2,3,4,6,8,12],"wa":[[NaN,0.0],[5.788051,0.024274],[5.743721,0.034751],[4.993835,0.02364],[4.336301,0.031334],[3.560276,0.017576]],"parts":[[3002.3,2.634871],[1338.984405,31.352048],[234.532744,12.491647],[107.070996,0.395694],[124.05836,0.442091],[150.397848,0.453374]],"busy":[[0.0,0.0],[15.161502,0.059807],[15.80085,0.031147],[14.564053,0.058695],[12.165487,0.061427],[9.692468,0.040914]]}]},"e5":{"rates":[200,250],"differences":{"200":{"parts_mean":[-108.33950391241413,16.840460794740373],"fresh_waiting_mean":[-0.007043890754848003,0.001846242354579762],"merge_duration_mean":[-0.2534744164476962,0.04638033372158814],"write_amplification":[0.12763530675011214,0.13026900021978813],"merge_duration_p99":[-4.098712296837563,0.1343551224405183]},"250":{"parts_mean":[-137.19425274088672,9.61691216347776],"fresh_waiting_mean":[-0.022050430716287855,0.0005317710467782208],"merge_duration_mean":[-0.2865622131934061,0.013909768755616007],"write_amplification":[-0.016665197768506078,0.016522501877504293],"merge_duration_p99":[-4.507036226944611,0.125504753102875]}},"runs":[{"rate":200,"policy":"round_robin","parts":[250.779824,10.466558],"merge_p99":[8.225141,0.210429],"wa":[4.166259,0.030068]},{"rate":200,"policy":"shortest_task_first","parts":[203.862179,5.774034],"merge_p99":[4.961824,0.024035],"wa":[4.278528,0.046895]},{"rate":250,"policy":"round_robin","parts":[618.725605,6.571013],"merge_p99":[9.942602,0.11273],"wa":[3.560241,0.008157]},{"rate":250,"policy":"shortest_task_first","parts":[511.525358,7.375782],"merge_p99":[5.467984,0.054331],"wa":[3.53037,0.008541]}]},"e6":{"offered":350,"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"open, guard","parts":[0.0,441.2,564.2,625.4,705.1,796.8,873.0,942.7,1013.6,1098.5,1178.0,1259.8,1341.6,1425.0,1493.4,1576.9,1661.6,1745.7,1801.9,1910.7,1970.6,2056.9,2127.5,2208.9,2292.8,2370.9,2470.8,2548.0,2626.5,2703.5,2772.7,2851.3,2928.4,2949.3,2965.6,2949.3,2970.9,2959.4,2954.1,2951.9,2964.3,2960.4,2989.0,2970.9,2958.9,2987.4,2956.4,2977.6,2971.0,2979.5,2965.7,2979.2,2968.0,2958.3,2959.7,2976.4,2998.0,2952.9,2958.7,2976.4,2981.9],"rate":[349.9994,0.261663],"rejected":[0.127856,0.001523],"delayed":[0.870322,0.00142],"parts_mean":[2570.27339,7.644488]},{"name":"closed, guard","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"rate":[324.533167,0.861646],"rejected":[2e-06,5e-06],"delayed":[0.01109,0.000404],"parts_mean":[2430.042418,3.050198]},{"name":"open, no guard","parts":[0.0,441.2,564.2,625.4,705.1,796.8,873.0,942.7,1013.6,1098.5,1178.0,1259.8,1341.6,1425.0,1493.4,1576.9,1661.6,1745.7,1801.9,1910.7,1970.6,2056.9,2127.5,2208.9,2292.8,2370.9,2470.8,2548.0,2626.5,2703.5,2772.7,2851.3,2928.4,2949.3,2965.6,2949.3,2970.9,2959.4,2954.1,2951.9,2964.3,2960.4,2989.0,2970.9,2958.9,2987.4,2956.4,2977.6,2971.0,2979.5,2965.7,2979.2,2968.0,2958.3,2959.7,2976.4,2998.0,2952.9,2984.3,2962.9,2988.0],"rate":[349.9994,0.261663],"rejected":[0.130449,0.001373],"delayed":[0.869551,0.001373],"parts_mean":[2570.455719,7.618194]},{"name":"closed, no guard","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1059.8,1056.6,1065.8,1073.5,1070.6,1071.2,1067.6,1074.6,1062.4,1077.0,1069.3,1064.1,1077.0,1066.4,1071.6,1084.4,1065.3,1076.7,1070.0,1080.2,1069.9,1075.1,1082.2,1075.7,1078.3,1078.4,1072.9,1080.4,1094.9,1086.7,1095.1,1086.1,1087.0,1083.3,1091.6,1091.9,1079.3,1065.9,1095.7,1081.8],"rate":[256.375625,0.706472],"rejected":[0.0,0.0],"delayed":[0.999827,8.7e-05],"parts_mean":[1073.925637,0.811181]}]},"e7":{"burst":[1800.0,300.0],"grid":[0.0,30.0,60.0,90.0,120.0,150.0,180.0,210.0,240.0,270.0,300.0,330.0,360.0,390.0,420.0,450.0,480.0,510.0,540.0,570.0,600.0,630.0,660.0,690.0,720.0,750.0,780.0,810.0,840.0,870.0,900.0,930.0,960.0,990.0,1020.0,1050.0,1080.0,1110.0,1140.0,1170.0,1200.0,1230.0,1260.0,1290.0,1320.0,1350.0,1380.0,1410.0,1440.0,1470.0,1500.0,1530.0,1560.0,1590.0,1620.0,1650.0,1680.0,1710.0,1740.0,1770.0,1800.0,1830.0,1860.0,1890.0,1920.0,1950.0,1980.0,2010.0,2040.0,2070.0,2100.0,2130.0,2160.0,2190.0,2220.0,2250.0,2280.0,2310.0,2340.0,2370.0,2400.0,2430.0,2460.0,2490.0,2520.0,2550.0,2580.0,2610.0,2640.0,2670.0,2700.0,2730.0,2760.0,2790.0,2820.0,2850.0,2880.0,2910.0,2940.0,2970.0,3000.0,3030.0,3060.0,3090.0,3120.0,3150.0,3180.0,3210.0,3240.0,3270.0,3300.0,3330.0,3360.0,3390.0,3420.0,3450.0,3480.0,3510.0,3540.0,3570.0,3600.0,3630.0,3660.0,3690.0,3720.0,3750.0,3780.0,3810.0,3840.0,3870.0,3900.0,3930.0,3960.0,3990.0,4020.0,4050.0,4080.0,4110.0,4140.0,4170.0,4200.0,4230.0,4260.0,4290.0,4320.0,4350.0,4380.0,4410.0,4440.0,4470.0,4500.0,4530.0,4560.0,4590.0,4620.0,4650.0,4680.0,4710.0,4740.0,4770.0,4800.0,4830.0,4860.0,4890.0,4920.0,4950.0,4980.0,5010.0,5040.0,5070.0,5100.0,5130.0,5160.0,5190.0,5220.0,5250.0,5280.0,5310.0,5340.0,5370.0,5400.0],"runs":[{"factor":1.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,116.2,118.5,114.1,115.5,116.2,118.2,115.1,121.6,124.0,120.1,117.4,121.5,120.3,117.5,117.8,121.9,118.8,117.1,117.9,117.8,120.0,118.1,121.9,120.3,119.4,118.4,124.2,125.1,124.9,117.9,123.3,121.9,122.9,125.9,120.8,125.8,122.7,122.5,121.2,123.7,121.1,125.3,123.8,125.0,118.1,125.1,123.7,123.0,122.2,128.6,121.7,122.4,125.8,127.9,123.8,126.1,128.3,125.9,130.9,129.7,127.6,131.7,126.8,130.6,130.9,132.3,130.7,128.1,132.0,130.2,130.6,128.3,130.4,133.4,133.2,127.2,132.1,134.3,136.1,128.9,129.3,131.3,132.7,133.7,133.4,133.0,133.6,135.8,132.0,133.4,136.0,130.9,133.5,135.3,133.9,131.0,134.4,136.1,132.1,131.8,131.6,132.8,132.5,132.3,130.0,132.8,127.3,130.3,137.7,132.9,132.9,132.2,131.7,133.8,134.7,133.2,131.1,135.3,137.2,138.0],"peak":158.3,"recovery":[0.0,0.0]},{"factor":1.5,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,180.6,215.7,240.9,260.2,253.9,272.7,285.8,291.1,319.3,304.3,196.6,170.1,161.3,158.0,149.5,149.3,140.9,132.9,134.5,128.7,128.7,128.4,127.9,126.3,129.8,123.2,131.6,128.8,127.1,124.8,129.9,131.9,129.1,130.9,127.6,130.3,126.1,132.8,128.2,126.5,122.6,129.4,126.7,129.4,125.2,129.8,130.8,130.1,130.1,128.7,127.2,127.2,130.2,129.3,126.7,130.2,135.3,128.2,136.2,126.8,132.0,129.9,130.2,129.6,133.3,128.0,131.5,132.3,136.1,133.3,132.6,128.3,127.6,134.0,130.5,128.1,129.0,135.2,134.1,133.1,131.9,134.7,132.4,133.6,131.5,136.6,134.2,135.9,132.2,133.9,140.7,129.9,134.3,138.3,138.4,137.2,136.3,140.8,135.1,141.7,136.5,137.5,138.7,134.7,135.0,136.3,135.8,132.1,137.8,136.5,137.4,134.9,137.2,135.9,132.2,134.5,136.7,134.7,133.7,140.5],"peak":348.8,"recovery":[228.0,40.0]},{"factor":2.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,349.5,448.7,475.5,510.3,534.8,577.6,583.5,604.6,646.9,664.1,466.4,470.5,405.8,344.0,326.9,286.5,267.2,248.6,232.7,224.9,223.2,215.9,209.3,197.4,192.5,176.3,173.8,168.4,163.0,150.7,153.2,149.0,151.2,142.3,141.0,140.7,138.7,143.5,141.8,138.7,138.3,143.1,142.0,138.4,139.8,142.9,139.9,139.3,136.5,141.2,140.7,136.4,139.1,136.0,136.7,134.6,135.3,132.7,137.0,131.3,132.9,132.2,135.4,129.3,136.4,132.5,137.9,135.9,136.4,137.8,140.4,137.0,138.3,138.7,139.1,134.7,134.5,142.2,137.1,133.3,136.5,140.8,134.4,135.1,132.2,135.1,136.5,137.3,132.1,132.7,136.5,132.8,136.4,137.3,137.5,133.2,131.9,139.4,137.1,137.0,134.8,135.4,133.8,140.0,138.1,137.1,133.1,136.4,141.2,141.6,140.6,137.8,137.3,137.6,142.1,141.7,138.2,138.2,138.3,139.1],"peak":687.1,"recovery":[714.0,78.5]},{"factor":3.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,762.0,1055.0,1328.5,1597.1,1844.6,2104.0,2341.7,2568.3,2738.1,2872.0,2237.5,1934.7,1708.7,1505.8,1316.1,1165.0,1013.0,858.9,760.9,685.1,672.0,627.3,601.6,550.3,531.9,505.6,477.4,456.8,426.6,408.0,386.8,386.6,400.5,370.1,389.4,395.8,392.8,386.9,391.3,371.2,357.3,348.7,316.5,273.2,250.6,243.6,232.6,228.9,222.0,211.5,202.4,189.4,192.1,191.2,189.5,178.8,180.4,180.2,186.0,173.5,170.3,171.3,167.1,161.9,163.6,164.4,165.2,168.0,170.6,167.0,168.4,163.2,166.0,170.1,164.5,159.8,163.0,163.4,164.2,160.2,152.4,157.2,154.4,148.3,154.1,154.8,153.7,152.7,147.8,144.8,154.6,147.9,150.4,152.2,149.8,146.9,149.9,155.6,148.1,147.6,146.2,149.7,152.4,154.1,152.7,149.1,150.5,150.1,143.1,147.3,145.8,145.6,147.3,144.0,148.0,140.7,141.0,144.7,140.1,149.5],"peak":2914.5,"recovery":[1894.0,264.6]}]},"e8":{"variants":["none","bloom_filter index","projection","projection + index"],"runs":[{"parts_mean":[85.727586,0.999626],"busy_threads_mean":[9.08194,0.152855],"merge_duration_mean":[0.495812,0.0093],"write_amplification":[4.688704,0.074774]},{"parts_mean":[89.825073,0.824186],"busy_threads_mean":[9.820608,0.120536],"merge_duration_mean":[0.533728,0.006624],"write_amplification":[4.627114,0.052237]},{"parts_mean":[177.49571,8.098652],"busy_threads_mean":[15.939451,0.026431],"merge_duration_mean":[1.177184,0.054345],"write_amplification":[4.221696,0.047655]},{"parts_mean":[270.98928,9.786364],"busy_threads_mean":[15.999981,4.2e-05],"merge_duration_mean":[1.623457,0.064652],"write_amplification":[4.106169,0.057767]}]},"e9":{"factors":["insert size","threads","base","scheduling_policy","projection"],"responses":["parts_mean","write_amplification","fresh_lifetime_mean","busy_threads_mean"],"effects":{"parts_mean":{"main":{"insert size":[-16.778958689254953,0.7544218066801389],"threads":[-19.80084428044265,1.1545398594133605],"base":[13.344699165201893,0.17054656447854294],"scheduling_policy":[-1.140404929178763,0.35894043874031095],"projection":[47.595086420755116,0.8275393710806879]},"interactions":{"insert size x threads":[9.307556032708456,0.8226572938763206],"insert size x base":[5.441875756337077,0.7252859829274737],"insert size x scheduling_policy":[-1.2857095458852796,0.5862012126190804],"insert size x projection":[-12.03275007328221,0.7575895104791837],"threads x base":[17.264116943762087,0.5488812257706204],"threads x scheduling_policy":[1.0632041856154513,0.34896399208614387],"threads x projection":[-19.764891641388164,1.043866473909658],"base x scheduling_policy":[-0.08448891659423419,0.3453516801584674],"base x projection":[-13.852535883845375,0.8241111402337822],"scheduling_policy x projection":[-1.2128195007430722,0.42749976219328534]}},"write_amplification":{"main":{"insert size":[-0.6639968798951389,0.05458590782342697],"threads":[0.35080506358453617,0.018615143527111692],"base":[-1.5883610719980752,0.0522459481992639],"scheduling_policy":[-0.013866696654477054,0.025683649745888],"projection":[-0.6691025662785953,0.04905909517632637]},"interactions":{"insert size x threads":[-0.10342405051843002,0.02700900030101647],"insert size x base":[0.13893228692852677,0.07980396319445242],"insert size x scheduling_policy":[0.001152704358848992,0.01235392604567642],"insert size x projection":[0.10437428439021235,0.061373176524522774],"threads x base":[-0.2994964788055202,0.031777264932584114],"threads x scheduling_policy":[0.020310620505073335,0.01946784948726095],"threads x projection":[0.39146317170729245,0.05159839701504861],"base x scheduling_policy":[-6.191536662041956e-05,0.032522466379722816],"base x projection":[0.259329577249301,0.07810494190097834],"scheduling_policy x projection":[0.007288842031089894,0.016655796348102103]}},"fresh_lifetime_mean":{"main":{"insert size":[0.22165104158919854,0.0017455001839178112],"threads":[-0.013709324380582378,0.0006611296579073334],"base":[0.14526925193198664,0.0010415325922954566],"scheduling_policy":[-0.012197325097867855,0.0005704337029139604],"projection":[0.08374479443097475,0.0004571170457648196]},"interactions":{"insert size x threads":[-0.005303930549107137,0.0006159577035624883],"insert size x base":[0.10125769955762082,0.001330205684130007],"insert size x scheduling_policy":[-0.004575755811404471,0.0005071479272402161],"insert size x projection":[0.051681742793735164,0.0004942240639245216],"threads x base":[0.011169366491765859,0.0007112730482787371],"threads x scheduling_policy":[0.012202016142659472,0.0005709539954418261],"threads x projection":[-0.013699663934039307,0.0006300800043597701],"base x scheduling_policy":[0.009668815189990134,0.0006220696390273741],"base x projection":[0.02658174642496433,0.000808999219320826],"scheduling_policy x projection":[-0.01218603956903514,0.0005331079674390542]}},"busy_threads_mean":{"main":{"insert size":[-0.8956860586735206,0.022312811135616516],"threads":[0.8237721374237631,0.01215199979229856],"base":[-2.1313329668132903,0.0369247008256173],"scheduling_policy":[0.0008504953396643126,0.009295066184181923],"projection":[3.6119759255374624,0.034753741746778886]},"interactions":{"insert size x threads":[-0.23632040174600144,0.04268172137437109],"insert size x base":[-0.06976464948895306,0.061505886014524246],"insert size x scheduling_policy":[0.004791300836654642,0.010841056674120783],"insert size x projection":[-0.23083041495815282,0.07736171855986619],"threads x base":[-0.7632306559710277,0.029599859762521802],"threads x scheduling_policy":[0.00911234149444278,0.015573839990446125],"threads x projection":[0.8260111461346904,0.024986367543768477],"base x scheduling_policy":[-0.00022388756202641283,0.01068568172760122],"base x projection":[-0.41027776008936184,0.0664369742110147],"scheduling_policy x projection":[0.00958347957506229,0.02026164046936032]}},"delayed_fraction":{"main":{"insert size":[0.0,0.0],"threads":[0.0,0.0],"base":[0.0,0.0],"scheduling_policy":[0.0,0.0],"projection":[0.0,0.0]},"interactions":{"insert size x threads":[0.0,0.0],"insert size x base":[0.0,0.0],"insert size x scheduling_policy":[0.0,0.0],"insert size x projection":[0.0,0.0],"threads x base":[0.0,0.0],"threads x scheduling_policy":[0.0,0.0],"threads x projection":[0.0,0.0],"base x scheduling_policy":[0.0,0.0],"base x projection":[0.0,0.0],"scheduling_policy x projection":[0.0,0.0]}}}},"e10":{"rotation":{"partition_seconds":600.0,"retention_partitions":3},"open":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0,3660.0,3720.0,3780.0,3840.0,3900.0,3960.0,4020.0,4080.0,4140.0,4200.0,4260.0,4320.0,4380.0,4440.0,4500.0,4560.0,4620.0,4680.0,4740.0,4800.0,4860.0,4920.0,4980.0,5040.0,5100.0,5160.0,5220.0,5280.0,5340.0,5400.0,5460.0,5520.0,5580.0,5640.0,5700.0,5760.0,5820.0,5880.0,5940.0,6000.0,6060.0,6120.0,6180.0,6240.0,6300.0,6360.0,6420.0,6480.0,6540.0,6600.0,6660.0,6720.0,6780.0,6840.0,6900.0,6960.0,7020.0,7080.0,7140.0,7200.0],"variants":[{"name":"one partition","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7,131.7,130.6,132.3,128.1,130.2,128.3,133.4,127.2,134.3,128.9,131.3,133.7,133.0,135.8,133.4,130.9,135.3,131.0,136.1,131.8,132.8,132.3,132.8,130.3,132.9,132.2,133.8,133.2,135.3,138.0,135.5,138.7,136.6,133.4,137.2,133.2,133.1,136.0,134.8,134.7,137.9,135.5,135.8,144.2,137.7,136.7,141.5,148.0,140.9,143.0,145.2,138.9,140.8,140.9,140.8,143.1,143.4,147.0,146.3,145.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7,131.7,130.6,132.3,128.1,130.2,128.3,133.4,127.2,134.3,128.9,131.3,133.7,133.0,135.8,133.4,130.9,135.3,131.0,136.1,131.8,132.8,132.3,132.8,130.3,132.9,132.2,133.8,133.2,135.3,138.0,135.5,138.7,136.6,133.4,137.2,133.2,133.1,136.0,134.8,134.7,137.9,135.5,135.8,144.2,137.7,136.7,141.5,148.0,140.9,143.0,145.2,138.9,140.8,140.9,140.8,143.1,143.4,147.0,146.3,145.3],"stats":{"parts_mean":[126.758719,0.843071],"write_amplification":[4.823796,0.023455],"insert_rate":[149.984394,0.086371],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,108.5,112.8,104.5,111.5,105.8,109.0,113.8,109.1,114.1,114.4,119.8,122.6,121.9,123.1,126.2,125.1,127.7,122.7,124.8,115.9,137.3,130.2,132.3,141.5,141.0,138.9,138.6,138.3,135.9,122.4,140.3,134.9,137.0,145.0,143.1,135.2,137.0,138.5,133.5,115.8,135.2,131.4,131.8,138.2,133.4,135.7,135.1,132.6,126.6,113.4,132.0,131.1,129.7,136.6,132.9,131.2,133.8,128.4,138.0,117.2,141.3,132.5,141.8,141.0,136.9,133.4,145.1,136.7,140.8,112.1,136.4,132.4,134.5,136.1,140.3,133.6,139.4,137.7,132.4,117.1,138.7,132.8,135.8,136.9,139.3,138.4,134.0,137.7,131.0,111.6,141.7,128.0,130.9,135.2,134.4,136.0,141.2,139.0,129.8,115.2,136.2,128.8,132.8,137.4,136.2,137.0,135.4,127.3,130.2,115.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,80.2,89.4,88.8,96.8,91.1,95.0,99.8,95.1,100.1,100.4,78.0,86.4,89.4,92.5,96.2,95.1,98.9,94.4,98.2,99.9,79.3,82.4,85.5,95.9,97.5,97.6,97.3,98.4,96.0,102.3,74.9,83.1,86.3,95.9,94.0,92.1,96.6,101.7,99.1,98.9,82.2,85.3,86.8,93.8,92.6,97.0,96.4,97.8,95.1,98.1,80.2,84.4,84.8,93.0,93.4,91.7,96.9,92.8,102.4,96.9,79.6,81.8,91.7,93.7,93.5,92.3,104.0,96.8,102.7,93.9,75.8,84.1,87.7,91.6,97.6,92.0,97.8,97.7,97.5,101.7,76.3,85.0,89.1,90.7,94.3,95.6,94.3,103.3,98.3,96.1,80.0,80.7,86.8,92.3,93.4,96.2,104.6,102.8,96.9,99.7,80.2,81.7,87.2,94.3,94.6,96.6,96.8,95.9,100.7,100.4],"stats":{"parts_mean":[134.787291,3.134128],"write_amplification":[4.251626,0.013315],"insert_rate":[149.97437,0.102898],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation, 10% late inserts","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,112.6,113.2,109.7,118.4,117.6,117.1,114.3,117.4,124.4,125.4,135.6,135.3,137.5,137.4,139.1,140.6,140.4,135.2,137.3,123.1,137.1,135.7,143.6,141.6,137.6,143.1,135.7,135.3,138.8,122.2,133.6,136.5,144.1,142.8,135.0,140.6,136.5,135.3,139.4,120.7,136.4,133.9,138.2,138.2,139.2,136.6,139.9,137.1,141.4,118.1,130.8,135.2,135.6,143.5,141.1,142.3,132.2,138.5,140.1,121.2,139.1,138.6,142.0,140.3,147.1,139.8,134.0,129.9,137.5,121.2,130.3,133.6,137.2,135.1,137.5,138.4,139.5,136.5,133.6,122.7,144.4,142.7,141.5,133.6,136.5,138.0,136.8,134.9,137.0,123.9,139.5,129.0,141.1,135.8,133.1,128.0,137.5,132.5,136.3,124.0,133.0,133.4,139.2,137.0,133.2,130.8,129.9,130.0,129.1,120.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,74.7,78.3,79.7,87.4,89.2,87.8,86.8,89.7,92.2,95.6,75.1,77.4,81.3,87.9,86.3,88.9,92.9,86.9,88.0,91.1,70.9,75.5,81.5,87.6,88.7,89.1,88.5,89.7,88.1,91.5,69.9,76.0,81.9,87.7,83.4,89.8,86.9,90.7,92.3,93.1,70.9,73.5,80.8,85.9,88.0,85.3,89.9,88.9,91.5,87.5,70.8,75.8,78.4,87.5,87.8,87.3,87.7,92.5,93.8,90.9,70.1,76.6,81.8,81.2,88.7,86.0,89.7,86.8,91.8,90.1,69.5,73.5,80.2,83.4,88.6,85.4,91.3,89.0,85.1,90.1,72.8,77.7,81.6,83.1,83.3,86.5,87.7,89.8,89.0,93.5,74.0,70.5,81.9,85.9,83.6,82.1,95.5,87.1,89.7,92.5,71.6,74.8,80.9,85.6,85.1,86.3,87.7,87.8,85.2,92.0],"stats":{"parts_mean":[137.549849,1.381241],"write_amplification":[4.234096,0.017369],"insert_rate":[149.965792,0.140718],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}}]},"closed":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"one partition","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"largest":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"stats":{"parts_mean":[2430.042418,3.050198],"write_amplification":[2.844837,0.004698],"insert_rate":[324.533167,0.861646],"delayed_fraction":[0.01109,0.000404],"rejected_fraction":[2e-06,5e-06]}},{"name":"rotation","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1171.7,1270.3,1317.1,1387.5,1496.2,1583.3,1618.9,1692.2,1715.7,1721.2,1883.1,1947.8,2006.0,2094.7,2192.2,2252.7,2341.9,2385.0,2397.2,1730.6,1924.4,2003.0,2075.3,2169.6,2246.7,2303.6,2389.9,2437.7,2441.4,1734.0,1929.5,1997.1,2067.2,2155.6,2225.9,2315.3,2381.6,2429.2,2439.3,1745.2,1960.3,2000.3,2085.3,2163.9,2245.7,2308.4,2395.8,2432.7,2445.9,1741.8],"largest":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,701.9,693.0,692.7,703.3,804.2,892.0,927.6,1000.9,1024.7,1035.3,718.1,709.3,709.0,713.9,804.9,865.8,955.0,998.5,1010.7,1024.6,732.9,718.7,723.5,758.2,833.6,891.3,977.6,1025.7,1029.9,1029.9,740.2,726.7,727.2,742.9,802.3,891.9,958.7,1006.9,1019.8,1037.2,744.3,730.8,730.9,755.3,818.6,881.9,969.6,1007.1,1020.5,1025.1],"stats":{"parts_mean":[2054.420998,6.999921],"write_amplification":[2.726775,0.003467],"insert_rate":[340.819333,0.370744],"delayed_fraction":[0.184785,0.008048],"rejected_fraction":[0.0,0.0]}}]}},"e11":{"disk_bytes":2000000000000,"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0,3660.0,3720.0,3780.0,3840.0,3900.0,3960.0,4020.0,4080.0,4140.0,4200.0,4260.0,4320.0,4380.0,4440.0,4500.0,4560.0,4620.0,4680.0,4740.0,4800.0,4860.0,4920.0,4980.0,5040.0,5100.0,5160.0,5220.0,5280.0,5340.0,5400.0,5460.0,5520.0,5580.0,5640.0,5700.0,5760.0,5820.0,5880.0,5940.0,6000.0],"variants":[{"name":"no limit","used":[0.0,86880817151.91,189228636745.77,295999857031.27,417383298528.8,509830947936.66,623781938086.27,741017638340.1,833707419161.41,891043782675.62,921352894549.81,951679780094.68,1009347194607.71,1116054554804.34,1141143878110.41,1165097354622.96,1167222288403.98,1193826661114.0,1202748876330.57,1234215613857.66,1257202276938.75,1263292999600.16,1334098088947.88,1394803887747.66,1406349580339.04,1428571268568.86,1457366085918.22,1487645464416.47,1513075158612.36,1523084463108.92,1591049012576.55,1631386627381.67,1670962855104.12,1702778681685.23,1704247669089.18,1717059989561.58,1697018605241.02,1681021002330.94,1686978995132.21,1722075697599.82,1713123629946.03,1769494828038.78,1851401141069.09,1863729167879.69,1883274041127.6,1947029472993.05,1980771412977.76,1960858587186.76,1973511113976.69,1949798794576.8,1940764936373.06,1970139803974.17,1967530687719.69,1993844105322.79,2013823285564.56,2061993150481.74,2050043804248.77,2051798071472.47,2064173932641.93,2132931397879.31,2142880831880.9,2134448586312.61,2196236604483.75,2197290488546.72,2251454937419.52,2282502772325.86,2258180964842.97,2245335049936.07,2262141694585.9,2298738613657.24,2319161457752.89,2347170580889.95,2352055809478.49,2390518271405.48,2394722111708.45,2413453562105.83,2436935270033.93,2459472019293.07,2452291256885.56,2487261318508.78,2498407479005.81,2493711433377.52,2517271453546.22,2550485911914.34,2554642750095.69,2557749795893.31,2608457830501.58,2604930405075.47,2575528371037.5,2604880197944.4,2633374739853.75,2671266825543.77,2659464512408.1,2701597159267.68,2697990790569.29,2720615147121.59,2770030861904.94,2758382862202.17,2751200609688.08,2778053625208.04,2817671453612.57],"outdated":[0.0,61278409919.5,135732904223.7,209359109859.6,286360796289.6,381773053897.9,467828081154.7,556873077399.7,653562772453.4,677810647745.6,703494922866.3,714861520655.7,730443256929.2,731394787045.8,733640721494.3,732975664583.1,734100743569.6,735419628698.9,731842615975.1,736005583590.6,733307539125.7,729563472192.0,726420812940.1,732089108035.0,730158716170.9,722356537976.6,727417743425.6,748692556984.7,807779067564.6,833636455589.0,846885334185.8,842962228872.1,857295744989.0,867180699781.8,856353356394.4,836562647005.9,780542332358.7,756324431999.5,748241510979.6,776369257129.4,769407099856.5,805436769429.9,851085042656.7,850164989255.5,868797340203.5,882865323753.2,898991627722.6,886615759404.8,904069616491.6,877842935524.8,840149412002.7,843926859737.5,840325883952.6,850081182074.4,835546566188.5,853948353382.2,821002459680.5,826921071093.9,863618615029.7,886566304544.2,867321613906.8,840096580071.4,844829841220.4,821226812375.1,837607591010.1,846895582611.9,829190422947.2,816193288811.2,846197587458.9,841887881098.9,875288882825.3,859030032992.8,852035773385.5,854656788398.8,850728060265.9,857063302837.1,857214962985.6,872758555863.3,851642595319.5,873660922707.7,914337874342.2,888037697632.2,869332936486.0,870295832594.4,858627151677.4,842576236586.6,858876824862.0,847392988503.5,791138208422.5,815289858943.9,847896262005.4,836877733222.6,815306140924.6,855007704117.5,822093395981.6,838997778045.9,856004556321.9,861058832649.9,825794784094.1,863501769795.1,891147880253.9],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0,87.0,94.9,91.8,91.0,88.1,91.4,91.7,92.5,94.4,94.8,94.4,94.8,93.2,95.3,96.0,92.1,94.8,93.9,94.4,94.9,93.2,96.4,91.2,93.9,96.6,93.9,93.0,96.6,96.6,95.7,95.5,96.6,96.9,97.6,95.8,98.8,96.1,95.5,92.4,97.0],"first_nospace":null,"cap_drop":null,"nospace_last_10_min":[0.0,0.0],"stats":{"parts_mean":[87.633196,1.079384],"write_amplification":[4.705503,0.037692],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0],"nospace_fraction":[0.0,0.0]}},{"name":"2 TB, old_parts_lifetime 480 s","used":[0.0,86880817151.91,189228636745.77,295999857031.27,417383298528.8,509830947936.66,623781938086.27,741017638340.1,833707419161.41,891043782675.62,921352894549.81,951679780094.68,1009347194607.71,1116054554804.34,1141143878110.41,1165097354622.96,1167222288403.98,1193826661114.0,1202748876330.57,1234215613857.66,1257202276938.75,1263292999600.16,1334098088947.88,1394803887747.66,1406349580339.04,1428571268568.86,1457366085918.22,1487645464416.47,1513075158612.36,1523084463108.92,1591049012576.55,1631386627381.67,1670962855104.12,1702778681685.23,1704247669089.18,1717059989561.58,1697018605241.02,1681021002330.94,1686978995132.21,1722075697599.82,1713123629946.03,1751862752751.63,1799203717144.21,1811804166830.89,1830151973521.38,1843010781817.6,1860681690499.48,1856104211894.47,1866469932747.56,1860051020774.76,1841555831812.69,1861368623052.42,1861432191763.55,1862462778335.01,1856667017466.65,1862769626077.21,1864857772038.94,1876862496084.44,1880547537545.15,1893943325419.03,1914869078602.06,1909621597446.86,1924801565483.06,1932804092946.48,1924115029586.25,1932575024278.03,1941903157351.68,1938082446109.49,1949321247555.82,1953318475833.6,1962477798283.55,1973219894550.2,1973202261324.32,1985426768951.71,1987879370328.3,1988330437718.72,1994503212029.21,1995990996407.03,1997598710958.57,1997553484333.68,1999249757291.77,1996749914919.72,1998756623137.1,1998360564553.38,1998948516610.23,1999251715304.22,1999332250875.31,1999750550920.94,1999601861169.48,1999700295403.32,1999847109147.03,1999916123371.39,1999920902161.91,1999870689863.41,1999967163605.46,1999884571705.73,1999910383466.96,1999927160845.57,1999955580686.22,1999965655069.89,1999953980217.17],"outdated":[0.0,61278409919.5,135732904223.7,209359109859.6,286360796289.6,381773053897.9,467828081154.7,556873077399.7,653562772453.4,677810647745.6,703494922866.3,714861520655.7,730443256929.2,731394787045.8,733640721494.3,732975664583.1,734100743569.6,735419628698.9,731842615975.1,736005583590.6,733307539125.7,729563472192.0,726420812940.1,732089108035.0,730158716170.9,722356537976.6,727417743425.6,748692556984.7,807779067564.6,833636455589.0,846885334185.8,842962228872.1,857295744989.0,867180699781.8,856353356394.4,836562647005.9,780542332358.7,756324431999.5,748241510979.6,776369257129.4,769407099856.5,805405533666.1,850685662019.2,850838948809.2,864925942262.8,881806985972.4,899899918814.6,884670850490.6,900744477671.2,873747647466.0,839104793049.7,841014308671.1,825903478953.5,833550896732.9,820508875266.8,832085311451.9,810646287302.1,809572100390.1,808198455367.3,817506558628.8,819903854208.1,796233592513.8,795289640087.9,773444574962.3,779831547190.6,765878351195.2,764467676127.4,759047710535.1,751954552001.7,745387285930.6,733501616974.8,735152202946.8,712934571601.0,731865118247.4,713356689570.5,712636640191.8,707137185139.0,695406004740.8,687092836565.6,668216426744.0,658133458020.2,628233677436.7,621280213364.3,602531165598.1,590977524611.4,578721085829.5,564282367708.0,549312784001.4,533373588346.0,519917102233.2,504989408193.7,490164253714.1,474316685983.2,459482481310.0,445093638969.1,429816160766.4,415958862323.7,401152489462.8,387154049647.2,373098155265.8,359172155024.2],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,90.2,92.0,91.9,91.6,90.6,90.5,86.5,92.3,93.0,88.3,90.5,91.2,91.4,94.1,94.7,89.9,93.4,91.9,95.7,88.9,92.6,95.9,93.8,92.0,97.1,98.2,97.7,105.1,102.5,105.8,109.6,113.7,108.7,114.2,122.6,130.4,146.4,151.0,162.9,176.2,186.1,199.4,198.4,234.0,279.5,308.1,332.3,378.1,430.3,449.7,464.4,522.6,604.0,692.0,768.5,891.9,988.4,1073.8,1113.4,1238.3],"first_nospace":[4425.939779779461,149.96088711440487],"cap_drop":[2028.0,159.06037615660665],"nospace_last_10_min":[0.14971326429604734,0.020230425656767373],"stats":{"parts_mean":[180.740817,9.770005],"write_amplification":[4.124686,0.028086],"delayed_fraction":[0.001403,0.002325],"rejected_fraction":[0.0,0.0],"nospace_fraction":[0.020541,0.003244]}},{"name":"2 TB, old_parts_lifetime 60 s","used":[0.0,86880817151.91,127950226826.27,160266952807.57,208024188669.2,223470151647.06,242008884188.37,273189557185.4,276834341761.71,298759420141.72,317996741108.41,321811062864.28,371487360382.01,481023555483.44,495804118321.41,520501629373.66,530936318874.58,545252202756.1,567468017056.57,587365801307.86,613780116051.65,626349248199.36,692835578461.18,756763014141.36,772075246344.24,785257722738.96,831571304642.72,849383492031.67,854267979866.26,807925116335.52,842570859440.95,878549527624.57,923885008408.12,924525928842.93,938689931457.47,971137217767.08,1009427847053.62,1018955778787.84,1029061744182.91,1063959315735.22,1046972271109.63,1089015675121.78,1136759990401.89,1103284000434.39,1126060626043.4,1172491341245.95,1188230349254.86,1180119834728.96,1190151095591.99,1170686794598.1,1199365892837.76,1219710213781.67,1235187753101.49,1261845413376.29,1270192667489.86,1332323591240.24,1316805048973.47,1329526547338.07,1336003230015.43,1362810052394.61,1364297476671.1,1385209462533.71,1448055972526.15,1476739441467.02,1517991829449.62,1549544728275.26,1546733294634.27,1532589586048.37,1534686664471.7,1543398482490.84,1573922785916.79,1572557463360.05,1597170259525.89,1652420036581.28,1657808076048.15,1666173326763.43,1698614524541.53,1688804806239.97,1709582912011.46,1703614356010.37,1722469383631.15,1693558758042.65,1726549483928.48,1793880281653.04,1800967760950.97,1814856397281.9,1849279298561.3,1832332254852.69,1841710379355.71,1869297124392.24,1856459640313.41,1849640184355.85,1842370484528.38,1858543445630.84,1878467599396.19,1888687806766.82,1901589881423.2,1912221387125.23,1925469138860.4,1935624626309.45,1903620917055.12],"outdated":[0.0,61278409919.5,74454494304.2,73626205635.9,77001686430.0,95412257608.3,86055027256.8,89044996245.0,96689695053.7,85526285211.7,100138769424.9,84992803425.3,92583422703.5,96363787724.9,88300961705.3,88379939333.8,97814774040.2,86845170341.0,96561756701.1,89155771040.8,89885378238.6,92619720791.2,85158302453.4,94048234428.7,95884382176.1,79042992146.7,101622962150.1,110430584599.9,148971888818.5,118477108815.6,98407181050.2,90125129115.0,110217898293.0,88927946939.5,90795618762.7,90639875211.4,92951574171.3,94259208456.4,90324260030.3,118252875264.8,103255741020.1,124957616512.9,136443891989.5,89719821810.2,111583925119.3,108327192006.1,106450563999.7,105877006947.0,120709598106.9,98730935546.1,98750368467.4,93497269545.0,107982949334.4,118082490127.9,91915948113.8,124278794140.7,87763704405.2,104649546959.5,135447912403.2,116444959059.5,88738258697.0,90857456292.5,96649209262.8,100675765295.4,104144483040.2,113937538561.3,117742752738.5,103447824923.5,118742557344.7,86547749932.5,130050210989.2,84416915462.9,97150223432.9,116558553574.6,113814024605.6,109783067494.7,118894217493.2,102091342810.2,108934250445.4,106438430034.4,137725234128.5,90220077492.6,93145115638.9,112976338888.2,105684277230.8,87541119026.6,124058799219.7,96621780470.7,80548742607.4,115676947215.7,122668028711.8,104125987627.4,92767668631.3,117327661734.7,104485451092.7,97125537444.6,92891385149.2,114175761730.4,97249726444.4,140281950984.2,119798959050.1],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0,87.0,94.9,91.8,91.0,88.1,91.4,91.7,92.5,94.4,94.8,94.4,94.8,93.2,95.3,96.0,92.1,94.8,93.9,94.5,95.5,94.3,96.0,93.5,93.6,96.6,95.0,89.8,98.4,95.1,94.6,96.0,95.0,98.4,99.2,97.7,97.3,97.9,97.0,104.0,99.1],"first_nospace":null,"cap_drop":[4329.0,158.0436961610869],"nospace_last_10_min":[0.00030915017305689033,0.0006993462783432616],"stats":{"parts_mean":[87.731214,1.174328],"write_amplification":[4.705369,0.029487],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0],"nospace_fraction":[3.1e-05,6.9e-05]}}]},"validation":[{"key":"open","title":"відкритий потік, 8 вставок/с","rows":[{"metric":"parts_mean","live":10.130597014925373,"live_half":0.1399614062599456,"model":10.395299599009729,"model_half":0.03185770633772495},{"metric":"busy_threads_mean","live":0.18781094527363185,"live_half":0.021406232487120754,"model":0.19478532174725666,"model_half":0.003212677059033852},{"metric":"fresh_waiting_mean","live":0.2613592524557908,"live_half":0.015094454939987682,"model":0.25581253763265016,"model_half":0.0031455705075053406},{"metric":"fresh_lifetime_mean","live":0.31545133535773373,"live_half":0.01482815997889,"model":0.31449584882372134,"model_half":0.0030799420348732753},{"metric":"merge_duration_mean","live":0.11132891412107027,"live_half":0.0017258896932049802,"model":0.11843035932045945,"model_half":0.0016397008811227113},{"metric":"write_amplification","live":4.0042493905645875,"live_half":0.06385093435602403,"model":3.9814227737301606,"model_half":0.013530043835588335},{"metric":"insert_rate","live":7.949382716049382,"live_half":0.09576194468031057,"model":7.970555555555556,"model_half":0.07213115330685983},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"closed","title":"8 замкнених клієнтів","rows":[{"metric":"parts_mean","live":12.322139303482587,"live_half":0.47673943353698045,"model":12.736626866217884,"model_half":0.06767665670324928},{"metric":"busy_threads_mean","live":0.3731343283582089,"live_half":0.033420469758830014,"model":0.40737142213685046,"model_half":0.00875374909033198},{"metric":"fresh_waiting_mean","live":0.12905897057807073,"live_half":0.004259712291433156,"model":0.1256654126555829,"model_half":0.0010465452719312215},{"metric":"fresh_lifetime_mean","live":0.18211987066660887,"live_half":0.004551331592654266,"model":0.18504435096151284,"model_half":0.0010113709763427943},{"metric":"merge_duration_mean","live":0.10957394907884428,"live_half":0.01635000097248151,"model":0.12002504094763375,"model_half":0.002507968905304445},{"metric":"write_amplification","live":4.062745085979626,"live_half":0.37295361928263226,"model":4.0671934372830645,"model_half":0.06895299873581957},{"metric":"insert_rate","live":15.765432098765432,"live_half":0.4834719936381366,"model":15.910555555555556,"model_half":0.12035204489860322},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"throttled","title":"40 вставок/с, низькі пороги","rows":[{"metric":"parts_mean","live":11.819651741293532,"live_half":0.06171717901844883,"model":12.083770350818208,"model_half":0.033855430189071445},{"metric":"busy_threads_mean","live":0.2611940298507463,"live_half":0.033420469758830014,"model":0.27257587014994805,"model_half":0.00385339851167651},{"metric":"fresh_waiting_mean","live":0.05043227929279095,"live_half":0.0017217626990454682,"model":0.04998406608097003,"model_half":0.0002652041286939843},{"metric":"fresh_lifetime_mean","live":0.06556254050929539,"live_half":0.0017290479326435412,"model":0.06442535885577702,"model_half":0.00026453518213750645},{"metric":"merge_duration_mean","live":0.030500006358904378,"live_half":0.0015324110438751629,"model":0.03144186485911955,"model_half":0.0004798490540076376},{"metric":"write_amplification","live":5.302200901797815,"live_half":0.14993738812838794,"model":5.278048497102154,"model_half":0.042531159015560344},{"metric":"insert_rate","live":40.39506172839506,"live_half":0.44859759781635455,"model":39.970555555555556,"model_half":0.1969764468303719},{"metric":"delayed_fraction","live":0.21063233312200194,"live_half":0.010013614089178238,"model":0.19072622546721754,"model_half":0.004769414073022361},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":15.62557378448898,"live_half":0.34780452457407174,"model":11.3140677299082,"model_half":0.4361106917447029}]}],"calibration":{"base":{"merge_fixed_seconds":1.9161701930021834e-06,"merge_bytes_per_second":235775162.1439831,"merge_noise_cv":0.10345845233389503,"checks":{"merges":376,"log_residual_sigma":0.10318320016045511,"residual_size_spearman":-0.05359547459686801,"log_residual_skew":-0.21665469844926297,"log_residual_excess_kurtosis":0.20590336317897462,"result_to_sources_size":0.9924331580222736,"result_to_sources_size_by_bytes":0.9335019487732431,"source_mib_range":[14.869882583618164,2337.555914878845]},"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221},"index":{"merge_fixed_seconds":0.003595729817121768,"merge_bytes_per_second":223508755.5000545,"merge_noise_cv":0.08634494753483375,"checks":{"merges":376,"log_residual_sigma":0.08618465909784145,"residual_size_spearman":-0.09054836860377294,"log_residual_skew":-0.07074766446446241,"log_residual_excess_kurtosis":1.4442467897625235,"result_to_sources_size":0.9922136710316851,"result_to_sources_size_by_bytes":0.9300976979810455,"source_mib_range":[14.976439476013184,1996.3367385864258]},"insert_bytes_mean":3633779.954413191,"insert_bytes_cv":0.35138285406492875},"projection":{"merge_fixed_seconds":4.407093743957217e-10,"merge_bytes_per_second":243204603.35305232,"merge_noise_cv":0.10432555069558312,"checks":{"merges":362,"log_residual_sigma":0.1040433468916645,"residual_size_spearman":0.37162339536161854,"log_residual_skew":0.7472187035298714,"log_residual_excess_kurtosis":2.860410578564392,"result_to_sources_size":0.9920643289968394,"source_mib_range":[29.526439666748047,3942.3284196853638]},"insert_bytes_mean":7184421.780155642,"insert_bytes_cv":0.3537193332356586,"projection_time_ratio":0.8770580296896087},"small":{"merge_fixed_seconds":0.0033462518187959904,"merge_bytes_per_second":259065659.38657644,"merge_noise_cv":0.14017975505680022,"checks":{"merges":295,"log_residual_sigma":0.13949834362610133,"residual_size_spearman":-0.03443865865173372,"log_residual_skew":-0.2823165883524914,"log_residual_excess_kurtosis":-0.7704246180447178,"result_to_sources_size":0.9757958293160882,"source_mib_range":[1.257950782775879,419.0453414916992]},"insert_bytes_mean":487879.82961072115,"insert_bytes_cv":0.5958613268903633},"base_and_small":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"checks":{"merges":671,"log_residual_sigma":0.1224435891334234,"residual_size_spearman":0.02252177964188716,"log_residual_skew":-0.1281665366174902,"log_residual_excess_kurtosis":-0.13304577153726527,"result_to_sources_size":0.9915019335341808,"source_mib_range":[1.257950782775879,2337.555914878845]}},"model":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221,"index_aux":[0.007155583071234206,0.10176512260370196],"projection_aux":[0.9912682104579509,1.0019119207924843],"result_ratio":0.9924737500565795,"result_ratio_large":0.7945592504794639,"large_merge_bytes":105187814,"large_merge_time_factor":1.1370079621788785}}};
+const RESULTS = {"e1":{"rates":[25,50,100,150,200,225,250,275,300],"metrics":{"parts_mean":[[30.443465,0.223777],[53.167277,0.594353],[85.727586,0.999626],[115.818183,0.507629],[250.779824,10.466558],[518.960614,14.722187],[618.725605,6.571013],[868.14861,14.691658],[1382.459202,21.170112]],"parts_quantiles_0.99":[[46.9,0.527837],[72.1,0.787254],[107.1,1.798696],[140.9,0.856439],[398.2,21.185517],[630.2,24.621398],[804.8,14.029428],[1214.5,27.953384],[2071.5,27.022549]],"busy_threads_mean":[[2.178746,0.015646],[4.352119,0.023789],[9.08194,0.152855],[13.38474,0.122372],[15.990619,0.004944],[16.0,0.0],[16.0,0.0],[16.0,0.0],[16.0,0.0]],"all_threads_busy":[[0.0,0.0],[0.0,0.0],[0.0,0.0],[0.084884,0.014439],[0.993044,0.003619],[1.0,0.0],[1.0,0.0],[1.0,0.0],[1.0,0.0]],"write_amplification":[[4.65224,0.022296],[4.530529,0.052116],[4.688704,0.074774],[4.613695,0.041206],[4.166259,0.030068],[3.854578,0.037627],[3.560241,0.008157],[3.264103,0.007124],[3.037246,0.005431]],"fresh_waiting_mean":[[0.10317,0.000442],[0.053392,0.000153],[0.027629,6.3e-05],[0.018645,3.2e-05],[0.017601,0.00093],[0.044032,0.000912],[0.044902,0.00044],[0.046484,0.000478],[0.046787,0.000326]],"fresh_waiting_quantiles_0.99":[[0.400178,0.001645],[0.201052,0.001012],[0.101555,0.000363],[0.070071,0.000165],[0.132258,0.036423],[0.532915,0.010697],[0.552067,0.005846],[0.574083,0.007222],[0.583144,0.006191]],"merge_duration_mean":[[0.501755,0.004432],[0.497167,0.0055],[0.495812,0.0093],[0.479867,0.005213],[0.693486,0.01937],[0.821908,0.006925],[0.755726,0.002323],[0.688804,0.001947],[0.634851,0.000829]],"merge_duration_quantiles_0.99":[[3.367946,0.040847],[3.639796,0.025565],[4.501645,0.010623],[4.85152,0.015799],[8.225141,0.210429],[9.881887,0.149272],[9.942602,0.11273],[9.920304,0.059917],[9.607975,0.068411]],"fresh_lifetime_mean":[[0.273023,0.000772],[0.202691,0.000701],[0.139043,0.000288],[0.119946,6.9e-05],[0.187827,0.006522],[0.297813,0.00217],[0.303261,0.000935],[0.309503,0.001112],[0.313395,0.00066]]},"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"series":{"25":[0.0,22.3,20.3,25.5,21.0,26.9,21.8,25.7,26.9,24.2,25.9,25.1,31.6,32.2,32.7,26.3,28.4,24.4,26.9,26.0,29.8,26.4,25.0,31.4,31.0,33.1,31.5,25.5,29.8,31.2,30.0,29.2,31.8,32.0,34.1,35.4,28.9,31.1,31.0,29.9,29.5,32.4,31.4,34.6,35.8,32.0,29.4,30.5,30.7,31.0,31.8,29.0,32.2,32.1,37.8,36.3,31.9,29.6,31.7,30.1,31.9],"50":[0.0,37.5,41.8,43.4,43.7,46.6,44.3,43.4,48.8,45.9,48.8,46.2,49.8,49.5,54.7,48.4,54.8,50.0,48.6,46.8,51.4,52.6,51.3,51.2,55.7,56.0,53.7,53.0,56.6,52.2,53.2,51.7,44.7,55.4,56.5,49.8,55.6,56.1,53.6,53.6,48.9,50.1,48.0,48.6,51.0,58.3,58.8,56.7,57.8,54.6,49.1,51.5,49.2,48.0,52.7,53.4,57.2,55.2,57.6,53.4,48.3],"100":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0],"150":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7],"200":[0.0,97.0,112.1,117.3,120.8,137.5,138.2,141.7,144.1,158.8,152.6,161.4,157.9,167.1,169.0,168.2,172.4,179.5,185.1,185.5,191.6,202.0,200.3,207.2,195.1,203.5,221.8,237.3,233.1,230.3,237.6,216.1,232.4,237.7,252.6,246.8,254.6,262.7,269.8,271.1,260.8,276.3,290.3,275.4,303.2,294.4,284.5,286.4,304.5,300.0,312.6,327.9,309.6,330.7,316.5,346.0,325.8,329.7,344.9,327.9,346.3],"225":[0.0,117.1,126.2,137.7,177.1,219.3,244.0,237.5,278.7,301.3,301.2,336.6,331.3,336.6,339.3,339.8,365.2,367.7,374.5,389.3,380.8,393.9,391.1,422.8,409.7,429.7,411.2,442.7,446.9,436.1,442.8,460.7,456.0,485.0,467.4,471.5,493.0,484.6,499.2,508.2,499.1,486.6,499.9,509.9,524.3,536.9,554.7,513.1,550.2,525.5,545.2,548.7,541.5,555.0,554.2,553.9,565.2,537.3,546.9,549.3,562.3],"250":[0.0,140.9,184.8,230.6,283.6,327.7,362.5,399.6,436.6,453.2,457.1,476.6,496.6,481.8,480.3,501.5,491.8,498.6,510.3,543.0,519.8,529.3,527.4,560.4,550.6,541.8,538.7,564.9,579.0,564.5,578.1,575.1,593.6,601.2,611.2,634.1,605.1,657.0,643.7,638.4,650.3,656.6,653.1,667.2,672.4,669.8,691.9,694.8,718.9,700.0,713.3,725.7,745.4,734.0,728.2,733.9,726.7,742.1,768.1,747.0,753.5],"275":[0.0,187.1,273.7,348.6,390.0,438.2,496.7,519.6,517.6,554.8,552.0,571.0,583.9,581.6,598.6,623.0,613.8,611.7,668.8,654.5,664.0,693.4,734.1,707.6,748.9,719.3,739.4,765.7,774.5,788.8,817.0,810.9,844.4,816.2,844.4,881.6,885.1,899.3,915.3,919.8,917.8,937.7,964.2,950.0,980.0,994.4,1016.3,990.6,1049.8,1033.6,1066.0,1076.3,1071.8,1087.5,1124.2,1105.5,1154.5,1156.0,1172.8,1172.5,1196.8],"300":[0.0,265.9,404.6,430.9,483.0,522.4,563.1,601.2,624.5,657.1,673.5,719.0,756.1,765.1,795.8,844.6,879.7,883.3,943.3,934.4,960.3,1003.4,1015.1,1038.7,1075.0,1109.8,1156.7,1175.7,1185.3,1204.5,1235.9,1264.0,1301.5,1322.1,1358.1,1366.4,1426.8,1436.0,1475.4,1498.4,1509.0,1535.1,1573.6,1627.0,1624.1,1638.1,1699.8,1710.0,1752.6,1765.5,1793.9,1808.4,1849.1,1906.1,1919.2,1930.2,1980.1,1968.9,2028.6,2043.9,2073.0]}},"e2":{"sizes":[0.29,0.9,3.6,14.4],"pools":[4,16],"metrics":{"parts_mean":[[[278.238674,5.637442],[127.076811,3.504503],[89.618708,2.868959],[64.025992,2.208578]],[[68.147266,0.602459],[59.240477,0.777367],[53.215522,0.419578],[48.271999,0.614381]]],"write_amplification":[[[4.546605,0.003481],[4.428491,0.019029],[4.073239,0.044306],[3.519865,0.064116]],[[5.912049,0.063286],[5.356616,0.05185],[4.506312,0.056524],[3.834078,0.057678]]],"busy_threads_mean":[[[3.994962,0.000458],[3.946388,0.014534],[3.823216,0.014138],[3.386392,0.032784]],[[5.560029,0.055662],[4.907146,0.035659],[4.319259,0.044338],[3.698523,0.05446]]]}},"e3":{"variants":[{"name":"pool 16","points":[[0.9,905.6348518886185,933.8231801802036,815.0713666997566],[3.6,280.59103830545996,289.3245717896636,1010.1277378996558],[14.4,81.76574897271071,84.31074795352906,1177.4267852070343]]},{"name":"pool 4","points":[[0.9,280.59103830545996,289.3245717896636,252.53193447491395],[3.6,86.9349612740158,90.78390083479722,312.96586058645687],[14.4,26.990215200110583,28.18517411554936,388.6590988815924]]},{"name":"pool 16 + projection","points":[[0.9,495.9555222001719,511.3923807184242,446.3599699801547],[3.6,149.02251077191983,153.66090940213485,536.4810387789114],[14.4,45.34859895277469,47.35635295619788,653.0198249199555]]}],"until":1800.0},"e4":{"rate":150,"selectors":[{"name":"SimpleMergeSelector","bases":[2,3,5,8,12,20],"wa":[[5.762808,0.023541],[5.812012,0.111276],[4.613695,0.041206],[3.865724,0.026397],[3.504062,0.008785],[2.973931,0.038899]],"parts":[[188.41528,1.632883],[159.146071,4.021423],[115.818183,0.507629],[156.333078,1.006342],[175.432479,0.751155],[233.169626,2.169679]],"busy":[[16.0,0.0],[15.999998,3e-06],[13.38474,0.122372],[10.987672,0.189473],[9.668212,0.057447],[8.105189,0.100025]]},{"name":"tiered","bases":[2,3,4,6,8,12],"wa":[[NaN,0.0],[5.788051,0.024274],[5.743721,0.034751],[4.993835,0.02364],[4.336301,0.031334],[3.560276,0.017576]],"parts":[[3002.3,2.634871],[1338.984405,31.352048],[234.532744,12.491647],[107.070996,0.395694],[124.05836,0.442091],[150.397848,0.453374]],"busy":[[0.0,0.0],[15.161502,0.059807],[15.80085,0.031147],[14.564053,0.058695],[12.165487,0.061427],[9.692468,0.040914]]}]},"e5":{"rates":[200,250],"differences":{"200":{"parts_mean":[-108.33950391241413,16.840460794740373],"fresh_waiting_mean":[-0.007043890754848003,0.001846242354579762],"merge_duration_mean":[-0.2534744164476962,0.04638033372158814],"write_amplification":[0.12763530675011214,0.13026900021978813],"merge_duration_p99":[-4.098712296837563,0.1343551224405183]},"250":{"parts_mean":[-137.19425274088672,9.61691216347776],"fresh_waiting_mean":[-0.022050430716287855,0.0005317710467782208],"merge_duration_mean":[-0.2865622131934061,0.013909768755616007],"write_amplification":[-0.016665197768506078,0.016522501877504293],"merge_duration_p99":[-4.507036226944611,0.125504753102875]}},"runs":[{"rate":200,"policy":"round_robin","parts":[250.779824,10.466558],"merge_p99":[8.225141,0.210429],"wa":[4.166259,0.030068]},{"rate":200,"policy":"shortest_task_first","parts":[203.862179,5.774034],"merge_p99":[4.961824,0.024035],"wa":[4.278528,0.046895]},{"rate":250,"policy":"round_robin","parts":[618.725605,6.571013],"merge_p99":[9.942602,0.11273],"wa":[3.560241,0.008157]},{"rate":250,"policy":"shortest_task_first","parts":[511.525358,7.375782],"merge_p99":[5.467984,0.054331],"wa":[3.53037,0.008541]}]},"e6":{"offered":350,"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"open, guard","parts":[0.0,441.2,564.2,625.4,705.1,796.8,873.0,942.7,1013.6,1098.5,1178.0,1259.8,1341.6,1425.0,1493.4,1576.9,1661.6,1745.7,1801.9,1910.7,1970.6,2056.9,2127.5,2208.9,2292.8,2370.9,2470.8,2548.0,2626.5,2703.5,2772.7,2851.3,2928.4,2949.3,2965.6,2949.3,2970.9,2959.4,2954.1,2951.9,2964.3,2960.4,2989.0,2970.9,2958.9,2987.4,2956.4,2977.6,2971.0,2979.5,2965.7,2979.2,2968.0,2958.3,2959.7,2976.4,2998.0,2952.9,2958.7,2976.4,2981.9],"rate":[349.9994,0.261663],"rejected":[0.127856,0.001523],"delayed":[0.870322,0.00142],"parts_mean":[2570.27339,7.644488]},{"name":"closed, guard","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"rate":[324.533167,0.861646],"rejected":[2e-06,5e-06],"delayed":[0.01109,0.000404],"parts_mean":[2430.042418,3.050198]},{"name":"open, no guard","parts":[0.0,441.2,564.2,625.4,705.1,796.8,873.0,942.7,1013.6,1098.5,1178.0,1259.8,1341.6,1425.0,1493.4,1576.9,1661.6,1745.7,1801.9,1910.7,1970.6,2056.9,2127.5,2208.9,2292.8,2370.9,2470.8,2548.0,2626.5,2703.5,2772.7,2851.3,2928.4,2949.3,2965.6,2949.3,2970.9,2959.4,2954.1,2951.9,2964.3,2960.4,2989.0,2970.9,2958.9,2987.4,2956.4,2977.6,2971.0,2979.5,2965.7,2979.2,2968.0,2958.3,2959.7,2976.4,2998.0,2952.9,2984.3,2962.9,2988.0],"rate":[349.9994,0.261663],"rejected":[0.130449,0.001373],"delayed":[0.869551,0.001373],"parts_mean":[2570.455719,7.618194]},{"name":"closed, no guard","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1059.8,1056.6,1065.8,1073.5,1070.6,1071.2,1067.6,1074.6,1062.4,1077.0,1069.3,1064.1,1077.0,1066.4,1071.6,1084.4,1065.3,1076.7,1070.0,1080.2,1069.9,1075.1,1082.2,1075.7,1078.3,1078.4,1072.9,1080.4,1094.9,1086.7,1095.1,1086.1,1087.0,1083.3,1091.6,1091.9,1079.3,1065.9,1095.7,1081.8],"rate":[256.375625,0.706472],"rejected":[0.0,0.0],"delayed":[0.999827,8.7e-05],"parts_mean":[1073.925637,0.811181]}]},"e7":{"burst":[1800.0,300.0],"grid":[0.0,30.0,60.0,90.0,120.0,150.0,180.0,210.0,240.0,270.0,300.0,330.0,360.0,390.0,420.0,450.0,480.0,510.0,540.0,570.0,600.0,630.0,660.0,690.0,720.0,750.0,780.0,810.0,840.0,870.0,900.0,930.0,960.0,990.0,1020.0,1050.0,1080.0,1110.0,1140.0,1170.0,1200.0,1230.0,1260.0,1290.0,1320.0,1350.0,1380.0,1410.0,1440.0,1470.0,1500.0,1530.0,1560.0,1590.0,1620.0,1650.0,1680.0,1710.0,1740.0,1770.0,1800.0,1830.0,1860.0,1890.0,1920.0,1950.0,1980.0,2010.0,2040.0,2070.0,2100.0,2130.0,2160.0,2190.0,2220.0,2250.0,2280.0,2310.0,2340.0,2370.0,2400.0,2430.0,2460.0,2490.0,2520.0,2550.0,2580.0,2610.0,2640.0,2670.0,2700.0,2730.0,2760.0,2790.0,2820.0,2850.0,2880.0,2910.0,2940.0,2970.0,3000.0,3030.0,3060.0,3090.0,3120.0,3150.0,3180.0,3210.0,3240.0,3270.0,3300.0,3330.0,3360.0,3390.0,3420.0,3450.0,3480.0,3510.0,3540.0,3570.0,3600.0,3630.0,3660.0,3690.0,3720.0,3750.0,3780.0,3810.0,3840.0,3870.0,3900.0,3930.0,3960.0,3990.0,4020.0,4050.0,4080.0,4110.0,4140.0,4170.0,4200.0,4230.0,4260.0,4290.0,4320.0,4350.0,4380.0,4410.0,4440.0,4470.0,4500.0,4530.0,4560.0,4590.0,4620.0,4650.0,4680.0,4710.0,4740.0,4770.0,4800.0,4830.0,4860.0,4890.0,4920.0,4950.0,4980.0,5010.0,5040.0,5070.0,5100.0,5130.0,5160.0,5190.0,5220.0,5250.0,5280.0,5310.0,5340.0,5370.0,5400.0],"runs":[{"factor":1.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,116.2,118.5,114.1,115.5,116.2,118.2,115.1,121.6,124.0,120.1,117.4,121.5,120.3,117.5,117.8,121.9,118.8,117.1,117.9,117.8,120.0,118.1,121.9,120.3,119.4,118.4,124.2,125.1,124.9,117.9,123.3,121.9,122.9,125.9,120.8,125.8,122.7,122.5,121.2,123.7,121.1,125.3,123.8,125.0,118.1,125.1,123.7,123.0,122.2,128.6,121.7,122.4,125.8,127.9,123.8,126.1,128.3,125.9,130.9,129.7,127.6,131.7,126.8,130.6,130.9,132.3,130.7,128.1,132.0,130.2,130.6,128.3,130.4,133.4,133.2,127.2,132.1,134.3,136.1,128.9,129.3,131.3,132.7,133.7,133.4,133.0,133.6,135.8,132.0,133.4,136.0,130.9,133.5,135.3,133.9,131.0,134.4,136.1,132.1,131.8,131.6,132.8,132.5,132.3,130.0,132.8,127.3,130.3,137.7,132.9,132.9,132.2,131.7,133.8,134.7,133.2,131.1,135.3,137.2,138.0],"peak":158.3,"recovery":[0.0,0.0]},{"factor":1.5,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,180.6,215.7,240.9,260.2,253.9,272.7,285.8,291.1,319.3,304.3,196.6,170.1,161.3,158.0,149.5,149.3,140.9,132.9,134.5,128.7,128.7,128.4,127.9,126.3,129.8,123.2,131.6,128.8,127.1,124.8,129.9,131.9,129.1,130.9,127.6,130.3,126.1,132.8,128.2,126.5,122.6,129.4,126.7,129.4,125.2,129.8,130.8,130.1,130.1,128.7,127.2,127.2,130.2,129.3,126.7,130.2,135.3,128.2,136.2,126.8,132.0,129.9,130.2,129.6,133.3,128.0,131.5,132.3,136.1,133.3,132.6,128.3,127.6,134.0,130.5,128.1,129.0,135.2,134.1,133.1,131.9,134.7,132.4,133.6,131.5,136.6,134.2,135.9,132.2,133.9,140.7,129.9,134.3,138.3,138.4,137.2,136.3,140.8,135.1,141.7,136.5,137.5,138.7,134.7,135.0,136.3,135.8,132.1,137.8,136.5,137.4,134.9,137.2,135.9,132.2,134.5,136.7,134.7,133.7,140.5],"peak":348.8,"recovery":[228.0,40.0]},{"factor":2.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,349.5,448.7,475.5,510.3,534.8,577.6,583.5,604.6,646.9,664.1,466.4,470.5,405.8,344.0,326.9,286.5,267.2,248.6,232.7,224.9,223.2,215.9,209.3,197.4,192.5,176.3,173.8,168.4,163.0,150.7,153.2,149.0,151.2,142.3,141.0,140.7,138.7,143.5,141.8,138.7,138.3,143.1,142.0,138.4,139.8,142.9,139.9,139.3,136.5,141.2,140.7,136.4,139.1,136.0,136.7,134.6,135.3,132.7,137.0,131.3,132.9,132.2,135.4,129.3,136.4,132.5,137.9,135.9,136.4,137.8,140.4,137.0,138.3,138.7,139.1,134.7,134.5,142.2,137.1,133.3,136.5,140.8,134.4,135.1,132.2,135.1,136.5,137.3,132.1,132.7,136.5,132.8,136.4,137.3,137.5,133.2,131.9,139.4,137.1,137.0,134.8,135.4,133.8,140.0,138.1,137.1,133.1,136.4,141.2,141.6,140.6,137.8,137.3,137.6,142.1,141.7,138.2,138.2,138.3,139.1],"peak":687.1,"recovery":[714.0,78.5]},{"factor":3.0,"series":[0.0,67.9,80.4,77.6,84.4,83.8,88.9,88.7,93.9,93.2,94.1,92.6,96.7,96.4,96.7,96.5,100.6,103.0,91.9,99.3,101.8,100.3,105.0,100.2,101.6,97.7,98.2,104.6,108.9,103.9,106.1,102.9,103.2,103.6,107.7,105.4,106.5,103.7,110.0,108.5,111.4,105.6,112.1,111.4,113.2,106.3,112.6,112.3,112.9,114.0,116.1,112.2,112.4,114.2,114.4,110.7,111.1,114.8,112.0,119.3,115.5,762.0,1055.0,1328.5,1597.1,1844.6,2104.0,2341.7,2568.3,2738.1,2872.0,2237.5,1934.7,1708.7,1505.8,1316.1,1165.0,1013.0,858.9,760.9,685.1,672.0,627.3,601.6,550.3,531.9,505.6,477.4,456.8,426.6,408.0,386.8,386.6,400.5,370.1,389.4,395.8,392.8,386.9,391.3,371.2,357.3,348.7,316.5,273.2,250.6,243.6,232.6,228.9,222.0,211.5,202.4,189.4,192.1,191.2,189.5,178.8,180.4,180.2,186.0,173.5,170.3,171.3,167.1,161.9,163.6,164.4,165.2,168.0,170.6,167.0,168.4,163.2,166.0,170.1,164.5,159.8,163.0,163.4,164.2,160.2,152.4,157.2,154.4,148.3,154.1,154.8,153.7,152.7,147.8,144.8,154.6,147.9,150.4,152.2,149.8,146.9,149.9,155.6,148.1,147.6,146.2,149.7,152.4,154.1,152.7,149.1,150.5,150.1,143.1,147.3,145.8,145.6,147.3,144.0,148.0,140.7,141.0,144.7,140.1,149.5],"peak":2914.5,"recovery":[1894.0,264.6]}]},"e8":{"variants":["none","bloom_filter index","projection","projection + index"],"runs":[{"parts_mean":[85.727586,0.999626],"busy_threads_mean":[9.08194,0.152855],"merge_duration_mean":[0.495812,0.0093],"write_amplification":[4.688704,0.074774]},{"parts_mean":[89.825073,0.824186],"busy_threads_mean":[9.820608,0.120536],"merge_duration_mean":[0.533728,0.006624],"write_amplification":[4.627114,0.052237]},{"parts_mean":[177.49571,8.098652],"busy_threads_mean":[15.939451,0.026431],"merge_duration_mean":[1.177184,0.054345],"write_amplification":[4.221696,0.047655]},{"parts_mean":[270.98928,9.786364],"busy_threads_mean":[15.999981,4.2e-05],"merge_duration_mean":[1.623457,0.064652],"write_amplification":[4.106169,0.057767]}]},"e9":{"factors":["insert size","threads","base","scheduling_policy","projection"],"responses":["parts_mean","write_amplification","fresh_lifetime_mean","busy_threads_mean"],"effects":{"parts_mean":{"main":{"insert size":[-27.06549501677676,1.2132676010368237],"threads":[-37.10922472833278,1.060295689588236],"base":[0.9527105521408377,1.2552715305255764],"scheduling_policy":[1.553053805593524,1.4841127744522489],"projection":[67.51939948582005,0.48380315083387354]},"interactions":{"insert size x threads":[19.637974281188903,1.2655054117978146],"insert size x base":[11.651343350378363,1.0480459900549286],"insert size x scheduling_policy":[-2.595085648955653,1.391988211675464],"insert size x projection":[-21.063443019177438,1.0475836305169652],"threads x base":[30.477704063760743,1.3743690064844403],"threads x scheduling_policy":[-1.598325885508009,1.3906485136769948],"threads x projection":[-37.168689425793396,1.0523216938264415],"base x scheduling_policy":[-4.191751050659317,1.131049527922398],"base x projection":[-26.362633976883767,1.6379237590109281],"scheduling_policy x projection":[1.5038021478589796,1.4950666873153182]}},"write_amplification":{"main":{"insert size":[-0.7901369590727693,0.038274901960148704],"threads":[0.42631723368831764,0.02989447561529302],"base":[-1.5242667102773393,0.030242930609766683],"scheduling_policy":[-0.002771786802486534,0.009969993876056123],"projection":[-0.8114103054397277,0.058615411440291365]},"interactions":{"insert size x threads":[-0.14489587825985586,0.023712959428999262],"insert size x base":[-0.002746150367297561,0.05962738951356821],"insert size x scheduling_policy":[-0.010171470267884855,0.01955361406091168],"insert size x projection":[0.13187393913687034,0.040576657747186336],"threads x base":[-0.3695618191683509,0.0345541672615131],"threads x scheduling_policy":[0.00946434841269384,0.017279218654523098],"threads x projection":[0.413226797686083,0.04461151600930003],"base x scheduling_policy":[-0.006977766608755408,0.02473711392848784],"base x projection":[0.22989511138472443,0.055129726213613534],"scheduling_policy x projection":[-0.0030379165385120512,0.023692032677169954]}},"fresh_lifetime_mean":{"main":{"insert size":[0.22219017918825235,0.0014132807774235297],"threads":[-0.01585932884024821,0.0005240941266101642],"base":[0.14490803560500018,0.0005526005600250103],"scheduling_policy":[-0.013869001166609529,0.00046010415156349914],"projection":[0.08669618301427474,0.0004278525443036524]},"interactions":{"insert size x threads":[-0.005561521438176897,0.0003016303594245477],"insert size x base":[0.09901976022257397,0.000764440830188952],"insert size x scheduling_policy":[-0.004413710005920477,0.0003823608830652171],"insert size x projection":[0.05269463939737317,0.00042452371769947716],"threads x base":[0.01184603735928858,0.0002555816142072326],"threads x scheduling_policy":[0.013872475462636119,0.0004720045677804209],"threads x projection":[-0.01585079066795752,0.0005119581760044634],"base x scheduling_policy":[0.009890884196687958,0.00014950579141448524],"base x projection":[0.026764677743754267,0.00038949658026814264],"scheduling_policy x projection":[-0.013840506261333346,0.00043724317734468963]}},"busy_threads_mean":{"main":{"insert size":[-1.0086820493140267,0.0598245818277641],"threads":[0.8741018632635459,0.0483875556987233],"base":[-2.1082646858194454,0.0512773366482426],"scheduling_policy":[0.005270040353069309,0.014813798356731089],"projection":[3.5677442484333235,0.049098192968472745]},"interactions":{"insert size x threads":[-0.23206161447818552,0.03517057941840975],"insert size x base":[-0.1665103460839453,0.04420210506412456],"insert size x scheduling_policy":[-0.0055810764141477525,0.012409197899601545],"insert size x projection":[-0.23818189940233137,0.06801477275224876],"threads x base":[-0.8260796671432851,0.056604401073205676],"threads x scheduling_policy":[-0.0014441636719287332,0.031528897491773906],"threads x projection":[0.8648493353539924,0.024111623176797468],"base x scheduling_policy":[-0.003852400923584798,0.014582067925662096],"base x projection":[-0.3668304162554971,0.07136615322484227],"scheduling_policy x projection":[-2.3925874680234365e-05,0.029267474373960663]}},"delayed_fraction":{"main":{"insert size":[0.0,0.0],"threads":[0.0,0.0],"base":[0.0,0.0],"scheduling_policy":[0.0,0.0],"projection":[0.0,0.0]},"interactions":{"insert size x threads":[0.0,0.0],"insert size x base":[0.0,0.0],"insert size x scheduling_policy":[0.0,0.0],"insert size x projection":[0.0,0.0],"threads x base":[0.0,0.0],"threads x scheduling_policy":[0.0,0.0],"threads x projection":[0.0,0.0],"base x scheduling_policy":[0.0,0.0],"base x projection":[0.0,0.0],"scheduling_policy x projection":[0.0,0.0]}}}},"e10":{"rotation":{"partition_seconds":600.0,"retention_partitions":3},"open":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0,3660.0,3720.0,3780.0,3840.0,3900.0,3960.0,4020.0,4080.0,4140.0,4200.0,4260.0,4320.0,4380.0,4440.0,4500.0,4560.0,4620.0,4680.0,4740.0,4800.0,4860.0,4920.0,4980.0,5040.0,5100.0,5160.0,5220.0,5280.0,5340.0,5400.0,5460.0,5520.0,5580.0,5640.0,5700.0,5760.0,5820.0,5880.0,5940.0,6000.0,6060.0,6120.0,6180.0,6240.0,6300.0,6360.0,6420.0,6480.0,6540.0,6600.0,6660.0,6720.0,6780.0,6840.0,6900.0,6960.0,7020.0,7080.0,7140.0,7200.0],"variants":[{"name":"one partition","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7,131.7,130.6,132.3,128.1,130.2,128.3,133.4,127.2,134.3,128.9,131.3,133.7,133.0,135.8,133.4,130.9,135.3,131.0,136.1,131.8,132.8,132.3,132.8,130.3,132.9,132.2,133.8,133.2,135.3,138.0,135.5,138.7,136.6,133.4,137.2,133.2,133.1,136.0,134.8,134.7,137.9,135.5,135.8,144.2,137.7,136.7,141.5,148.0,140.9,143.0,145.2,138.9,140.8,140.9,140.8,143.1,143.4,147.0,146.3,145.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,105.0,101.6,98.2,108.9,106.1,103.2,107.7,106.5,110.0,111.4,112.1,113.2,112.6,112.9,116.1,112.4,114.4,111.1,112.0,115.5,118.5,115.5,118.2,121.6,120.1,121.5,117.5,121.9,117.1,117.8,118.1,120.3,118.4,125.1,117.9,121.9,125.9,125.8,122.5,123.7,125.3,125.0,125.1,123.0,128.6,122.4,127.9,126.1,125.9,129.7,131.7,130.6,132.3,128.1,130.2,128.3,133.4,127.2,134.3,128.9,131.3,133.7,133.0,135.8,133.4,130.9,135.3,131.0,136.1,131.8,132.8,132.3,132.8,130.3,132.9,132.2,133.8,133.2,135.3,138.0,135.5,138.7,136.6,133.4,137.2,133.2,133.1,136.0,134.8,134.7,137.9,135.5,135.8,144.2,137.7,136.7,141.5,148.0,140.9,143.0,145.2,138.9,140.8,140.9,140.8,143.1,143.4,147.0,146.3,145.3],"stats":{"parts_mean":[126.758719,0.843071],"write_amplification":[4.823796,0.023455],"insert_rate":[149.984394,0.086371],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,108.5,112.8,104.5,111.5,105.8,109.0,113.8,109.1,114.1,114.4,119.8,122.6,121.9,123.1,126.2,125.1,127.7,122.7,124.8,115.9,137.3,130.2,132.3,141.5,141.0,138.9,138.6,138.3,135.9,122.4,140.3,134.9,137.0,145.0,143.1,135.2,137.0,138.5,133.5,115.8,135.2,131.4,131.8,138.2,133.4,135.7,135.1,132.6,126.6,113.4,132.0,131.1,129.7,136.6,132.9,131.2,133.8,128.4,138.0,117.2,141.3,132.5,141.8,141.0,136.9,133.4,145.1,136.7,140.8,112.1,136.4,132.4,134.5,136.1,140.3,133.6,139.4,137.7,132.4,117.1,138.7,132.8,135.8,136.9,139.3,138.4,134.0,137.7,131.0,111.6,141.7,128.0,130.9,135.2,134.4,136.0,141.2,139.0,129.8,115.2,136.2,128.8,132.8,137.4,136.2,137.0,135.4,127.3,130.2,115.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,80.2,89.4,88.8,96.8,91.1,95.0,99.8,95.1,100.1,100.4,78.0,86.4,89.4,92.5,96.2,95.1,98.9,94.4,98.2,99.9,79.3,82.4,85.5,95.9,97.5,97.6,97.3,98.4,96.0,102.3,74.9,83.1,86.3,95.9,94.0,92.1,96.6,101.7,99.1,98.9,82.2,85.3,86.8,93.8,92.6,97.0,96.4,97.8,95.1,98.1,80.2,84.4,84.8,93.0,93.4,91.7,96.9,92.8,102.4,96.9,79.6,81.8,91.7,93.7,93.5,92.3,104.0,96.8,102.7,93.9,75.8,84.1,87.7,91.6,97.6,92.0,97.8,97.7,97.5,101.7,76.3,85.0,89.1,90.7,94.3,95.6,94.3,103.3,98.3,96.1,80.0,80.7,86.8,92.3,93.4,96.2,104.6,102.8,96.9,99.7,80.2,81.7,87.2,94.3,94.6,96.6,96.8,95.9,100.7,100.4],"stats":{"parts_mean":[134.787291,3.134128],"write_amplification":[4.251626,0.013315],"insert_rate":[149.97437,0.102898],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}},{"name":"rotation, 10% late inserts","parts":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,112.6,113.2,109.7,118.4,117.6,117.1,114.3,117.4,124.4,125.4,135.6,135.3,137.5,137.4,139.1,140.6,140.4,135.2,137.3,123.1,137.1,135.7,143.6,141.6,137.6,143.1,135.7,135.3,138.8,122.2,133.6,136.5,144.1,142.8,135.0,140.6,136.5,135.3,139.4,120.7,136.4,133.9,138.2,138.2,139.2,136.6,139.9,137.1,141.4,118.1,130.8,135.2,135.6,143.5,141.1,142.3,132.2,138.5,140.1,121.2,139.1,138.6,142.0,140.3,147.1,139.8,134.0,129.9,137.5,121.2,130.3,133.6,137.2,135.1,137.5,138.4,139.5,136.5,133.6,122.7,144.4,142.7,141.5,133.6,136.5,138.0,136.8,134.9,137.0,123.9,139.5,129.0,141.1,135.8,133.1,128.0,137.5,132.5,136.3,124.0,133.0,133.4,139.2,137.0,133.2,130.8,129.9,130.0,129.1,120.3],"largest":[0.0,80.4,84.4,88.9,93.9,94.1,96.7,96.7,100.6,91.9,101.8,74.7,78.3,79.7,87.4,89.2,87.8,86.8,89.7,92.2,95.6,75.1,77.4,81.3,87.9,86.3,88.9,92.9,86.9,88.0,91.1,70.9,75.5,81.5,87.6,88.7,89.1,88.5,89.7,88.1,91.5,69.9,76.0,81.9,87.7,83.4,89.8,86.9,90.7,92.3,93.1,70.9,73.5,80.8,85.9,88.0,85.3,89.9,88.9,91.5,87.5,70.8,75.8,78.4,87.5,87.8,87.3,87.7,92.5,93.8,90.9,70.1,76.6,81.8,81.2,88.7,86.0,89.7,86.8,91.8,90.1,69.5,73.5,80.2,83.4,88.6,85.4,91.3,89.0,85.1,90.1,72.8,77.7,81.6,83.1,83.3,86.5,87.7,89.8,89.0,93.5,74.0,70.5,81.9,85.9,83.6,82.1,95.5,87.1,89.7,92.5,71.6,74.8,80.9,85.6,85.1,86.3,87.7,87.8,85.2,92.0],"stats":{"parts_mean":[137.549849,1.381241],"write_amplification":[4.234096,0.017369],"insert_rate":[149.965792,0.140718],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0]}}]},"closed":{"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0],"variants":[{"name":"one partition","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"largest":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1041.1,1053.0,1061.2,1057.3,1052.4,1064.3,1062.1,1068.0,1061.8,1064.1,1060.9,1070.0,1103.1,1140.8,1187.3,1224.7,1268.4,1325.4,1364.4,1431.8,1473.7,1513.9,1573.8,1625.8,1659.4,1723.3,1770.4,1824.5,1872.0,1926.9,1977.2,2033.6,2074.7,2124.7,2173.8,2230.2,2274.6,2326.7,2392.8,2417.7,2480.1,2529.7,2581.5,2633.8,2686.1,2721.7,2773.6,2834.3,2891.3,2939.6],"stats":{"parts_mean":[2430.042418,3.050198],"write_amplification":[2.844837,0.004698],"insert_rate":[324.533167,0.861646],"delayed_fraction":[0.01109,0.000404],"rejected_fraction":[2e-06,5e-06]}},{"name":"rotation","parts":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,1171.7,1270.3,1317.1,1387.5,1496.2,1583.3,1618.9,1692.2,1715.7,1721.2,1883.1,1947.8,2006.0,2094.7,2192.2,2252.7,2341.9,2385.0,2397.2,1730.6,1924.4,2003.0,2075.3,2169.6,2246.7,2303.6,2389.9,2437.7,2441.4,1734.0,1929.5,1997.1,2067.2,2155.6,2225.9,2315.3,2381.6,2429.2,2439.3,1745.2,1960.3,2000.3,2085.3,2163.9,2245.7,2308.4,2395.8,2432.7,2445.9,1741.8],"largest":[0.0,462.2,560.1,637.8,717.1,789.8,869.8,941.2,989.6,1010.5,1023.1,701.9,693.0,692.7,703.3,804.2,892.0,927.6,1000.9,1024.7,1035.3,718.1,709.3,709.0,713.9,804.9,865.8,955.0,998.5,1010.7,1024.6,732.9,718.7,723.5,758.2,833.6,891.3,977.6,1025.7,1029.9,1029.9,740.2,726.7,727.2,742.9,802.3,891.9,958.7,1006.9,1019.8,1037.2,744.3,730.8,730.9,755.3,818.6,881.9,969.6,1007.1,1020.5,1025.1],"stats":{"parts_mean":[2054.420998,6.999921],"write_amplification":[2.726775,0.003467],"insert_rate":[340.819333,0.370744],"delayed_fraction":[0.184785,0.008048],"rejected_fraction":[0.0,0.0]}}]}},"e11":{"disk_bytes":2000000000000,"grid":[0.0,60.0,120.0,180.0,240.0,300.0,360.0,420.0,480.0,540.0,600.0,660.0,720.0,780.0,840.0,900.0,960.0,1020.0,1080.0,1140.0,1200.0,1260.0,1320.0,1380.0,1440.0,1500.0,1560.0,1620.0,1680.0,1740.0,1800.0,1860.0,1920.0,1980.0,2040.0,2100.0,2160.0,2220.0,2280.0,2340.0,2400.0,2460.0,2520.0,2580.0,2640.0,2700.0,2760.0,2820.0,2880.0,2940.0,3000.0,3060.0,3120.0,3180.0,3240.0,3300.0,3360.0,3420.0,3480.0,3540.0,3600.0,3660.0,3720.0,3780.0,3840.0,3900.0,3960.0,4020.0,4080.0,4140.0,4200.0,4260.0,4320.0,4380.0,4440.0,4500.0,4560.0,4620.0,4680.0,4740.0,4800.0,4860.0,4920.0,4980.0,5040.0,5100.0,5160.0,5220.0,5280.0,5340.0,5400.0,5460.0,5520.0,5580.0,5640.0,5700.0,5760.0,5820.0,5880.0,5940.0,6000.0],"variants":[{"name":"no limit","used":[0.0,86880817151.91,189228636745.77,295999857031.27,417383298528.8,509830947936.66,623781938086.27,741017638340.1,833707419161.41,891043782675.62,921352894549.81,951679780094.68,1009347194607.71,1116054554804.34,1141143878110.41,1165097354622.96,1167222288403.98,1193826661114.0,1202748876330.57,1234215613857.66,1257202276938.75,1263292999600.16,1334098088947.88,1394803887747.66,1406349580339.04,1428571268568.86,1457366085918.22,1487645464416.47,1513075158612.36,1523084463108.92,1591049012576.55,1631386627381.67,1670962855104.12,1702778681685.23,1704247669089.18,1717059989561.58,1697018605241.02,1681021002330.94,1686978995132.21,1722075697599.82,1713123629946.03,1769494828038.78,1851401141069.09,1863729167879.69,1883274041127.6,1947029472993.05,1980771412977.76,1960858587186.76,1973511113976.69,1949798794576.8,1940764936373.06,1970139803974.17,1967530687719.69,1993844105322.79,2013823285564.56,2061993150481.74,2050043804248.77,2051798071472.47,2064173932641.93,2132931397879.31,2142880831880.9,2134448586312.61,2196236604483.75,2197290488546.72,2251454937419.52,2282502772325.86,2258180964842.97,2245335049936.07,2262141694585.9,2298738613657.24,2319161457752.89,2347170580889.95,2352055809478.49,2390518271405.48,2394722111708.45,2413453562105.83,2436935270033.93,2459472019293.07,2452291256885.56,2487261318508.78,2498407479005.81,2493711433377.52,2517271453546.22,2550485911914.34,2554642750095.69,2557749795893.31,2608457830501.58,2604930405075.47,2575528371037.5,2604880197944.4,2633374739853.75,2671266825543.77,2659464512408.1,2701597159267.68,2697990790569.29,2720615147121.59,2770030861904.94,2758382862202.17,2751200609688.08,2778053625208.04,2817671453612.57],"outdated":[0.0,61278409919.5,135732904223.7,209359109859.6,286360796289.6,381773053897.9,467828081154.7,556873077399.7,653562772453.4,677810647745.6,703494922866.3,714861520655.7,730443256929.2,731394787045.8,733640721494.3,732975664583.1,734100743569.6,735419628698.9,731842615975.1,736005583590.6,733307539125.7,729563472192.0,726420812940.1,732089108035.0,730158716170.9,722356537976.6,727417743425.6,748692556984.7,807779067564.6,833636455589.0,846885334185.8,842962228872.1,857295744989.0,867180699781.8,856353356394.4,836562647005.9,780542332358.7,756324431999.5,748241510979.6,776369257129.4,769407099856.5,805436769429.9,851085042656.7,850164989255.5,868797340203.5,882865323753.2,898991627722.6,886615759404.8,904069616491.6,877842935524.8,840149412002.7,843926859737.5,840325883952.6,850081182074.4,835546566188.5,853948353382.2,821002459680.5,826921071093.9,863618615029.7,886566304544.2,867321613906.8,840096580071.4,844829841220.4,821226812375.1,837607591010.1,846895582611.9,829190422947.2,816193288811.2,846197587458.9,841887881098.9,875288882825.3,859030032992.8,852035773385.5,854656788398.8,850728060265.9,857063302837.1,857214962985.6,872758555863.3,851642595319.5,873660922707.7,914337874342.2,888037697632.2,869332936486.0,870295832594.4,858627151677.4,842576236586.6,858876824862.0,847392988503.5,791138208422.5,815289858943.9,847896262005.4,836877733222.6,815306140924.6,855007704117.5,822093395981.6,838997778045.9,856004556321.9,861058832649.9,825794784094.1,863501769795.1,891147880253.9],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0,87.0,94.9,91.8,91.0,88.1,91.4,91.7,92.5,94.4,94.8,94.4,94.8,93.2,95.3,96.0,92.1,94.8,93.9,94.4,94.9,93.2,96.4,91.2,93.9,96.6,93.9,93.0,96.6,96.6,95.7,95.5,96.6,96.9,97.6,95.8,98.8,96.1,95.5,92.4,97.0],"first_nospace":null,"cap_drop":null,"nospace_last_10_min":[0.0,0.0],"stats":{"parts_mean":[87.633196,1.079384],"write_amplification":[4.705503,0.037692],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0],"nospace_fraction":[0.0,0.0]}},{"name":"2 TB, old_parts_lifetime 480 s","used":[0.0,86880817151.91,189228636745.77,295999857031.27,417383298528.8,509830947936.66,623781938086.27,741017638340.1,833707419161.41,891043782675.62,921352894549.81,951679780094.68,1009347194607.71,1116054554804.34,1141143878110.41,1165097354622.96,1167222288403.98,1193826661114.0,1202748876330.57,1234215613857.66,1257202276938.75,1263292999600.16,1334098088947.88,1394803887747.66,1406349580339.04,1428571268568.86,1457366085918.22,1487645464416.47,1513075158612.36,1523084463108.92,1591049012576.55,1631386627381.67,1670962855104.12,1702778681685.23,1704247669089.18,1717059989561.58,1697018605241.02,1681021002330.94,1686978995132.21,1722075697599.82,1713123629946.03,1751862752751.63,1799203717144.21,1811804166830.89,1830151973521.38,1843010781817.6,1860681690499.48,1856104211894.47,1866469932747.56,1860051020774.76,1841555831812.69,1861368623052.42,1861432191763.55,1862462778335.01,1856667017466.65,1862769626077.21,1864857772038.94,1876862496084.44,1880547537545.15,1893943325419.03,1914869078602.06,1909621597446.86,1924801565483.06,1932804092946.48,1924115029586.25,1932575024278.03,1941903157351.68,1938082446109.49,1949321247555.82,1953318475833.6,1962477798283.55,1973219894550.2,1973202261324.32,1985426768951.71,1987879370328.3,1988330437718.72,1994503212029.21,1995990996407.03,1997598710958.57,1997553484333.68,1999249757291.77,1996749914919.72,1998756623137.1,1998360564553.38,1998948516610.23,1999251715304.22,1999332250875.31,1999750550920.94,1999601861169.48,1999700295403.32,1999847109147.03,1999916123371.39,1999920902161.91,1999870689863.41,1999967163605.46,1999884571705.73,1999910383466.96,1999927160845.57,1999955580686.22,1999965655069.89,1999953980217.17],"outdated":[0.0,61278409919.5,135732904223.7,209359109859.6,286360796289.6,381773053897.9,467828081154.7,556873077399.7,653562772453.4,677810647745.6,703494922866.3,714861520655.7,730443256929.2,731394787045.8,733640721494.3,732975664583.1,734100743569.6,735419628698.9,731842615975.1,736005583590.6,733307539125.7,729563472192.0,726420812940.1,732089108035.0,730158716170.9,722356537976.6,727417743425.6,748692556984.7,807779067564.6,833636455589.0,846885334185.8,842962228872.1,857295744989.0,867180699781.8,856353356394.4,836562647005.9,780542332358.7,756324431999.5,748241510979.6,776369257129.4,769407099856.5,805405533666.1,850685662019.2,850838948809.2,864925942262.8,881806985972.4,899899918814.6,884670850490.6,900744477671.2,873747647466.0,839104793049.7,841014308671.1,825903478953.5,833550896732.9,820508875266.8,832085311451.9,810646287302.1,809572100390.1,808198455367.3,817506558628.8,819903854208.1,796233592513.8,795289640087.9,773444574962.3,779831547190.6,765878351195.2,764467676127.4,759047710535.1,751954552001.7,745387285930.6,733501616974.8,735152202946.8,712934571601.0,731865118247.4,713356689570.5,712636640191.8,707137185139.0,695406004740.8,687092836565.6,668216426744.0,658133458020.2,628233677436.7,621280213364.3,602531165598.1,590977524611.4,578721085829.5,564282367708.0,549312784001.4,533373588346.0,519917102233.2,504989408193.7,490164253714.1,474316685983.2,459482481310.0,445093638969.1,429816160766.4,415958862323.7,401152489462.8,387154049647.2,373098155265.8,359172155024.2],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,90.2,92.0,91.9,91.6,90.6,90.5,86.5,92.3,93.0,88.3,90.5,91.2,91.4,94.1,94.7,89.9,93.4,91.9,95.7,88.9,92.6,95.9,93.8,92.0,97.1,98.2,97.7,105.1,102.5,105.8,109.6,113.7,108.7,114.2,122.6,130.4,146.4,151.0,162.9,176.2,186.1,199.4,198.4,234.0,279.5,308.1,332.3,378.1,430.3,449.7,464.4,522.6,604.0,692.0,768.5,891.9,988.4,1073.8,1113.4,1238.3],"first_nospace":[4425.939779779461,149.96088711440487],"cap_drop":[2028.0,159.06037615660665],"nospace_last_10_min":[0.14971326429604734,0.020230425656767373],"stats":{"parts_mean":[180.740817,9.770005],"write_amplification":[4.124686,0.028086],"delayed_fraction":[0.001403,0.002325],"rejected_fraction":[0.0,0.0],"nospace_fraction":[0.020541,0.003244]}},{"name":"2 TB, old_parts_lifetime 60 s","used":[0.0,86880817151.91,127950226826.27,160266952807.57,208024188669.2,223470151647.06,242008884188.37,273189557185.4,276834341761.71,298759420141.72,317996741108.41,321811062864.28,371487360382.01,481023555483.44,495804118321.41,520501629373.66,530936318874.58,545252202756.1,567468017056.57,587365801307.86,613780116051.65,626349248199.36,692835578461.18,756763014141.36,772075246344.24,785257722738.96,831571304642.72,849383492031.67,854267979866.26,807925116335.52,842570859440.95,878549527624.57,923885008408.12,924525928842.93,938689931457.47,971137217767.08,1009427847053.62,1018955778787.84,1029061744182.91,1063959315735.22,1046972271109.63,1089015675121.78,1136759990401.89,1103284000434.39,1126060626043.4,1172491341245.95,1188230349254.86,1180119834728.96,1190151095591.99,1170686794598.1,1199365892837.76,1219710213781.67,1235187753101.49,1261845413376.29,1270192667489.86,1332323591240.24,1316805048973.47,1329526547338.07,1336003230015.43,1362810052394.61,1364297476671.1,1385209462533.71,1448055972526.15,1476739441467.02,1517991829449.62,1549544728275.26,1546733294634.27,1532589586048.37,1534686664471.7,1543398482490.84,1573922785916.79,1572557463360.05,1597170259525.89,1652420036581.28,1657808076048.15,1666173326763.43,1698614524541.53,1688804806239.97,1709582912011.46,1703614356010.37,1722469383631.15,1693558758042.65,1726549483928.48,1793880281653.04,1800967760950.97,1814856397281.9,1849279298561.3,1832332254852.69,1841710379355.71,1869297124392.24,1856459640313.41,1849640184355.85,1842370484528.38,1858543445630.84,1878467599396.19,1888687806766.82,1901589881423.2,1912221387125.23,1925469138860.4,1935624626309.45,1903620917055.12],"outdated":[0.0,61278409919.5,74454494304.2,73626205635.9,77001686430.0,95412257608.3,86055027256.8,89044996245.0,96689695053.7,85526285211.7,100138769424.9,84992803425.3,92583422703.5,96363787724.9,88300961705.3,88379939333.8,97814774040.2,86845170341.0,96561756701.1,89155771040.8,89885378238.6,92619720791.2,85158302453.4,94048234428.7,95884382176.1,79042992146.7,101622962150.1,110430584599.9,148971888818.5,118477108815.6,98407181050.2,90125129115.0,110217898293.0,88927946939.5,90795618762.7,90639875211.4,92951574171.3,94259208456.4,90324260030.3,118252875264.8,103255741020.1,124957616512.9,136443891989.5,89719821810.2,111583925119.3,108327192006.1,106450563999.7,105877006947.0,120709598106.9,98730935546.1,98750368467.4,93497269545.0,107982949334.4,118082490127.9,91915948113.8,124278794140.7,87763704405.2,104649546959.5,135447912403.2,116444959059.5,88738258697.0,90857456292.5,96649209262.8,100675765295.4,104144483040.2,113937538561.3,117742752738.5,103447824923.5,118742557344.7,86547749932.5,130050210989.2,84416915462.9,97150223432.9,116558553574.6,113814024605.6,109783067494.7,118894217493.2,102091342810.2,108934250445.4,106438430034.4,137725234128.5,90220077492.6,93145115638.9,112976338888.2,105684277230.8,87541119026.6,124058799219.7,96621780470.7,80548742607.4,115676947215.7,122668028711.8,104125987627.4,92767668631.3,117327661734.7,104485451092.7,97125537444.6,92891385149.2,114175761730.4,97249726444.4,140281950984.2,119798959050.1],"parts":[0.0,61.2,65.2,68.5,70.0,74.4,69.5,72.7,76.5,76.6,70.6,76.2,78.5,75.2,80.5,78.0,81.1,80.2,83.5,83.2,80.9,81.8,82.0,82.5,84.2,87.6,84.0,85.6,86.1,85.4,82.2,85.4,85.7,86.8,88.1,89.4,89.8,83.3,87.9,93.3,88.6,89.7,90.3,92.3,90.6,90.6,90.7,86.8,87.2,90.2,88.7,94.4,91.0,95.2,90.9,89.7,88.2,91.0,95.0,84.8,89.0,87.0,94.9,91.8,91.0,88.1,91.4,91.7,92.5,94.4,94.8,94.4,94.8,93.2,95.3,96.0,92.1,94.8,93.9,94.5,95.5,94.3,96.0,93.5,93.6,96.6,95.0,89.8,98.4,95.1,94.6,96.0,95.0,98.4,99.2,97.7,97.3,97.9,97.0,104.0,99.1],"first_nospace":null,"cap_drop":[4329.0,158.0436961610869],"nospace_last_10_min":[0.00030915017305689033,0.0006993462783432616],"stats":{"parts_mean":[87.731214,1.174328],"write_amplification":[4.705369,0.029487],"delayed_fraction":[0.0,0.0],"rejected_fraction":[0.0,0.0],"nospace_fraction":[3.1e-05,6.9e-05]}}]},"validation":[{"key":"open","title":"відкритий потік, 8 вставок/с","rows":[{"metric":"parts_mean","live":10.130597014925373,"live_half":0.1399614062599456,"model":10.395299599009729,"model_half":0.03185770633772495},{"metric":"busy_threads_mean","live":0.18781094527363185,"live_half":0.021406232487120754,"model":0.19478532174725666,"model_half":0.003212677059033852},{"metric":"fresh_waiting_mean","live":0.2613592524557908,"live_half":0.015094454939987682,"model":0.25581253763265016,"model_half":0.0031455705075053406},{"metric":"fresh_lifetime_mean","live":0.31545133535773373,"live_half":0.01482815997889,"model":0.31449584882372134,"model_half":0.0030799420348732753},{"metric":"merge_duration_mean","live":0.11132891412107027,"live_half":0.0017258896932049802,"model":0.11843035932045945,"model_half":0.0016397008811227113},{"metric":"write_amplification","live":4.0042493905645875,"live_half":0.06385093435602403,"model":3.9814227737301606,"model_half":0.013530043835588335},{"metric":"insert_rate","live":7.949382716049382,"live_half":0.09576194468031057,"model":7.970555555555556,"model_half":0.07213115330685983},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"closed","title":"8 замкнених клієнтів","rows":[{"metric":"parts_mean","live":12.322139303482587,"live_half":0.47673943353698045,"model":12.736626866217884,"model_half":0.06767665670324928},{"metric":"busy_threads_mean","live":0.3731343283582089,"live_half":0.033420469758830014,"model":0.40737142213685046,"model_half":0.00875374909033198},{"metric":"fresh_waiting_mean","live":0.12905897057807073,"live_half":0.004259712291433156,"model":0.1256654126555829,"model_half":0.0010465452719312215},{"metric":"fresh_lifetime_mean","live":0.18211987066660887,"live_half":0.004551331592654266,"model":0.18504435096151284,"model_half":0.0010113709763427943},{"metric":"merge_duration_mean","live":0.10957394907884428,"live_half":0.01635000097248151,"model":0.12002504094763375,"model_half":0.002507968905304445},{"metric":"write_amplification","live":4.062745085979626,"live_half":0.37295361928263226,"model":4.0671934372830645,"model_half":0.06895299873581957},{"metric":"insert_rate","live":15.765432098765432,"live_half":0.4834719936381366,"model":15.910555555555556,"model_half":0.12035204489860322},{"metric":"delayed_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0}]},{"key":"throttled","title":"40 вставок/с, низькі пороги","rows":[{"metric":"parts_mean","live":11.819651741293532,"live_half":0.06171717901844883,"model":12.083770350818208,"model_half":0.033855430189071445},{"metric":"busy_threads_mean","live":0.2611940298507463,"live_half":0.033420469758830014,"model":0.27257587014994805,"model_half":0.00385339851167651},{"metric":"fresh_waiting_mean","live":0.05043227929279095,"live_half":0.0017217626990454682,"model":0.04998406608097003,"model_half":0.0002652041286939843},{"metric":"fresh_lifetime_mean","live":0.06556254050929539,"live_half":0.0017290479326435412,"model":0.06442535885577702,"model_half":0.00026453518213750645},{"metric":"merge_duration_mean","live":0.030500006358904378,"live_half":0.0015324110438751629,"model":0.03144186485911955,"model_half":0.0004798490540076376},{"metric":"write_amplification","live":5.302200901797815,"live_half":0.14993738812838794,"model":5.278048497102154,"model_half":0.042531159015560344},{"metric":"insert_rate","live":40.39506172839506,"live_half":0.44859759781635455,"model":39.970555555555556,"model_half":0.1969764468303719},{"metric":"delayed_fraction","live":0.21063233312200194,"live_half":0.010013614089178238,"model":0.19072622546721754,"model_half":0.004769414073022361},{"metric":"rejected_fraction","live":0.0,"live_half":0.0,"model":0.0,"model_half":0.0},{"metric":"delay_mean_ms","live":15.62557378448898,"live_half":0.34780452457407174,"model":11.3140677299082,"model_half":0.4361106917447029}]}],"calibration":{"base":{"merge_fixed_seconds":1.9161701930021834e-06,"merge_bytes_per_second":235775162.1439831,"merge_noise_cv":0.10345845233389503,"checks":{"merges":376,"log_residual_sigma":0.10318320016045511,"residual_size_spearman":-0.05359547459686801,"log_residual_skew":-0.21665469844926297,"log_residual_excess_kurtosis":0.20590336317897462,"result_to_sources_size":0.9924331580222736,"result_to_sources_size_by_bytes":0.9335019487732431,"source_mib_range":[14.869882583618164,2337.555914878845]},"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221},"index":{"merge_fixed_seconds":0.003595729817121768,"merge_bytes_per_second":223508755.5000545,"merge_noise_cv":0.08634494753483375,"checks":{"merges":376,"log_residual_sigma":0.08618465909784145,"residual_size_spearman":-0.09054836860377294,"log_residual_skew":-0.07074766446446241,"log_residual_excess_kurtosis":1.4442467897625235,"result_to_sources_size":0.9922136710316851,"result_to_sources_size_by_bytes":0.9300976979810455,"source_mib_range":[14.976439476013184,1996.3367385864258]},"insert_bytes_mean":3633779.954413191,"insert_bytes_cv":0.35138285406492875},"projection":{"merge_fixed_seconds":4.407093743957217e-10,"merge_bytes_per_second":243204603.35305232,"merge_noise_cv":0.10432555069558312,"checks":{"merges":362,"log_residual_sigma":0.1040433468916645,"residual_size_spearman":0.37162339536161854,"log_residual_skew":0.7472187035298714,"log_residual_excess_kurtosis":2.860410578564392,"result_to_sources_size":0.9920643289968394,"source_mib_range":[29.526439666748047,3942.3284196853638]},"insert_bytes_mean":7184421.780155642,"insert_bytes_cv":0.3537193332356586,"projection_time_ratio":0.8770580296896087},"small":{"merge_fixed_seconds":0.0033462518187959904,"merge_bytes_per_second":259065659.38657644,"merge_noise_cv":0.14017975505680022,"checks":{"merges":295,"log_residual_sigma":0.13949834362610133,"residual_size_spearman":-0.03443865865173372,"log_residual_skew":-0.2823165883524914,"log_residual_excess_kurtosis":-0.7704246180447178,"result_to_sources_size":0.9757958293160882,"source_mib_range":[1.257950782775879,419.0453414916992]},"insert_bytes_mean":487879.82961072115,"insert_bytes_cv":0.5958613268903633},"base_and_small":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"checks":{"merges":671,"log_residual_sigma":0.1224435891334234,"residual_size_spearman":0.02252177964188716,"log_residual_skew":-0.1281665366174902,"log_residual_excess_kurtosis":-0.13304577153726527,"result_to_sources_size":0.9915019335341808,"source_mib_range":[1.257950782775879,2337.555914878845]}},"model":{"merge_fixed_seconds":0.0027020177578470582,"merge_bytes_per_second":244504578.58316943,"merge_noise_cv":0.12290395761261506,"insert_bytes_mean":3607962.8763336567,"insert_bytes_cv":0.3514333577709221,"index_aux":[0.007155583071234206,0.10176512260370196],"projection_aux":[0.9912682104579509,1.0019119207924843],"result_ratio":0.9924737500565795,"result_ratio_large":0.7945592504794639,"large_merge_bytes":105187814,"large_merge_time_factor":1.1370079621788785}}};
 
 return { RESULTS };
 })();
 
 // ---- src/ui/results.js
 const __module_17 = (() => {
-// The other tabs: the model diagram with the calibrated parameters, the experiment results and the validation,
-// drawn from the data the Python side exported (tools/export_data.py).
-
 const { RESULTS } = __module_16;
 const { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } = __module_7;
 const { Chart, Bars, table, card, ci, niceTicks, S } = __module_8;
-// a model-time interval as "53 ± 2 хв", or "ніколи" for an event that did not happen in every replication
+// null: the event did not happen in every replication
 const minutes = v => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : "ніколи");
 
 function results() {
@@ -3472,14 +3370,16 @@ function results() {
           .map(k => ci(R.e1.metrics[k][i]))])) });
     const seg = el("div", { class: "seg", role: "group", "aria-label": "Характеристика" });
     const holder = el("div");
+    let chart = null;
     const show = key => {
       for (const b of seg.children) b.setAttribute("aria-pressed", String(b.dataset.key === key));
       const m = metrics[key];
-      new Chart(holder, { height: 260, x: { label: "вставок за секунду" }, y: { min: 0, max: m.max }, valueFormat: v => m.fmt(v),
-        tooltipTitle: x => `${x} вставок/с`,
-        series: m.keys.map(([k, name], i) => ({ name, color: S(i + 1), markers: true,
-          points: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0]]),
-          band: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0] - R.e1.metrics[k][j][1], R.e1.metrics[k][j][0] + R.e1.metrics[k][j][1]]) })) });
+      const series = m.keys.map(([k, name], i) => ({ name, color: S(i + 1), markers: true,
+        points: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0]]),
+        band: R.e1.rates.map((rate, j) => [rate, R.e1.metrics[k][j][0] - R.e1.metrics[k][j][1], R.e1.metrics[k][j][0] + R.e1.metrics[k][j][1]]) }));
+      const view = { y: { min: 0, max: m.max }, valueFormat: v => m.fmt(v) };
+      if (chart) chart.setSeries(series, view);
+      else chart = new Chart(holder, { height: 260, x: { label: "вставок за секунду" }, tooltipTitle: x => `${x} вставок/с`, series, ...view });
     };
     for (const [key, m] of Object.entries(metrics)) seg.append(el("button", { type: "button", "data-key": key, onclick: () => show(key) }, m.name));
     body.append(seg, el("div", { style: "height:10px" }), holder);
@@ -3546,14 +3446,14 @@ function results() {
   if (R.e7) {
     const { card: c, body } = card("E7. Відновлення після сплеску",
       "150 вставок/с і 5-хвилинний сплеск. Відновлення: перший момент, коли кусків не більше ніж на 10% більше, ніж у прогоні з тими самими випадковими числами без сплеску.",
-      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв`])) });
+      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), r.recovery ? `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв` : "не відновилось"])) });
     const [start, length] = R.e7.burst;
     const shown = R.e7.runs;
     new Chart(body, { height: 260, x: { label: "модельний час, хв", format: v => INT.format(v) },
       y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
       series: shown.map((r, i) => ({ name: r.factor === 1 ? "без сплеску" : `сплеск ×${r.factor}`, color: r.factor === 1 ? "var(--axis)" : S(i),
         points: R.e7.grid.map((t, j) => [t / 60, r.series[j]]).filter(p => p[0] >= start / 60 - 10 && p[0] <= start / 60 + 45) })) });
-    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${NUM.format(r.recovery[0] / 60)} хв`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
+    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${r.recovery ? NUM.format(r.recovery[0] / 60) + " хв" : "не відновилось"}`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
     grid.append(c);
   }
 
@@ -3713,8 +3613,6 @@ return { results, validation, model };
 
 // ---- src/main.js
 const __module_18 = (() => {
-// Entry point: tabs, theme, and the laboratory.
-
 const { Lab } = __module_15;
 const { model, results, validation } = __module_17;
 const { tooltip } = __module_7;
@@ -3757,7 +3655,7 @@ function theme(lab) {
 }
 
 const lab = new Lab();
-window.lab = lab;  // for the browser tests and for curious readers in the console
+window.lab = lab;  // for the browser tests and the console
 model();
 tabs(lab);
 theme(lab);

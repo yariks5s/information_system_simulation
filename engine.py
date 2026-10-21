@@ -1,4 +1,3 @@
-"""Discrete-event engine: model clock and event calendar (RFC section 4)."""
 import heapq
 import itertools
 import math
@@ -9,7 +8,7 @@ class Engine:
         self.now = 0.0
         self.events = 0
         self._calendar = []
-        self._seq = itertools.count()  # tie-break: events at equal times fire in scheduling order
+        self._seq = itertools.count()  # equal times fire in scheduling order
 
     def schedule(self, delay, handler, *args):
         if delay < 0:

@@ -1,6 +1,4 @@
-// Background merges and mutations executor (RFC 3.4) as a rate-allocation queue.
-// round_robin shares the threads equally among all tasks (processor sharing); shortest_task_first gives the
-// threads to the tasks with the smallest priority, the sum of source part bytes. One event per change of the task set.
+// rate-sharing executor: one event per change of the task set, not one per merge step
 
 export const POLICIES = ["round_robin", "shortest_task_first"];
 
@@ -36,7 +34,6 @@ export class Pool {
     this.reallocate();
   }
 
-  // removes every task, as when DROP PARTITION cancels the merges of the table; returns them
   cancelAll() {
     this.advance();
     const tasks = this.tasks;
@@ -45,7 +42,6 @@ export class Pool {
     return tasks;
   }
 
-  // live changes from the UI
   configure({ threads, maxTasks, policy }) {
     this.advance();
     if (threads != null) this.threads = threads;
@@ -63,7 +59,7 @@ export class Pool {
     this.updatedAt = this.engine.now;
   }
 
-  // remaining work of a task at the current model time, without advancing the pool
+  // read-only: an extra advance would change the float rounding of remaining
   remainingNow(task) {
     return task.remaining - task.rate * (this.engine.now - this.updatedAt);
   }

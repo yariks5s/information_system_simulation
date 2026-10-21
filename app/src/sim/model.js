@@ -1,7 +1,4 @@
-// MergeTree background merges: state and event handlers, a port of model.py (RFC sections 3 and 5).
-// The same event order and the same draws from the same streams, so that with recorded random numbers it
-// reproduces the Python model event by event (tests/diff.test.mjs). On top of that: parameters can change while
-// the model runs, and an observer sees every event.
+// port of model.py: keep its event order and draws, tests/diff.test.mjs replays python against it
 
 import { Engine } from "./engine.js";
 import { Pool } from "./pool.js";
@@ -13,27 +10,23 @@ const MIB = 1024 * 1024;
 const DAY = 86400;
 
 export const DEFAULTS = {
-  // input (RFC 3.2, 3.8)
   arrivals: "open",
   insert_rate: 2.0,
   rate_amplitude: 0.0,
   rate_peak_at: 14 * 3600,
-  burst: null,  // [start, duration, factor], factor > 1: a separate Poisson process on top (RFC 3.2)
+  burst: null,  // [start, duration, factor], an extra poisson process on top
   clients: 4,
   think_time: 2.0,
   insert_bytes_mean: 10 * MIB,
   insert_bytes_cv: 1.0,
-  // throttling (RFC 3.3)
   parts_to_delay_insert: 1000,
   max_delay_to_insert: 1,
   min_delay_to_insert_ms: 10,
   max_avg_part_size_for_too_many_parts: 1024 * MIB,
   max_parts_in_total: 100000,
-  // pool
   threads: 16,
   concurrency_ratio: 2,
   scheduling_policy: "round_robin",
-  // selector
   selector: "simple",
   base: 5.0,
   window_size: 1000,
@@ -43,24 +36,18 @@ export const DEFAULTS = {
   max_bytes_at_max_space: 150 * 1024 * MIB,
   max_bytes_at_min_space: MIB,
   free_entries_to_lower_max_size: 8,
-  // merge cost
   merge_fixed_seconds: 0.05,
   merge_bytes_per_second: 150e6,
   merge_noise_cv: 0.3,
-  aux: [],  // [storage overhead s, merge time overhead δ] per projection or skip index
-  // size of a merged part (RFC 3.1): result_ratio of the sources, result_ratio_large once per byte in merges of at
-  // least large_merge_bytes (0: no such regime), which also take large_merge_time_factor longer (RFC 3.7)
+  aux: [],  // [storage overhead, merge time overhead] per projection or skip index
   result_ratio: 1.0,
   result_ratio_large: 1.0,
   large_merge_bytes: 0,
   large_merge_time_factor: 1.0,
-  // partitions (RFC 3.9)
   partition_seconds: 0.0,
   late_insert_fraction: 0.0,
   retention_partitions: 0,
-  // seconds between a trigger and the assignee run
   assign_latency: 0.0,
-  // disk (RFC 3.10): bytes the table may take (0: no limit), and how long merged parts stay on disk
   disk_bytes: 0,
   old_parts_lifetime: 480.0,
   seed: 1,
@@ -69,43 +56,42 @@ export const DEFAULTS = {
 const STREAMS = ["arrival", "thinning", "size", "merge", "assignee", "partition", "burst_arrival", "burst_thinning", "burst_size", "burst_partition"];
 
 export class Table {
-  // rng: optional { streams, client(c) } to replace the random streams, used by the differential test
+  // rng replaces the random streams; the diff test passes python's recorded draws
   constructor(config = {}, rng = null) {
     this.cfg = { ...DEFAULTS, ...config };
     const cfg = this.cfg;
     if (!["open", "closed"].includes(cfg.arrivals)) throw new Error(`unknown arrivals ${cfg.arrivals}`);
     if (!["simple", "simple_reference", "tiered"].includes(cfg.selector)) throw new Error(`unknown selector ${cfg.selector}`);
+    if (!(cfg.rate_amplitude >= 0 && cfg.rate_amplitude <= 1)) throw new Error("rate_amplitude must be in [0, 1]");
     this.engine = new Engine();
     this.rngSource = rng;
     this.rng = rng ? rng.streams : streams(cfg.seed, ...STREAMS);
     this.think = [];
     for (let c = 0; c < cfg.clients; c++) this.think.push(this.clientRng(c));
-    this.clientLive = [];  // a closed client has a pending think, arrival or delayed insert
+    this.clientLive = [];  // true while a closed client has an event pending, so a restart never starts a second loop
     this.pool = new Pool(this.engine, cfg.threads, cfg.threads * cfg.concurrency_ratio, cfg.scheduling_policy, task => this.onMergeDone(task));
-    this.partitions = new Map([[0, []]]);  // key -> active parts ordered by block number, keys ascending
+    this.partitions = new Map([[0, []]]);  // keys ascending, parts ordered by block
     this.partitionBytes = new Map([[0, 0]]);
     this.partCount = 0;
-    this.currentPartition = 0;  // the number of rotations so far
+    this.currentPartition = 0;
     this.droppedPartitions = [];
     this.nextId = 1;
     this.lastBlock = 0;
     this.insertedBytes = 0;
     this.droppedBytes = 0;
     this.droppedBlocks = 0;
-    this.savedBytes = 0;  // sources minus merged parts (RFC 3.1)
+    this.savedBytes = 0;  // sources minus merged parts
     this.arrivals = 0;
     this.inFlight = 0;
     this.rejected = 0;
     this.rejectedDisk = 0;  // NOT_ENOUGH_SPACE at commit
-    this.outdated = [];  // [outdated at, bytes] of merge sources and dropped parts still on disk, oldest first, from outdatedHead on
+    this.outdated = [];  // [outdated at, bytes], oldest first, entries before outdatedHead are gone
     this.outdatedHead = 0;
     this.outdatedBytes = 0;
     this.delayed = 0;
-    this.delayTotalMs = 0;
     this.mergedBytes = 0;
     this.mergesDone = 0;
     this.mergesAborted = 0;
-    this.selectorRuns = 0;
     this.noWorkCount = 0;
     this.assigneeAt = Infinity;
     this.assigneeToken = 0;
@@ -114,10 +100,10 @@ export class Table {
     this.rotationToken = 0;
     this.activeClients = cfg.clients;
     this.insertsPaused = false;
-    this.diskLimitChanged = false;  // a limit lowered from the UI may be below the used space
-    this.lastSelection = null;  // the outcome of the last selector run, for the UI
-    this.lastMerge = null;  // why the last merge was chosen
-    this.observer = null;  // (type, ...data) on every event, see emit
+    this.diskLimitChanged = false;  // a limit changed live may already be below the used space
+    this.lastSelection = null;
+    this.lastMerge = null;
+    this.observer = null;  // (type, now, ...data)
     this.updateDerived();
   }
 
@@ -138,7 +124,6 @@ export class Table {
     return cfg.insert_rate * (1 + cfg.rate_amplitude * Math.cos(2 * Math.PI * (t - cfg.rate_peak_at) / DAY));
   }
 
-  // the extra rate (factor - 1) λ(t) of a burst
   burstRate(t) {
     const b = this.cfg.burst;
     return b[0] <= t && t < b[0] + b[1] ? (b[2] - 1) * this.rate(t) : 0.0;
@@ -167,10 +152,8 @@ export class Table {
     this.trigger();
   }
 
-  // inputs
-
   scheduleArrival() {
-    // a non-homogeneous Poisson process by thinning (Lewis, Shedler)
+    // non-homogeneous poisson process by thinning (lewis and shedler)
     if (this.insertsPaused || this.cfg.insert_rate <= 0) return;
     let t = this.engine.now;
     for (;;) {
@@ -197,7 +180,7 @@ export class Table {
     this.engine.schedule(this.think[client].expovariate(1 / this.cfg.think_time), c => this.onInsertArrival(c), client);
   }
 
-  // closed clients still in the model, the others end their loop at the next event
+  // a client that does not stay ends its loop at its next event
   clientStays(client) {
     return client < this.activeClients && !this.insertsPaused && this.cfg.arrivals === "closed";
   }
@@ -211,13 +194,12 @@ export class Table {
       return;
     }
     this.arrivals++;
-    // drawn before the throttling decision, so that the i-th insert is the same in every configuration:
-    // its size, and whether its data belongs to the previous partition
+    // drawn before throttling, so the i-th insert is the same in every configuration
     const sizeRng = burst ? this.rng.burst_size : this.rng.size;
     const size = Math.max(1, roundHalfEven(lognormal(sizeRng, this.cfg.insert_bytes_mean, this.cfg.insert_bytes_cv) * this.auxStorage));
     let target = this.currentPartition;
     if (this.cfg.partition_seconds && this.cfg.late_insert_fraction) {
-      if ((burst ? this.rng.burst_partition : this.rng.partition).random() < this.cfg.late_insert_fraction) target -= 1;
+      if ((burst ? this.rng.burst_partition : this.rng.partition).random() < this.cfg.late_insert_fraction && target > 0) target -= 1;
     }
     // getMaxPartsCountAndSizeForPartition: on a tie the first partition wins
     let key = null, most = -1;
@@ -229,25 +211,14 @@ export class Table {
       if (client !== null) this.thinkThen(client);
       return;
     }
-    if (delay) {
-      this.delayed++;
-      this.delayTotalMs += delay;
-    }
+    if (delay) this.delayed++;
     this.inFlight++;
     this.engine.schedule(delay / 1000, (s, c, p, d) => this.onInsertCommit(s, c, p, d), size, client, target, delay);
   }
 
-  // the partition of the insert's data; data of an already dropped partition goes to the current one
-  partitionForInsert(target) {
-    const keys = [...this.partitions.keys()];
-    if (this.partitions.has(target) || target > keys[keys.length - 1]) return target;
-    return this.currentPartition;
-  }
-
-  onInsertCommit(size, client, target, delay) {
+  onInsertCommit(size, client, key, delay) {
     this.inFlight--;
-    const key = this.partitionForInsert(target);
-    // MergeTreeDataWriter reserves space for the new part; the model reserves its size on disk (RFC 3.10)
+    // MergeTreeDataWriter reserves the part size, NOT_ENOUGH_SPACE otherwise
     if (this.cfg.disk_bytes && size > this.diskFree()) {
       this.rejectedDisk++;
       this.emit("nospace", size, client, delay);
@@ -257,7 +228,7 @@ export class Table {
     this.lastBlock++;
     if (!this.partitions.has(key)) this.addPartition(key);
     const part = { id: this.nextId++, minBlock: this.lastBlock, maxBlock: this.lastBlock, level: 0, size, createdAt: this.engine.now,
-                   partition: key, blocks: 1, fresh: size, merging: false, pickedAt: null, removedAt: null, dropped: false, origin: null };
+                   partition: key, blocks: 1, fresh: size, merging: false, origin: null };
     this.partitions.get(key).push(part);
     this.partitionBytes.set(key, this.partitionBytes.get(key) + size);
     this.partCount++;
@@ -273,12 +244,10 @@ export class Table {
   }
 
   addPartition(key) {
-    // keys stay ascending: a new key is the largest one (partitionForInsert never returns an older missing key)
-    this.partitions.set(key, []);
+    // like clickhouse, data of a missing partition creates it, even one dropped before
+    this.partitions = new Map([...this.partitions, [key, []]].sort((a, b) => a[0] - b[0]));
     this.partitionBytes.set(key, 0);
   }
-
-  // assignee
 
   trigger() {
     this.noWorkCount = Math.floor(this.noWorkCount / 2);
@@ -287,7 +256,7 @@ export class Table {
 
   postpone() {
     this.noWorkCount++;
-    // std::pow saturates to inf in ClickHouse; the cap gives the same 600 s
+    // std::pow saturates to inf in clickhouse, the cap gives the same 600 s
     const delay = Math.min(600.0, 0.1 * Math.pow(1.1, Math.min(this.noWorkCount, 200))) + this.rng.assignee.uniform(0, 1);
     this.scheduleAssignee(delay);
     this.emit("sleep", delay);
@@ -307,13 +276,11 @@ export class Table {
   }
 
   tryAssignMerge() {
-    // ClickHouse selects on a full pool too and postpones twice when the pool refuses the merge; skipping that
-    // selection changes only the backoff counter, which every insert halves (RFC 3.6)
+    // clickhouse still selects on a full pool, skipping it only shifts the backoff
     if (!this.pool.hasCapacity()) {
       this.lastSelection = { at: this.engine.now, outcome: "pool_full" };
       return false;
     }
-    this.selectorRuns++;
     const free = this.cfg.disk_bytes ? this.diskFree() : null;
     const maxBytes = maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg, free);
     const diskLimited = free !== null && maxBytes < maxSourcePartsBytes(this.pool.maxTasks, this.pool.tasks.length, this.cfg);
@@ -331,7 +298,6 @@ export class Table {
     let size = 0, fresh = 0;
     for (const p of sources) {
       p.merging = true;
-      p.pickedAt = this.engine.now;
       size += p.size;
       fresh += p.fresh;
     }
@@ -340,14 +306,13 @@ export class Table {
     const [resultSize, resultFresh] = this.mergedSize(size, fresh);
     const task = { id: this.nextId++, work, priority: size, payload: sources, remaining: 0, rate: 0, createdAt: 0, resultSize, resultFresh };
     this.pool.add(task);
-    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited,
+    this.lastSelection = this.lastMerge = { at: this.engine.now, outcome: "merge", task: task.id, maxBytes, diskLimited, base: this.cfg.base,
                                             freeEntries: this.pool.maxTasks - this.pool.tasks.length + 1, ...stats, ...found, work };
     this.emit("assign", task, found);
     return true;
   }
 
-  // thread-seconds of a merge before noise (RFC 3.7): the cost line is per byte of fresh data; a byte that went through
-  // a large merge holds 1 / result_ratio_large times more data, and large merges are slower
+  // thread-seconds before noise, a large-merged byte holds 1 / result_ratio_large bytes of data
   mergeWork(size, fresh) {
     const cfg = this.cfg;
     const data = (fresh + (size - fresh) / cfg.result_ratio_large) / this.auxStorage;
@@ -356,7 +321,6 @@ export class Table {
     return work;
   }
 
-  // size of the merged part and its fresh bytes (RFC 3.1)
   mergedSize(size, fresh) {
     const cfg = this.cfg;
     if (cfg.large_merge_bytes && size >= cfg.large_merge_bytes) {
@@ -364,8 +328,6 @@ export class Table {
     }
     return [Math.max(1, roundHalfEven(cfg.result_ratio * size)), roundHalfEven(cfg.result_ratio * fresh)];
   }
-
-  // merges
 
   onMergeDone(task) {
     const sources = task.payload;
@@ -376,13 +338,12 @@ export class Table {
     for (const p of sources) { if (p.level > level) level = p.level; blocks += p.blocks; }
     level += 1;
     const merged = { id: task.id, minBlock: sources[0].minBlock, maxBlock: sources[sources.length - 1].maxBlock, level, size: task.resultSize,
-                     createdAt: this.engine.now, partition: key, blocks, fresh: task.resultFresh, merging: false, pickedAt: null, removedAt: null,
-                     dropped: false, origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
+                     createdAt: this.engine.now, partition: key, blocks, fresh: task.resultFresh, merging: false,
+                     origin: { sources: sources.length, levels: sources.map(p => p.level), assignedAt: task.createdAt, work: task.work } };
     parts.splice(begin, sources.length, merged);
     this.partCount -= sources.length - 1;
     this.partitionBytes.set(key, this.partitionBytes.get(key) + task.resultSize - task.priority);
     this.savedBytes += task.priority - task.resultSize;
-    for (const p of sources) p.removedAt = this.engine.now;
     this.removeOutdated();
     this.outdated.push([this.engine.now, task.priority]);
     this.outdatedBytes += task.priority;
@@ -391,8 +352,6 @@ export class Table {
     this.noWorkCount++;  // MergePlainMergeTreeTask::onCompleted postpones the assignee after a successful merge
     this.emit("merged", task, merged);
   }
-
-  // partitions
 
   scheduleRotation() {
     this.rotationToken++;
@@ -412,14 +371,12 @@ export class Table {
     }
   }
 
-  // DROP PARTITION: stopMergesAndWait cancels every running merge of the table first, then the parts become outdated
+  // DROP PARTITION: stopMergesAndWait cancels every merge of the table first
   drop(key) {
     this.cancelMerges();
     const parts = this.partitions.get(key);
     let size = 0;
     for (const p of parts) {
-      p.removedAt = this.engine.now;
-      p.dropped = true;
       size += p.size;
       this.droppedBlocks += p.blocks;
     }
@@ -438,23 +395,13 @@ export class Table {
   cancelMerges() {
     const tasks = this.pool.cancelAll();
     for (const task of tasks) {
-      for (const p of task.payload) {
-        p.merging = false;
-        p.pickedAt = null;
-      }
+      for (const p of task.payload) p.merging = false;
       this.mergesAborted++;
       this.emit("cancel", task);
     }
-    if (tasks.length) {
-      // the cancelled tasks wake the assignee, which finds merges blocked by the DROP and goes to sleep
-      this.noWorkCount = Math.floor(this.noWorkCount / 2);
-      this.postpone();
-    }
   }
 
-  // disk (RFC 3.10)
-
-  // clearOldPartsFromFilesystem: outdated parts older than old_parts_lifetime leave the disk
+  // clearOldPartsFromFilesystem
   removeOutdated() {
     const q = this.outdated, lifetime = this.cfg.old_parts_lifetime, now = this.engine.now;
     while (this.outdatedHead < q.length && q[this.outdatedHead][0] + lifetime <= now) this.outdatedBytes -= q[this.outdatedHead++][1];
@@ -464,7 +411,7 @@ export class Table {
     }
   }
 
-  // bytes written or reserved by running merges: MergeTask shrinks the reservation to (1 - progress) of the initial one
+  // MergeTask shrinks its reservation to (1 - progress) of the initial one
   mergingBytes() {
     let merging = 0;
     for (const task of this.pool.tasks) {
@@ -474,7 +421,6 @@ export class Table {
     return merging;
   }
 
-  // active parts, outdated parts not yet removed, and running merges
   diskUsed() {
     this.removeOutdated();
     return this.insertedBytes - this.droppedBytes - this.savedBytes + this.outdatedBytes + this.mergingBytes();
@@ -485,20 +431,24 @@ export class Table {
     return Math.max(0.0, this.cfg.disk_bytes - this.diskUsed());
   }
 
-  // live changes from the UI; each takes effect from the current model time
 
   configure(changes) {
     const cfg = this.cfg, old = { ...cfg };
     Object.assign(cfg, changes);
     this.updateDerived();
     const open = cfg.arrivals === "open";
-    if (["insert_rate", "rate_amplitude"].some(k => k in changes) && open) this.restartArrivals();
-    if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes) && open) this.restartBurst();
     if ("arrivals" in changes && changes.arrivals !== old.arrivals) {
-      this.arrivalToken++;
-      this.burstToken++;
-      if (open) this.restartArrivals();
-      else this.startIdleClients();
+      if (open) {
+        this.restartArrivals();
+        this.restartBurst();
+      } else {
+        this.arrivalToken++;
+        this.burstToken++;
+        this.startIdleClients();
+      }
+    } else if (open) {
+      if (["insert_rate", "rate_amplitude"].some(k => k in changes)) this.restartArrivals();
+      if (["insert_rate", "rate_amplitude", "burst"].some(k => k in changes)) this.restartBurst();
     }
     if ("clients" in changes) this.setClients(cfg.clients);
     if (["threads", "concurrency_ratio", "scheduling_policy"].some(k => k in changes)) {
@@ -509,7 +459,7 @@ export class Table {
       if (cfg.partition_seconds) this.scheduleRotation();
     }
     if ("retention_partitions" in changes && cfg.retention_partitions) this.applyRetention();
-    if ("disk_bytes" in changes && changes.disk_bytes !== old.disk_bytes) this.diskLimitChanged = true;
+    if ("disk_bytes" in changes) this.diskLimitChanged = cfg.disk_bytes > 0 && this.diskUsed() > cfg.disk_bytes;
     this.trigger();  // new selector settings may allow a merge right away
   }
 
@@ -565,7 +515,7 @@ export class Table {
     return true;
   }
 
-  // checks of RFC section 7
+  // RFC section 7
   checkInvariants() {
     const parts = this.parts;
     let size = 0, blocks = 0, merging = 0;
@@ -581,19 +531,19 @@ export class Table {
       let bytes = 0;
       ps.forEach((p, i) => {
         bytes += p.size;
-        assert(p.partition === key && p.maxBlock >= p.minBlock && !p.dropped, "part fields");
+        assert(p.partition === key && p.maxBlock >= p.minBlock, "part fields");
         assert(p.blocks <= p.maxBlock - p.minBlock + 1 && p.fresh >= 0 && p.fresh <= p.size, "part contents");
         if (i) assert(ps[i - 1].maxBlock < p.minBlock, "parts ordered and disjoint");
       });
       assert(bytes === this.partitionBytes.get(key), "partition bytes");
     }
     if (this.partitions.size === 1 && !this.droppedPartitions.length) {
-      // one partition, nothing dropped: the parts cover the blocks 1..lastBlock without gaps
+      // gapless blocks, keyed on state because partition_seconds can change live
       let expected = 1;
       for (const p of parts) { assert(p.minBlock === expected, "blocks without gaps"); expected = p.maxBlock + 1; }
       assert(expected === this.lastBlock + 1, "all blocks covered");
     }
-    // the pool size is not checked: a pool shrunk from the UI keeps its running tasks, and Pool.add refuses new ones
+    // no pool size check: a pool shrunk live keeps its running tasks
     assert(this.pool.busyThreads() <= this.pool.threads + 1e-9, "busy threads");
     let sources = 0;
     for (const t of this.pool.tasks) {
@@ -603,6 +553,7 @@ export class Table {
       sources += t.payload.length;
     }
     assert(sources === merging, "merging flags");
+    if (this.diskLimitChanged && this.diskUsed() <= this.cfg.disk_bytes) this.diskLimitChanged = false;
     if (this.cfg.disk_bytes && !this.diskLimitChanged) assert(this.diskUsed() <= this.cfg.disk_bytes * (1 + 1e-9), "disk limit");
   }
 }

@@ -1,5 +1,4 @@
-"""Merge selection (RFC 3.5, 3.6): pure functions from the ordered list of active parts
-to the half-open index range [begin, end) to merge next, or None."""
+"""SimpleMergeSelector port: pure functions from ordered parts to the [begin, end) range to merge, or None"""
 import math
 
 import numpy as np
@@ -7,7 +6,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 from inputs import MIB
 
-# SimpleMergeSelector::Settings constants that are not exposed as MergeTree settings
+# SimpleMergeSelector::Settings defaults that are not MergeTree settings
 FIXED_COST = 5 * MIB  # size_fixed_cost_to_add
 MIN_SIZE_TO_LOWER_BASE_LOG = math.log(1 + MIB)
 MAX_SIZE_TO_LOWER_BASE_LOG = math.log(1 + 100 * 1024 * MIB)
@@ -18,15 +17,13 @@ REMOVE_SMALL_AT_RIGHT_RATIO = 0.01
 ALIGN_MIN_RATIO_TO_PREV = 0.9
 ALIGN_MAX_POWERS_OF_TWO = 0.5
 ALIGN_MAX_SCORE_ADJUSTMENT = 0.75
-# CompactionStatistics: a merge starts only with this much free space per source byte, and reserves RESERVE_RATIO
+# CompactionStatistics: free space per source byte needed to select a merge, and reserved for it
 SELECT_RATIO = 2.0  # DISK_USAGE_COEFFICIENT_TO_SELECT
 RESERVE_RATIO = 1.1  # DISK_USAGE_COEFFICIENT_TO_RESERVE
 
 
 def max_source_parts_bytes(max_tasks, scheduled, cfg, free_disk=None):
-    """CompactionStatistics::getMaxSourcePartsBytesForMerge: the merge size limit shrinks
-    exponentially towards max_bytes_to_merge_at_min_space_in_pool as the pool fills up,
-    and is at most half of the free unreserved disk space (free_disk, None for no limit)."""
+    """CompactionStatistics::getMaxSourcePartsBytesForMerge; free_disk None means no disk limit"""
     if cfg.max_bytes_at_max_space == 0:
         return 0
     free = max_tasks - scheduled
@@ -51,14 +48,14 @@ def _allow(sum_size, max_size, min_age, count, range_size, base):
     min_age_to_lower = _lerp(AGE_TO_LOWER_BASE_AT_MIN_SIZE[0], AGE_TO_LOWER_BASE_AT_MAX_SIZE[0], size_normalized)
     max_age_to_lower = _lerp(AGE_TO_LOWER_BASE_AT_MIN_SIZE[1], AGE_TO_LOWER_BASE_AT_MAX_SIZE[1], size_normalized)
     age_normalized = _unit(min_age, min_age_to_lower, max_age_to_lower)
-    # ClickHouse passes the size of the mergeable range here, not of the whole partition
+    # clickhouse passes the length of the free range here, not of the partition
     parts_normalized = _unit(range_size, *PARTS_TO_LOWER_BASE)
     lowered_base = _lerp(base, 2.0, min(1.0, age_normalized + parts_normalized))
     return (sum_size + count * FIXED_COST) / (max_size + FIXED_COST) >= lowered_base
 
 
 def _score(segment, begin, end, sum_size):
-    # heuristic_to_remove_small_parts_at_right compares against the sum before removal
+    # the threshold uses the sum before removal, as in clickhouse
     threshold = REMOVE_SMALL_AT_RIGHT_RATIO * sum_size
     while end >= begin + 3 and segment[end - 1].size < threshold:
         end -= 1
@@ -74,7 +71,7 @@ def _score(segment, begin, end, sum_size):
 
 
 def _max_parts_to_merge(part_count, cfg):
-    """merge_selector_enable_heuristic_to_lower_max_parts_to_merge_at_once; 0 means no limit."""
+    """the heuristic to lower max_parts_to_merge_at_once; 0 there means no limit"""
     limit = cfg.max_parts_to_merge_at_once
     if not limit:
         return math.inf
@@ -87,7 +84,7 @@ def _max_parts_to_merge(part_count, cfg):
 
 
 def _segments(parts):
-    """Maximal runs of parts that are not being merged, as (offset, parts)."""
+    """runs of parts not being merged, as (offset, parts)"""
     start = 0
     for i, part in enumerate(parts + [None]):
         if part is None or part.merging:
@@ -97,10 +94,10 @@ def _segments(parts):
 
 
 def _segment_best(segment, offset, now, max_bytes, max_parts, cfg):
-    """Best candidate of one segment as (score, -begin, begin, end): smaller is better, ties go to the right."""
+    """(score, -begin, begin, end), smaller is better so ties go to the right"""
     n = len(segment)
     best = None
-    now = math.floor(now)  # ages are whole seconds, as time_t in ClickHouse
+    now = math.floor(now)  # ages are whole seconds, like time_t in clickhouse
     for begin in range(max(0, n - cfg.window_size), n):
         sum_size = max_size = segment[begin].size
         min_age = now - math.floor(segment[begin].created_at)
@@ -122,7 +119,6 @@ def _segment_best(segment, offset, now, max_bytes, max_parts, cfg):
 
 
 def _best(parts, now, max_bytes, cfg, segment_best):
-    """Best candidate of one partition as (score, -begin, begin, end), or None."""
     max_parts = _max_parts_to_merge(len(parts), cfg)  # counts parts being merged too
     best = None
     for offset, segment in _segments(parts):
@@ -139,17 +135,17 @@ def _select(parts, now, max_bytes, cfg, segment_best):
 
 
 def select_simple(parts, now, max_bytes, cfg):
-    """SimpleMergeSelector::select with one merge constraint, as used by StorageMergeTree."""
+    """SimpleMergeSelector::select with one constraint, as StorageMergeTree calls it"""
     return _select(parts, now, max_bytes, cfg, _segment_best)
 
 
 def _segment_best_fast(segment, offset, now, max_bytes, max_parts, cfg):
-    """_segment_best for all candidate ranges at once: rows are begins, columns are lengths - 1."""
+    """_segment_best vectorized: rows are begins, columns are lengths - 1"""
     n = len(segment)
     first = max(0, n - cfg.window_size)
     sizes = np.fromiter((p.size for p in segment), dtype=np.int64, count=n)
     prefix = np.concatenate([[0], np.cumsum(sizes)])
-    # sums grow with the length, so no range longer than this fits into max_bytes
+    # sums grow with length, so no longer range fits into max_bytes
     fits = np.searchsorted(prefix, prefix[first : n - 1] + max_bytes, side="right") - 1 - np.arange(first, n - 1)
     width = int(min(max_parts, n - first, int(fits.max())))
     if width < 2:
@@ -178,7 +174,7 @@ def _segment_best_fast(segment, offset, now, max_bytes, max_parts, cfg):
         return None
     b, end, total = begin[allowed], begin[allowed] + length[allowed], sum_size[allowed]
 
-    # _score: drop small parts at the right, compared against the untrimmed sum
+    # _score
     threshold = REMOVE_SMALL_AT_RIGHT_RATIO * total
     active = (end - b >= 3) & (sizes[end - 1] < threshold)
     while active.any():
@@ -203,7 +199,7 @@ def _unit_array(value, low, high):
     return np.where(value <= low, 0.0, np.where(value >= high, 1.0, (value - low) / (high - low)))
 
 
-# below this many candidate ranges numpy call overhead costs more than the python loop
+# below this many candidates the python loop is faster than numpy
 FAST_MIN_CANDIDATES = 200
 
 
@@ -214,14 +210,14 @@ def _segment_best_hybrid(segment, offset, now, max_bytes, max_parts, cfg):
 
 
 def select_simple_fast(parts, now, max_bytes, cfg):
-    """select_simple vectorized with numpy; test_fast_selector.py checks that both choose the same range."""
+    """same choice as select_simple, test_fast_selector.py checks it"""
     return _select(parts, now, max_bytes, cfg, _segment_best_hybrid)
 
 
 def select_tiered(parts, now, max_bytes, cfg):
-    """Baseline LSM tiering: the leftmost run of `base` adjacent idle parts of one level."""
+    """baseline lsm tiering: the leftmost run of base idle same-level parts"""
     base = max(2, int(cfg.base))
-    run = 0  # length of the run of idle same-level parts ending at i
+    run = 0
     for i, part in enumerate(parts):
         if part.merging:
             run = 0
@@ -233,9 +229,7 @@ def select_tiered(parts, now, max_bytes, cfg):
 
 
 def select_across(partitions, now, max_bytes, cfg, selector):
-    """One merge over all partitions: (partition key, begin, end) or None. SimpleMergeSelector compares the
-    candidates of all partitions by score. ClickHouse breaks a tie across partitions by memory address; the model
-    gives it to the later partition, like ties inside one partition."""
+    """(key, begin, end) or None; clickhouse breaks ties across partitions by address, here the later one wins"""
     if selector == "tiered":
         for key, parts in partitions.items():
             found = select_tiered(parts, now, max_bytes, cfg)
@@ -253,4 +247,4 @@ def select_across(partitions, now, max_bytes, cfg, selector):
     return None if best is None else (-best[1], best[3], best[4])
 
 
-SELECTORS = {"simple": select_simple_fast, "simple_reference": select_simple, "tiered": select_tiered}
+SELECTORS = ("simple", "simple_reference", "tiered")

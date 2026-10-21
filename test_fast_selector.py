@@ -1,4 +1,3 @@
-"""The vectorized selector chooses exactly what the reference implementation chooses."""
 import math
 import random
 
@@ -29,7 +28,7 @@ def test_random_cases_agree():
     for case in range(3000):
         parts, now, max_bytes, cfg = random_case(rng)
         assert select_simple_fast(parts, now, max_bytes, cfg) == select_simple(parts, now, max_bytes, cfg), case
-        # the numpy path itself, also on segments too short for the hybrid to pick it
+        # the numpy path directly too, since the hybrid skips it on short segments
         max_parts = _max_parts_to_merge(len(parts), cfg)
         for offset, segment in _segments(parts):
             if len(segment) > 1:
@@ -42,7 +41,7 @@ def test_random_cases_agree():
 
 
 def test_trajectories_agree():
-    # whole simulations must match event by event, including near the stability boundary
+    # the second config runs near the stability boundary
     for config in (Config(), Config(threads=2, insert_rate=60, insert_bytes_mean=MIB)):
         until = 3600 if config.threads == 16 else 600
         fast = simulate(config, until)

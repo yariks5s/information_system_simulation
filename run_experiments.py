@@ -1,6 +1,4 @@
-"""M8: runs the experiments of RFC section 9 into results/<name>.json; plots.py draws them.
-
-    python3 run_experiments.py [--quick] [name ...]"""
+"""experiments of RFC section 9 into results/: python3 run_experiments.py [--quick] [name ...]"""
 import json
 import math
 import os
@@ -18,7 +16,7 @@ QUICK = "--quick" in sys.argv
 SEEDS = range(2 if QUICK else 10)
 HORIZON = 600.0 if QUICK else 3600.0
 WARMUP = 120.0 if QUICK else 600.0
-# warm-ups a sweep can pick from by Welch's procedure; the longest leaves a third of the horizon to observe
+# candidate warm-ups for welch; the longest still leaves a third of the horizon
 WARMUPS = (120.0, 240.0) if QUICK else (600.0, 1200.0, 1800.0, 2400.0)
 STEP = 30.0
 OUT = "results_quick" if QUICK else "results"
@@ -55,47 +53,39 @@ def save(name, payload):
 
 
 def welch_warmup(fresh, grid):
-    """End of the warm-up by Welch's procedure on the mean number of fresh parts, or None if it never settles."""
     index = stats.warmup_end(fresh, window=5)
     return float(grid[index]) if index < len(grid) - 5 else None
 
 
 def sweep(configs, until=HORIZON, warmups=WARMUPS):
-    """Replications of each configuration. The warm-up of a configuration is the shortest of `warmups` that covers
-    its Welch estimate; if the fresh parts never settle, the shortest one, and the run is marked as not stationary."""
     g = np.arange(0, until + STEP, STEP)
     results = stats.replicate_many(configs, until, warmups, SEEDS, grid=g)
     runs = []
     for summaries, curves in results:
         series = mean_series(curves)
+        # fresh parts, not all: one growing partition keeps adding parts like the log of its size
         welch = welch_warmup(np.array(series["fresh"]), g)
+        # shortest candidate covering welch; never settled takes the shortest, settled too late the longest
         warmup = next((w for w in warmups if welch is not None and w >= welch), warmups[0] if welch is None else warmups[-1])
         per_seed = [s[warmup] for s in summaries]
         runs.append(dict(stats=aggregate(per_seed), series=series, per_seed=per_seed, warmup=warmup, welch_warmup=welch,
                          stationary=welch is not None and welch <= warmups[-1], per_warmup=summaries,
-                         # the same characteristics after every warm-up, so the choice can be revisited without a rerun
+                         # every warm-up is kept so the choice can be revisited without a rerun
                          stats_by_warmup={str(int(w)): aggregate([s[w] for s in summaries]) for w in warmups}))
     return runs, g
 
 
 def strip(runs):
-    """Runs without the summaries for every warm-up, which are only needed in memory."""
     return [{k: v for k, v in run.items() if k != "per_warmup"} for run in runs]
 
 
-# experiments
-
 def e1_load():
-    """Characteristics vs insert rate, 3.6 MB inserts, default pool."""
     rates = [25, 50, 100, 150, 200, 225, 250, 275, 300]
-    # the warm-up comes from Welch's procedure on fresh parts: the total number of parts of one growing
-    # partition is not stationary, it keeps growing with the logarithm of the table size
     runs, grid = sweep([base(insert_rate=r) for r in rates])
     save("e1_load", dict(rates=rates, grid=grid.tolist(), runs=strip(runs)))
 
 
 def e2_batch():
-    """Same data rate, different insert sizes, two pool sizes."""
     data_rate = 180 * MB
     sizes = [0.29 * MB, 0.9 * MB, 3.6 * MB, 14.4 * MB]
     pools = [4, 16]
@@ -105,15 +95,14 @@ def e2_batch():
 
 
 def e3_boundary():
-    """Largest insert rate at which no partition reaches parts_to_delay_insert within the horizon. The average
-    part size guard is off: with it, large partitions stop being throttled and the criterion would measure the guard."""
     sizes = [0.9 * MB, 3.6 * MB, 14.4 * MB]
     variants = {"pool 16": dict(threads=16), "pool 4": dict(threads=4), "pool 16 + projection": dict(threads=16, aux=(PROJECTION,))}
     configs, guess, labels = [], [], []
     for label, overrides in variants.items():
         for size in sizes:
+            # guard off: with it large partitions are never throttled and the bound would measure the guard
             config = base(insert_bytes_mean=size, max_avg_part_size_for_too_many_parts=0, **overrides)
-            # threads * merge speed / (write amplification ~5 * merge work per base byte)
+            # rough capacity, assuming write amplification of about 5
             capacity = config.threads * config.merge_bytes_per_second / (5 * size * (1 + sum(d for _, d in config.aux)))
             configs.append(config)
             guess.append(capacity)
@@ -125,7 +114,6 @@ def e3_boundary():
 
 
 def e4_selector():
-    """Write amplification vs number of parts for the selector and its base."""
     rate = 150
     simple = [2, 3, 5, 8, 12, 20]
     tiered = [2, 3, 4, 6, 8, 12]
@@ -135,14 +123,13 @@ def e4_selector():
 
 
 def e5_policy():
-    """round_robin vs shortest_task_first near saturation, paired on common random numbers."""
     rates = [200, 250]
     policies = ["round_robin", "shortest_task_first"]
     configs = [base(insert_rate=r, scheduling_policy=p) for r in rates for p in policies]
     runs, _ = sweep(configs)
     differences = {}
     for i, rate in enumerate(rates):
-        # both members of a pair at the longer of their two warm-ups
+        # a pair must share one window, so take the longer warm-up
         warmup = max(runs[2 * i]["warmup"], runs[2 * i + 1]["warmup"])
         a, b = ([s[warmup] for s in runs[j]["per_warmup"]] for j in (2 * i, 2 * i + 1))
         differences[rate] = {"warmup": warmup}
@@ -152,10 +139,9 @@ def e5_policy():
 
 
 def e6_feedback():
-    """Open vs closed input at the same offered overload, with and without the average part size guard (RFC 3.3).
-    Closed clients think 0.1 s, so the maximum delay of 1 s can cut their rate by up to 11 times."""
     offered = 350
     open_input = dict(insert_rate=offered)
+    # 35 clients thinking 0.1 s offer 350/s, and a 1 s delay cuts that up to 11 times
     closed_input = dict(arrivals="closed", clients=35, think_time=0.1)
     variants = {"open, guard": open_input, "closed, guard": closed_input,
                 "open, no guard": dict(open_input, max_avg_part_size_for_too_many_parts=0),
@@ -165,8 +151,6 @@ def e6_feedback():
 
 
 def e7_burst():
-    """Recovery after a 5-minute burst on top of 150 inserts/s. Recovery is paired on common random numbers:
-    the first time after the burst when the number of parts is within 10% of the same seed without a burst."""
     factors = [1.0, 1.5, 2.0, 3.0]
     start, length = (300.0, 60.0) if QUICK else (1800.0, 300.0)
     until = HORIZON * 1.5
@@ -174,6 +158,7 @@ def e7_burst():
     configs = [base(insert_rate=150, burst=(start, length, f)) for f in factors]
     results = stats.pmap(_burst_job, [(replace(c, seed=s), until, g) for c in configs for s in SEEDS])
     n = len(SEEDS)
+    # factors[0] must be 1.0: the same seed without a burst is the reference
     reference = [np.array(r) for r in results[:n]]
     after = np.searchsorted(g, start + length)
     runs = []
@@ -184,7 +169,8 @@ def e7_burst():
             within = np.nonzero(burst[after:] <= 1.1 * ref[after:])[0]
             recovery.append(float(g[after + within[0]] - (start + length)) if len(within) else math.inf)
         runs.append(dict(factor=factor, series=np.mean(chunk, axis=0).tolist(), peak=float(np.mean([c.max() for c in chunk])),
-                         recovery=stats.confidence_interval(recovery), recovery_per_seed=recovery))
+                         recovery=stats.confidence_interval(recovery) if all(map(math.isfinite, recovery)) else None,
+                         recovery_per_seed=[r if math.isfinite(r) else None for r in recovery]))
     save("e7_burst", dict(factors=factors, burst=(start, length), grid=g.tolist(), runs=runs))
 
 
@@ -199,14 +185,12 @@ def _burst_job(job):
 
 
 def e8_aux():
-    """Auxiliary structures at a fixed load."""
     variants = {"none": (), "bloom_filter index": (INDEX,), "projection": (PROJECTION,), "projection + index": (PROJECTION, INDEX)}
     runs, _ = sweep([base(insert_rate=100, aux=a) for a in variants.values()])
     save("e8_aux", dict(variants=list(variants), runs=strip(runs)))
 
 
 def e9_factorial():
-    """2^5 screening at 180 MB/s of inserted data."""
     data_rate = 180 * MB
     factors = {
         "insert size": (lambda c: replace(c, insert_bytes_mean=0.9 * MB, insert_rate=data_rate / (0.9 * MB)),
@@ -218,16 +202,21 @@ def e9_factorial():
     }
     responses = ("parts_mean", "write_amplification", "fresh_lifetime_mean", "busy_threads_mean", "delayed_fraction")
     seeds = range(2 if QUICK else 6)
-    until = 600.0 if QUICK else 1800.0
-    warmup = WARMUP / 2
-    results, effects = experiments.factorial(base(), factors, until, warmup, responses, seeds)
+    g = np.arange(0, HORIZON + STEP, STEP)
+
+    def longest_warmup(curves):  # the design stays balanced only with one warm-up for all cells
+        ends = [welch_warmup(np.array(mean_series(c)["fresh"]), g) for c in curves]
+        need = max((e for e in ends if e is not None), default=WARMUPS[0])
+        return next((w for w in WARMUPS if w >= need), WARMUPS[-1])
+
+    until = HORIZON
+    results, effects, warmup = experiments.factorial(base(), factors, until, WARMUPS, responses, seeds, grid=g, choose=longest_warmup)
     save("e9_factorial", dict(factors=list(factors), responses=responses, seeds=len(seeds), until=until, warmup=warmup,
                               runs=[dict(signs=r["signs"], means=r["means"], per_seed={k: [s[k] for s in r["summaries"]] for k in responses})
                                     for r in results], effects=effects))
 
 
 def e10_partitions():
-    """Partition rotation in compressed time: a new partition every 10 model minutes, the 3 newest kept."""
     rotation = dict(partition_seconds=120.0 if QUICK else 600.0, retention_partitions=3)
     open_variants = {"one partition": {}, "rotation": rotation, "rotation, 10% late inserts": dict(rotation, late_insert_fraction=0.1)}
     open_runs, open_grid = sweep([base(insert_rate=150, **v) for v in open_variants.values()], until=HORIZON * 2)
@@ -239,7 +228,6 @@ def e10_partitions():
 
 
 def _disk_job(job):
-    """One run with the disk state every STEP seconds."""
     from model import Table
     from selector import max_source_parts_bytes
 
@@ -256,7 +244,7 @@ def _disk_job(job):
     series = {k: [r[k] for r in rows] for k in rows[0]}
     cap_drop = next((t for t, cap in zip(np.arange(0, until + STEP, STEP), series["cap"]) if cap < config.max_bytes_at_max_space), math.inf)
     first_nospace = table.history_nospace[0] if table.history_nospace else math.inf
-    tail = 600.0  # the last 10 minutes: how much of the input the full disk still lets in
+    tail = 600.0  # how much input a full disk still lets in
     arrivals = sum(1 for t, _ in table.history_inserts if t >= until - tail)
     nospace = sum(1 for t in table.history_nospace if t >= until - tail)
     return stats.summary(table), series, dict(first_nospace=first_nospace, cap_drop=float(cap_drop),
@@ -264,7 +252,6 @@ def _disk_job(job):
 
 
 def e11_disk():
-    """A disk that fills up: one partition, 100 inserts per second, 2 TB, and the lifetime of outdated parts."""
     until = 600.0 if QUICK else 6000.0
     disk = int((0.3 if QUICK else 2.0) * 10**12)
     variants = {"no limit": {}, "2 TB, old_parts_lifetime 480 s": dict(disk_bytes=disk), "2 TB, old_parts_lifetime 60 s": dict(disk_bytes=disk, old_parts_lifetime=60.0)}
@@ -277,7 +264,7 @@ def e11_disk():
         events = {}
         for key in ("first_nospace", "cap_drop", "nospace_last_10_min"):
             values = [c[2][key] for c in chunk]
-            # an interval only if every replication had the event; per seed None means never
+            # an interval only if every seed had the event, None per seed means never
             events[key] = stats.confidence_interval(values) if all(math.isfinite(v) for v in values) else None
             events[key + "_per_seed"] = [v if math.isfinite(v) else None for v in values]
         runs.append(dict(stats=aggregate([c[0] for c in chunk]), series=mean_series([c[1] for c in chunk]), **events))
