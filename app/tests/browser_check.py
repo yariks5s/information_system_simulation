@@ -5,7 +5,7 @@ import sys
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CHROME = "/home/ubuntu/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome"
+CHROME = os.environ.get("CHROMIUM")  # a browser other than playwright's own
 scheme = sys.argv[1] if len(sys.argv) > 1 else "light"
 shots = os.path.join(ROOT, "tests", "shots")
 os.makedirs(shots, exist_ok=True)

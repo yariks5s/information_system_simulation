@@ -1,4 +1,0 @@
-<frozen importlib._bootstrap>:914: ImportWarning: _SixMetaPathImporter.find_spec() not found; falling back to find_module()
-..........................................                               [100%]
-42 passed in 217.61s (0:03:37)
-exit 0

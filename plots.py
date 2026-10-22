@@ -248,7 +248,8 @@ def e9(d):
              "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією"}
     responses = [r for r in d["responses"] if any(abs(v[0]) > 1e-12 for v in d["effects"][r]["main"].values())]
     fig, axes = plt.subplots(1, len(responses), figsize=(3.1 * len(responses) + 1.5, 3.2), squeeze=False)
-    for ax, response in zip(axes[0], responses):
+    axes = axes[0]
+    for ax, response in zip(axes, responses):
         main = d["effects"][response]["main"]
         factors = list(main)
         ax.barh(range(len(factors)), [main[f][0] for f in factors], xerr=[main[f][1] for f in factors], color=SERIES[0], height=0.6,

@@ -10,7 +10,7 @@ python3 - <<'PY'
 import os
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path=os.path.expanduser("~/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome"))
+    browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM"))
     page = browser.new_page()
     page.goto("file://" + os.path.abspath("report.html"))
     page.pdf(path="report.pdf", format="A4", print_background=True, display_header_footer=True, header_template="<span></span>",

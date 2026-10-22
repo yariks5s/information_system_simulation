@@ -1,11 +1,11 @@
 == closed
 metric                                   live                  model    diff
-parts_mean                    12.32 ± 0.48           12.37 ± 0.04      +0.4%
-busy_threads_mean            0.3731 ± 0.033         0.3688 ± 0.0049    -1.2%
-fresh_waiting_mean           0.1291 ± 0.0043        0.1257 ± 0.00091   -2.6%
-fresh_lifetime_mean          0.1821 ± 0.0046        0.1835 ± 0.001     +0.7%
-merge_duration_mean          0.1096 ± 0.016         0.1111 ± 0.0013    +1.4%
-write_amplification           4.063 ± 0.37           4.365 ± 0.015     +7.4%
+parts_mean                    12.32 ± 0.48           12.74 ± 0.068     +3.4%
+busy_threads_mean            0.3731 ± 0.033         0.4074 ± 0.0088    +9.2%
+fresh_waiting_mean           0.1291 ± 0.0043        0.1257 ± 0.001     -2.6%
+fresh_lifetime_mean          0.1821 ± 0.0046         0.185 ± 0.001     +1.6%
+merge_duration_mean          0.1096 ± 0.016           0.12 ± 0.0025    +9.5%
+write_amplification           4.063 ± 0.37           4.067 ± 0.069     +0.1%
 insert_rate                   15.77 ± 0.48           15.91 ± 0.12      +0.9%
 delayed_fraction                  0 ± 0                  0 ± 0         +nan%
 rejected_fraction                 0 ± 0                  0 ± 0         +nan%

@@ -251,7 +251,7 @@ def _disk_job(job):
                          cap=max_source_parts_bytes(table.pool.max_tasks, len(table.pool.tasks), config, free)))
     series = {k: [r[k] for r in rows] for k in rows[0]}
     cap_drop = next((t for t, cap in zip(np.arange(0, until + STEP, STEP), series["cap"]) if cap < config.max_bytes_at_max_space), math.inf)
-    first_nospace = table.history_nospace[0] if table.history_nospace else math.inf
+    first_nospace = min(table.history_nospace, default=math.inf)
     tail = 600.0
     arrivals = sum(1 for t, _ in table.history_inserts if t >= until - tail)
     nospace = sum(1 for t in table.history_nospace if t >= until - tail)

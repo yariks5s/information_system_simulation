@@ -117,6 +117,7 @@
     "0.99": 1.0391589376376908
    },
    "fresh_rate": 8.014814814814814,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.1162282974562984,
    "merge_duration_quantiles": {
     "0.5": 0.031883756786953654,
@@ -159,6 +160,7 @@
     "0.99": 1.1678980202491682
    },
    "fresh_rate": 7.696296296296296,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.12191439474839103,
    "merge_duration_quantiles": {
     "0.5": 0.03132615389129967,
@@ -201,6 +203,7 @@
     "0.99": 1.1016227528818963
    },
    "fresh_rate": 7.896296296296296,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11902275078711967,
    "merge_duration_quantiles": {
     "0.5": 0.03135361174491891,
@@ -243,6 +246,7 @@
     "0.99": 1.1560735266352373
    },
    "fresh_rate": 8.0,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.12177521355848789,
    "merge_duration_quantiles": {
     "0.5": 0.03142925238816474,
@@ -285,6 +289,7 @@
     "0.99": 1.0420136680179084
    },
    "fresh_rate": 7.881481481481481,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11516386819171111,
    "merge_duration_quantiles": {
     "0.5": 0.031209107080940157,
@@ -327,6 +332,7 @@
     "0.99": 1.0684677799032443
    },
    "fresh_rate": 7.962962962962963,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11485470765398087,
    "merge_duration_quantiles": {
     "0.5": 0.03141709215888966,
@@ -369,6 +375,7 @@
     "0.99": 1.0281629088287614
    },
    "fresh_rate": 8.059259259259258,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11994186849814382,
    "merge_duration_quantiles": {
     "0.5": 0.0318989752717016,
@@ -411,6 +418,7 @@
     "0.99": 1.115169857455994
    },
    "fresh_rate": 7.874074074074074,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.1141574009177814,
    "merge_duration_quantiles": {
     "0.5": 0.03157582158240757,
@@ -453,6 +461,7 @@
     "0.99": 1.0678657705894847
    },
    "fresh_rate": 8.155555555555555,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.12361667016056467,
    "merge_duration_quantiles": {
     "0.5": 0.03148276452753862,
@@ -495,6 +504,7 @@
     "0.99": 1.0776185596835783
    },
    "fresh_rate": 7.7407407407407405,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11891917669722625,
    "merge_duration_quantiles": {
     "0.5": 0.03162944205121221,
@@ -537,6 +547,7 @@
     "0.99": 1.0594988643533885
    },
    "fresh_rate": 8.088888888888889,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11736899872132721,
    "merge_duration_quantiles": {
     "0.5": 0.03134232164831019,
@@ -579,6 +590,7 @@
     "0.99": 1.064309422889113
    },
    "fresh_rate": 8.137037037037038,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11814322089372294,
    "merge_duration_quantiles": {
     "0.5": 0.03142078677859672,
@@ -621,6 +633,7 @@
     "0.99": 1.11444024288287
    },
    "fresh_rate": 8.174074074074074,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11915896602946363,
    "merge_duration_quantiles": {
     "0.5": 0.0317252954751126,
@@ -663,6 +676,7 @@
     "0.99": 1.069966510944502
    },
    "fresh_rate": 7.940740740740741,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11653523842623709,
    "merge_duration_quantiles": {
     "0.5": 0.031811364324767055,
@@ -705,6 +719,7 @@
     "0.99": 1.1083636543565487
    },
    "fresh_rate": 7.937037037037037,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.12604737139723227,
    "merge_duration_quantiles": {
     "0.5": 0.03154203623535068,
@@ -747,6 +762,7 @@
     "0.99": 1.0206865300510808
    },
    "fresh_rate": 8.059259259259258,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11690004983137353,
    "merge_duration_quantiles": {
     "0.5": 0.03188103033994594,
@@ -789,6 +805,7 @@
     "0.99": 1.0984847030427805
    },
    "fresh_rate": 8.114814814814816,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11943376643845759,
    "merge_duration_quantiles": {
     "0.5": 0.031499804231486905,
@@ -831,6 +848,7 @@
     "0.99": 1.0860403994085663
    },
    "fresh_rate": 7.611111111111111,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11386553781398003,
    "merge_duration_quantiles": {
     "0.5": 0.0318020224373754,
@@ -873,6 +891,7 @@
     "0.99": 1.0638744929187043
    },
    "fresh_rate": 8.08148148148148,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.11302720834008777,
    "merge_duration_quantiles": {
     "0.5": 0.0314793800226596,
@@ -915,6 +934,7 @@
     "0.99": 1.0296819135181188
    },
    "fresh_rate": 7.985185185185185,
+   "merges_aborted": 0,
    "merge_duration_mean": 0.12253247984760177,
    "merge_duration_quantiles": {
     "0.5": 0.03103750438307884,

@@ -37,6 +37,10 @@ export class Chart {
     this.legend = el("div", { class: "legend" });
     this.svg = sv("svg", { class: "chart", role: "img", "aria-label": options.ariaLabel || "" });
     container.append(this.legend, this.svg);
+    // on the svg: render replaces the hit rect, and a replaced rect misses pointerleave
+    this.svg.addEventListener("pointermove", e => { this.pointer = e; this.hover(e); });
+    this.svg.addEventListener("pointerleave", () => this.leave());
+    if (options.onClick) this.svg.addEventListener("click", e => { if (this.inside(e)) options.onClick(this.X.invert(this.localX(e))); });
     this.renderLegend();
     this.render();
     new ResizeObserver(() => this.render()).observe(container);
@@ -176,9 +180,6 @@ export class Chart {
     svg.append(this.cross);
     const hit = sv("rect", { class: "hit", x: m.l, y: m.t, width: Math.max(0, width - m.l - m.r), height: Math.max(0, height - m.t - m.b) });
     svg.append(hit);
-    hit.addEventListener("pointermove", e => { this.pointer = e; this.hover(e); });
-    hit.addEventListener("pointerleave", () => { this.pointer = null; tooltip.hide(); this.cross.setAttribute("visibility", "hidden"); });
-    if (o.onClick) hit.addEventListener("click", e => o.onClick(this.X.invert(this.localX(e))));
     if (this.playheadAt != null) this.setPlayhead(this.playheadAt);
     if (this.pointer) this.hover(this.pointer);  // live data moves under a resting pointer
   }
@@ -203,7 +204,20 @@ export class Chart {
     return (e.clientX - r.left) * this.width / r.width;
   }
 
+  inside(e) {
+    const r = this.svg.getBoundingClientRect(), m = this.m;
+    const px = this.localX(e), py = (e.clientY - r.top) * this.height / r.height;
+    return this.X && px >= m.l && px <= this.width - m.r && py >= m.t && py <= this.height - m.b;
+  }
+
+  leave() {
+    this.pointer = null;
+    tooltip.hide();
+    if (this.cross) this.cross.setAttribute("visibility", "hidden");
+  }
+
   hover(e) {
+    if (!this.inside(e)) { this.leave(); return; }
     const o = this.o, px = this.localX(e);
     const r = this.svg.getBoundingClientRect();
     const py = (e.clientY - r.top) * this.height / r.height;

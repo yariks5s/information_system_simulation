@@ -1,10 +1,12 @@
 // needs tests/python_runs.json: run app/tools/record_python.py from the repo root first
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { Table } from "../src/sim/model.js";
 
-const runs = JSON.parse(readFileSync(new URL("./python_runs.json", import.meta.url)));
+const path = new URL("./python_runs.json", import.meta.url);
+const runs = existsSync(path) ? JSON.parse(readFileSync(path)) : {};
+if (!existsSync(path)) test("trace matches Python", { skip: "no tests/python_runs.json: run python3 app/tools/record_python.py from the repo root" }, () => {});
 
 function close(a, b) {
   return a === b || Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));

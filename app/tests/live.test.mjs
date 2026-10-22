@@ -65,7 +65,8 @@ test("turning partitions off sends new inserts to the newest partition", () => {
   table.configure({ partition_seconds: 0 });
   table.engine.run(260, Infinity, () => table.checkInvariants());
   const fresh = [...table.partitions.values()].flat().filter(p => p.level === 0 && p.createdAt > 200);
-  assert.ok(fresh.length && fresh.every(p => p.partition === table.currentPartition), JSON.stringify([...table.partitions.keys()]));
+  const keys = [...table.partitions.keys()];
+  assert.ok(keys[keys.length - 1] === table.currentPartition && fresh.length && fresh.every(p => p.partition === table.currentPartition), JSON.stringify(keys));
 });
 
 test("a burst adds arrivals without moving the base ones", () => {
