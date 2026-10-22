@@ -229,6 +229,7 @@ svg.chart .axis-label { fill: var(--text-secondary); font-size: 11.5px; }
 svg.chart .grid-line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
 svg.chart .base-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
 svg.chart .threshold { stroke: var(--text-muted); stroke-width: 1; shape-rendering: crispEdges; }
+svg.chart .threshold-bg { fill: var(--surface-1); opacity: 0.85; }
 svg.chart .threshold-label { fill: var(--text-muted); font-size: 10.5px; paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
 svg.chart .end-label { fill: var(--text-secondary); font-size: 11.5px; }
 svg.chart .point-label { fill: var(--text-secondary); font-size: 10.5px; }
@@ -294,6 +295,7 @@ table.data th { color: var(--text-secondary); font-weight: 600; }
 
 .loading { color: var(--text-muted); padding: 40px 0; text-align: center; }
 footer { color: var(--text-muted); font-size: 12px; max-width: 1440px; margin: 0 auto; padding: 0 32px 32px; }
+footer a { color: var(--series-1); }
 
 .lab { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .lab { grid-template-columns: minmax(0, 1fr); } }
@@ -606,7 +608,7 @@ ol.log li.pick:hover { background: var(--surface-2); }
   <section class="tab" id="tab-validation" role="tabpanel" aria-labelledby="t-validation" hidden></section>
 </main>
 
-<footer>Проєкт: <code>~/merge-sim/app</code>. Модель, калібрування і експерименти: <code>~/merge-sim</code>, опис у <code>RFC.md</code>.</footer>
+<footer>Код, модель, калібрування й експерименти: <a href="https://github.com/yariks5s/information_system_simulation">github.com/yariks5s/information_system_simulation</a>, опис моделі у <code>RFC.md</code>.</footer>
 <div class="tooltip" id="tooltip" hidden></div>
 <script>
 "use strict";
@@ -1890,11 +1892,13 @@ class Chart {
     svg.append(sv("line", { class: "base-line", x1: m.l, x2: width - m.r, y1: base, y2: base }));
     if (o.x.label) svg.append(sv("text", { class: "axis-label", x: (m.l + width - m.r) / 2, y: height - 4, "text-anchor": "middle" }, o.x.label));
 
+    const labels = [];  // drawn after the series, which would hide them
     for (const t of o.thresholds || []) {
       if (t.y < y0 || t.y > y1) continue;
       const y = Math.round(Y(t.y)) + 0.5;
       svg.append(sv("line", { class: "threshold", x1: m.l, x2: width - m.r, y1: y, y2: y }));
-      svg.append(sv("text", { class: "threshold-label", x: m.l + 4, y: y - 4 }, t.label));
+      labels.push(sv("rect", { class: "threshold-bg", x: m.l + 2, y: y - 15, width: t.label.length * 6 + 4, height: 13, rx: 2 }),
+                  sv("text", { class: "threshold-label", x: m.l + 4, y: y - 4 }, t.label));
     }
 
     const clampY = v => Y(Math.min(y1, Math.max(v, o.y.log ? y0 : -Infinity)));
@@ -1925,6 +1929,7 @@ class Chart {
       }
     }
     if (direct) for (const d of direct) svg.append(sv("text", { class: "end-label", x: width - m.r + 8, y: d.y + 4 }, d.name));
+    svg.append(...labels);
 
     this.playheadLine = sv("line", { class: "playhead", y1: m.t, y2: height - m.b, x1: -10, x2: -10 });
     if (o.playhead) svg.append(this.playheadLine);
@@ -2376,7 +2381,7 @@ class EventLog {
       const sizes = task.payload.map(p => p.level);
       const lo = Math.min(...sizes), hi = Math.max(...sizes);
       const why = found.tiered ? `${found.count} сусідніх кусків одного рівня` : `base′ = ${NUM2.format(found.loweredBase)}, оцінка ${bytes(found.score)}`;
-      this.push(state, t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} рівнів ${lo === hi ? lo : lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
+      this.push(state, t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} ${lo === hi ? "рівня " + lo : "рівнів " + lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
     } else if (type === "merged") {
       const [task, part] = data;
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
@@ -2524,7 +2529,7 @@ class Inspector {
         const done = 1 - remaining / task.work;
         const levels = task.payload.map(p => p.level);
         this.root.replaceChildren(el("h3", {}, `Злиття №${task.id}`), rows([
-          ["джерела", `${partsText(task.payload.length)}, рівні ${Math.min(...levels)}–${Math.max(...levels)}`],
+          ["джерела", `${partsText(task.payload.length)}, ${Math.min(...levels) === Math.max(...levels) ? `рівень ${levels[0]}` : `рівні ${Math.min(...levels)}–${Math.max(...levels)}`}`],
           ["обсяг", bytes(task.priority)],
           ["робота", `${duration(task.work)} часу потоку`],
           ["виконано", PCT.format(Math.max(0, Math.min(1, done)))],

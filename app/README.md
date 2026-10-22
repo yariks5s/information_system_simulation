@@ -38,7 +38,7 @@
 
 ## Перевірки
 
-    cd .. && python3 app/tools/record_python.py   # один раз перед першим запуском: прогони Python-моделі для diff.test.mjs
+    (cd .. && python3 app/tools/record_python.py) # один раз перед першим запуском: прогони Python-моделі для diff.test.mjs
     node --test tests/*.test.mjs                 # ядро (Node.js 22)
     python3 tools/build.py && python3 tests/browser_check.py light   # сторінка в headless Chromium, і dark
 
@@ -50,5 +50,5 @@
 
 ## Як оновити дані
 
-    cd .. && python3 app/tools/export_data.py     # після нового калібрування чи експериментів
-    cd .. && python3 app/tools/record_python.py   # після змін у Python-моделі, для diff.test.mjs
+    (cd .. && python3 app/tools/export_data.py)   # після нового калібрування чи експериментів
+    (cd .. && python3 app/tools/record_python.py) # після змін у Python-моделі, для diff.test.mjs

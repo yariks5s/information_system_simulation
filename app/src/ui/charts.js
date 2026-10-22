@@ -138,11 +138,13 @@ export class Chart {
     svg.append(sv("line", { class: "base-line", x1: m.l, x2: width - m.r, y1: base, y2: base }));
     if (o.x.label) svg.append(sv("text", { class: "axis-label", x: (m.l + width - m.r) / 2, y: height - 4, "text-anchor": "middle" }, o.x.label));
 
+    const labels = [];  // drawn after the series, which would hide them
     for (const t of o.thresholds || []) {
       if (t.y < y0 || t.y > y1) continue;
       const y = Math.round(Y(t.y)) + 0.5;
       svg.append(sv("line", { class: "threshold", x1: m.l, x2: width - m.r, y1: y, y2: y }));
-      svg.append(sv("text", { class: "threshold-label", x: m.l + 4, y: y - 4 }, t.label));
+      labels.push(sv("rect", { class: "threshold-bg", x: m.l + 2, y: y - 15, width: t.label.length * 6 + 4, height: 13, rx: 2 }),
+                  sv("text", { class: "threshold-label", x: m.l + 4, y: y - 4 }, t.label));
     }
 
     const clampY = v => Y(Math.min(y1, Math.max(v, o.y.log ? y0 : -Infinity)));
@@ -173,6 +175,7 @@ export class Chart {
       }
     }
     if (direct) for (const d of direct) svg.append(sv("text", { class: "end-label", x: width - m.r + 8, y: d.y + 4 }, d.name));
+    svg.append(...labels);
 
     this.playheadLine = sv("line", { class: "playhead", y1: m.t, y2: height - m.b, x1: -10, x2: -10 });
     if (o.playhead) svg.append(this.playheadLine);

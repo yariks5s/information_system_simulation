@@ -62,7 +62,7 @@ export class Inspector {
         const done = 1 - remaining / task.work;
         const levels = task.payload.map(p => p.level);
         this.root.replaceChildren(el("h3", {}, `Злиття №${task.id}`), rows([
-          ["джерела", `${partsText(task.payload.length)}, рівні ${Math.min(...levels)}–${Math.max(...levels)}`],
+          ["джерела", `${partsText(task.payload.length)}, ${Math.min(...levels) === Math.max(...levels) ? `рівень ${levels[0]}` : `рівні ${Math.min(...levels)}–${Math.max(...levels)}`}`],
           ["обсяг", bytes(task.priority)],
           ["робота", `${duration(task.work)} часу потоку`],
           ["виконано", PCT.format(Math.max(0, Math.min(1, done)))],

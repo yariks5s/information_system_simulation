@@ -49,7 +49,7 @@ export class EventLog {
       const sizes = task.payload.map(p => p.level);
       const lo = Math.min(...sizes), hi = Math.max(...sizes);
       const why = found.tiered ? `${found.count} сусідніх кусків одного рівня` : `base′ = ${NUM2.format(found.loweredBase)}, оцінка ${bytes(found.score)}`;
-      this.push(state, t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} рівнів ${lo === hi ? lo : lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
+      this.push(state, t, "merge", `Призначено злиття №${task.id}: ${partsText(task.payload.length)} ${lo === hi ? "рівня " + lo : "рівнів " + lo + "–" + hi}, ${bytes(task.priority)}; ${why}`, { task: task.id });
     } else if (type === "merged") {
       const [task, part] = data;
       this.push(state, t, "merge", `Злиття №${task.id} завершилось за ${duration(t - task.createdAt)}: новий кусок рівня ${part.level}, ${bytes(part.size)}`, { part: part.id });
