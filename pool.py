@@ -1,4 +1,4 @@
-"""merge executor as processor sharing: one event per change of the task set, not one per step"""
+"""MergeTreeBackgroundExecutor as rate allocation: one event per change of the task set, not one per step"""
 from dataclasses import dataclass
 
 

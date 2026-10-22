@@ -52,7 +52,7 @@ def test_max_parts_in_total_counts_all_partitions():
     assert len(table.parts) == 500 and table.rejected > 0
 
 
-def test_merges_stay_inside_partitions_and_ties_go_to_the_later_one():
+def test_merges_stay_inside_partitions_and_tie_order():
     now = 1e6
     partitions = {k: [Part(10 * k + i, 10 * k + i, 10 * k + i, 0, 10 * MIB, now, partition=k) for i in range(5)] for k in (0, 1)}
     assert select_across(partitions, now, 150 * 1024 * MIB, Config(), "simple") == (1, 0, 5)

@@ -247,8 +247,8 @@ def e9(d):
     names = {"insert size": "вставка 0.9 → 3.6 МБ", "threads": "пул 8 → 16", "base": "base 3 → 8",
              "scheduling_policy": "round_robin → STF", "projection": "без → з проєкцією"}
     responses = [r for r in d["responses"] if any(abs(v[0]) > 1e-12 for v in d["effects"][r]["main"].values())]
-    fig, axes = plt.subplots(1, len(responses), figsize=(3.1 * len(responses) + 1.5, 3.2))
-    for ax, response in zip(axes, responses):
+    fig, axes = plt.subplots(1, len(responses), figsize=(3.1 * len(responses) + 1.5, 3.2), squeeze=False)
+    for ax, response in zip(axes[0], responses):
         main = d["effects"][response]["main"]
         factors = list(main)
         ax.barh(range(len(factors)), [main[f][0] for f in factors], xerr=[main[f][1] for f in factors], color=SERIES[0], height=0.6,
@@ -266,11 +266,14 @@ def e9(d):
 def e10(d):
     names = {"one partition": "одна партиція", "rotation": "ротація", "rotation, 10% late inserts": "ротація, 10% запізнілих"}
     fig, axes = plt.subplots(1, 2, figsize=(12, 3.9))
-    for ax, part, title in ((axes[0], "open", "150 вставок/с, відкритий вхід"), (axes[1], "closed", "35 замкнених клієнтів, пропонують 350/с")):
+    for ax, part, title in ((axes[0], "open", "150 вставок/с, відкритий вхід"), (axes[1], "closed", "35 замкнених клієнтів: найбільша партиція, штрихом усі куски")):
         grid = np.array(d[part]["grid"]) / 60
         ends = []
         for i, (variant, run) in enumerate(zip(d[part]["variants"], d[part]["runs"])):
             y = run["series"]["parts"]
+            if part == "closed":  # the throttling threshold is per partition
+                ax.plot(grid, y, color=SERIES[i], linewidth=0.8, linestyle="--")
+                y = run["series"]["largest"]
             ax.plot(grid, y, color=SERIES[i], label=names[variant])
             ends.append((grid[-1], y[-1], names[variant]))
         if part == "closed":
@@ -329,7 +332,7 @@ def inputs():
     merges = np.load("runs/calibration_base/merges.npy")
     small = merges[:, 3] < cal["large_merge_bytes"]
     residual = np.log(merges[small, 0]) - np.log(cal["merge_fixed_seconds"] + merges[small, 3] / cal["merge_bytes_per_second"])
-    # parameters come from the same sample, so plain kstest p-values are too high; goodness_of_fit refits per simulated sample
+    # parameters fitted on the same sample, so p-values come from per-sample refits
     ks_gaps = stats.goodness_of_fit(stats.expon, gaps, known_params={"loc": 0}, statistic="ks", random_state=0)
     ks_noise = stats.goodness_of_fit(stats.norm, residual, statistic="ks", random_state=0)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))

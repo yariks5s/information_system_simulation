@@ -1,4 +1,4 @@
-import { el, bytes, clock, duration, INT, NUM2, partsText } from "./dom.js";
+import { el, bytes, clock, duration, INT, NUM2, partsText, plural } from "./dom.js";
 
 export const KINDS = {
   merge: "злиття",
@@ -87,7 +87,7 @@ export class EventLog {
     } else if (type === "rotate") {
       this.push(state, t, "partition", `Почалась партиція ${data[0]}`);
     } else if (type === "drop") {
-      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${partsText(data[1])}; її куски лежать на диску ще old_parts_lifetime`);
+      this.push(state, t, "partition", `Партицію ${data[0]} видалено разом з ${INT.format(data[1])} ${data[1] % 10 === 1 && data[1] % 100 !== 11 ? "куском" : "кусками"}. Її куски лежать на диску ще old_parts_lifetime`);
     } else if (type === "cancel" && this.enabled.has("partition")) {
       // a drop cancels every running merge at once, so one line per drop
       let e = state.cancelled;
@@ -96,13 +96,13 @@ export class EventLog {
         add(state, e.entry);
       }
       e.count++;
-      e.entry.text = `DROP PARTITION скасував ${INT.format(e.count)} ${e.count === 1 ? "злиття" : "злиттів"}, що йшли в пулі; їхня робота втрачена`;
+      e.entry.text = `DROP PARTITION скасував ${INT.format(e.count)} ${plural(e.count, "злиття", "злиття", "злиттів")}, що йшли в пулі. Їхня робота втрачена`;
     }
   }
 
   render() {
-    // a list rebuilt under the pointer would swallow clicks
-    if (!this.dirty || this.list.matches(":hover, :focus-within")) return;
+    // a rebuild under the pointer swallows clicks, under keyboard focus loses it
+    if (!this.dirty || this.list.matches(":hover, :has(:focus-visible)")) return;
     this.dirty = false;
     const shown = [];
     const entries = this.s.entries;

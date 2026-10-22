@@ -21,9 +21,8 @@ def test_step_stats_by_hand():
 def test_time_integral_equals_sum_of_lifetimes():
     table = simulate(Config(), 3 * 3600)
     lifetimes = sum((p.removed_at if p.removed_at is not None else table.engine.now) - p.created_at for p in table.history_parts)
-    assert math.isclose(table.mean_parts() * table.engine.now, lifetimes, rel_tol=1e-9)
     mean, _ = stats.step_stats(stats.parts_changes(table), 0, table.engine.now)
-    assert math.isclose(mean, table.mean_parts(), rel_tol=1e-9)
+    assert math.isclose(mean * table.engine.now, lifetimes, rel_tol=1e-9)
 
 
 def test_little_law_for_fresh_parts():

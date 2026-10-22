@@ -1,4 +1,4 @@
-"""SimpleMergeSelector port: pure functions from ordered parts to the [begin, end) range to merge, or None"""
+"""merge selection: SimpleMergeSelector port, the tiered baseline and the merge size limit"""
 import math
 
 import numpy as np
@@ -214,7 +214,7 @@ def select_simple_fast(parts, now, max_bytes, cfg):
     return _select(parts, now, max_bytes, cfg, _segment_best_hybrid)
 
 
-def select_tiered(parts, now, max_bytes, cfg):
+def select_tiered(parts, max_bytes, cfg):
     """baseline lsm tiering: the leftmost run of base idle same-level parts"""
     base = max(2, int(cfg.base))
     run = 0
@@ -232,7 +232,7 @@ def select_across(partitions, now, max_bytes, cfg, selector):
     """(key, begin, end) or None; clickhouse breaks ties across partitions by address, here the later one wins"""
     if selector == "tiered":
         for key, parts in partitions.items():
-            found = select_tiered(parts, now, max_bytes, cfg)
+            found = select_tiered(parts, max_bytes, cfg)
             if found:
                 return (key, *found)
         return None

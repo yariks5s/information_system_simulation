@@ -4,15 +4,15 @@ export const S = i => `var(--series-${i})`;
 
 const drawable = p => p[1] != null && Number.isFinite(p[1]) && Number.isFinite(p[0]);
 
-function niceStep(min, max, count = 5) {
+function niceStep(min, max, count = 5, minStep = 0) {
   const span = max - min, step0 = span / count;
   const mag = Math.pow(10, Math.floor(Math.log10(step0)));
-  return [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= count) || 10 * mag;
+  return Math.max(minStep, [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= count) || 10 * mag);
 }
 
-export function niceTicks(min, max, count = 5) {
+export function niceTicks(min, max, count = 5, minStep = 0) {
   if (!(max > min)) return [min];
-  const step = niceStep(min, max, count);
+  const step = niceStep(min, max, count, minStep);
   const ticks = [];
   for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(+v.toFixed(10));
   return ticks;
@@ -84,8 +84,8 @@ export class Chart {
     }
     if (!(hi > lo)) hi = lo + 1;
     if (axis.max == null && pad) {
-      const step = niceStep(lo, hi * 1.04);
-      hi = Math.ceil(hi * 1.04 / step) * step;  // the top tick at or above the largest value
+      const step = niceStep(lo, hi * 1.04, 5, axis.minStep);
+      hi = Math.ceil(hi * 1.04 / step) * step;
     }
     return [lo, hi];
   }
@@ -110,23 +110,21 @@ export class Chart {
     for (const s of o.series) for (const p of s.points) if (drawable(p)) xs.push(p[0]);
     const [x0, x1] = this.extent(o.x, xs, false);
     const [y0, y1] = this.extent(o.y, this.yValues(), true);
-    const direct = this.directLabels(width, y0, y1, height);
-    const m = { l: 52, r: direct ? 104 : 16, t: 10, b: 38 };
+    const top = o.y.label ? 24 : 10;
+    const direct = this.directLabels(width, y0, y1, height, top);
+    const m = { l: 52, r: direct ? 104 : 16, t: top, b: 38 };
     const X = this.scale(o.x, x0, x1, m.l, width - m.r);
     const Y = this.scale(o.y, y0, y1, height - m.b, m.t);
     Object.assign(this, { X, Y, m, width, height });
 
     const fmtX = o.x.format || (v => NUM3.format(v));
     const fmtY = o.y.format || (v => NUM3.format(v));
-    let lastLabel = null;
-    for (const v of (o.y.log ? logTicks(y0, y1) : niceTicks(y0, y1))) {
-      const label = fmtY(v);
-      if (label === lastLabel) continue;  // an integer format over a short range would repeat labels
-      lastLabel = label;
+    for (const v of (o.y.log ? logTicks(y0, y1) : niceTicks(y0, y1, 5, o.y.minStep))) {
       const y = Math.round(Y(v)) + 0.5;
       svg.append(sv("line", { class: "grid-line", x1: m.l, x2: width - m.r, y1: y, y2: y }));
-      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, label));
+      svg.append(sv("text", { class: "tick", x: m.l - 8, y: y + 4, "text-anchor": "end" }, fmtY(v)));
     }
+    if (o.y.label) svg.append(sv("text", { class: "axis-label", x: 4, y: 12 }, o.y.label));
     for (const v of (o.x.log ? logTicks(x0, x1) : niceTicks(x0, x1, Math.max(3, Math.floor((width - m.l - m.r) / 64))))) {
       const x = Math.round(X(v)) + 0.5;
       if (x < m.l - 1 || x > width - m.r + 1) continue;
@@ -150,7 +148,7 @@ export class Chart {
         const bottom = s.band.slice().reverse().map(b => `${X(b[0])},${clampY(b[1])}`);
         svg.append(sv("polygon", { points: top.concat(bottom).join(" "), style: `fill:${s.color};opacity:0.12` }));
       }
-      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));  // keeps the original index for labels
+      const kept = s.points.map((p, i) => [p, i]).filter(([p]) => drawable(p));
       const pts = kept.map(([p]) => p);
       if (!pts.length) continue;
       if (o.mode !== "scatter" || s.connect) {
@@ -178,16 +176,17 @@ export class Chart {
     svg.append(this.cross);
     const hit = sv("rect", { class: "hit", x: m.l, y: m.t, width: Math.max(0, width - m.l - m.r), height: Math.max(0, height - m.t - m.b) });
     svg.append(hit);
-    hit.addEventListener("pointermove", e => this.hover(e));
-    hit.addEventListener("pointerleave", () => { tooltip.hide(); this.cross.setAttribute("visibility", "hidden"); });
+    hit.addEventListener("pointermove", e => { this.pointer = e; this.hover(e); });
+    hit.addEventListener("pointerleave", () => { this.pointer = null; tooltip.hide(); this.cross.setAttribute("visibility", "hidden"); });
     if (o.onClick) hit.addEventListener("click", e => o.onClick(this.X.invert(this.localX(e))));
     if (this.playheadAt != null) this.setPlayhead(this.playheadAt);
+    if (this.pointer) this.hover(this.pointer);  // live data moves under a resting pointer
   }
 
-  directLabels(width, y0, y1, height) {
+  directLabels(width, y0, y1, height, top) {
     const o = this.o;
     if (o.mode === "scatter" || o.series.length < 2 || o.series.length > 4 || width < 420) return null;
-    const Y = this.scale(o.y, y0, y1, height - 38, 10);
+    const Y = this.scale(o.y, y0, y1, height - 38, top);
     const ends = [];
     for (const s of o.series) {
       const pts = s.points.filter(drawable);
@@ -318,5 +317,5 @@ export function card(title, sub, { tableView, wide } = {}) {
   return { card: c, body };
 }
 
-export const ci = ([mean, half]) => (half ? `${NUM3.format(mean)} ± ${NUM3.format(half)}` : NUM3.format(mean));
+export const ci = v => (!v ? "—" : v[1] ? `${NUM3.format(v[0])} ± ${NUM3.format(v[1])}` : NUM3.format(v[0]));
 export const intFormat = v => INT.format(v);

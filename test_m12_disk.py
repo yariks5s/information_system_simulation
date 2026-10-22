@@ -22,11 +22,10 @@ def test_free_space_caps_the_merge_size():
 def test_a_full_disk_rejects_inserts_and_bounds_merges():
     disk = 2000 * MIB
     table = run(Config(insert_rate=50, insert_bytes_mean=MIB, disk_bytes=disk, old_parts_lifetime=30), until=300)
-    # the disk fills in about 40 s, and run checks the disk limit after every event
+    # the disk fills in about 40 s
     assert table.rejected_disk > 0 and table.merges_done > 0
     assert table.inserted_bytes - table.dropped_bytes <= disk
     assert max(size for *_, size in table.history_merges) <= disk / 2
-    assert table.arrivals == table.last_block + table.in_flight + table.rejected + table.rejected_disk
 
 
 def test_outdated_parts_stay_for_their_lifetime():

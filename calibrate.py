@@ -69,7 +69,7 @@ def large_merges(merges, c0, speed):
     """two regimes split by result ratio: large merges shrink fresh bytes more and run slower (RFC 3.1, 3.7)"""
     ratio, size, duration = merges[:, 1] / merges[:, 3], merges[:, 3], merges[:, 0]
     split = (ratio.max() + ratio.min()) / 2
-    threshold = float(size[ratio < split].min())  # the smallest merge in the second regime
+    threshold = float(size[ratio < split].min())
     small, fresh = size < threshold, ratio < split  # a merge in the second regime has only fresh bytes
     residual = np.log(duration) - np.log(c0 + size / speed)
     return dict(result_ratio=float(np.median(ratio[small])),
@@ -129,8 +129,6 @@ def refit():
     merges = {name: np.load(f"runs/calibration_{name}/merges.npy") for name in ("base", "index")}
     for name, m in merges.items():
         result[name].update(fit(m))
-    if "projection_time_share" in result["projection"]:
-        result["projection"]["projection_time_ratio"] = result["projection"].pop("projection_time_share")
     result["model"] = model_params(result, merges["base"])
     with open("calibration.json", "w") as f:
         json.dump(result, f, indent=1)

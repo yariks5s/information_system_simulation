@@ -57,19 +57,28 @@ def welch_warmup(fresh, grid):
     return float(grid[index]) if index < len(grid) - 5 else None
 
 
+def settled(welch, warmups):
+    return welch is not None and welch <= warmups[-1]
+
+
+def common_warmup(welches, warmups):
+    """rows of one table are compared, so they share the shortest warm-up covering every curve that settles"""
+    need = max((w for w in welches if settled(w, warmups)), default=warmups[0])
+    return next(w for w in warmups if w >= need)
+
+
 def sweep(configs, until=HORIZON, warmups=WARMUPS):
     g = np.arange(0, until + STEP, STEP)
     results = stats.replicate_many(configs, until, warmups, SEEDS, grid=g)
+    series = [mean_series(curves) for _, curves in results]
+    # fresh parts, not all: one growing partition keeps adding parts like the log of its size
+    welches = [welch_warmup(np.array(s["fresh"]), g) for s in series]
+    warmup = common_warmup(welches, warmups)
     runs = []
-    for summaries, curves in results:
-        series = mean_series(curves)
-        # fresh parts, not all: one growing partition keeps adding parts like the log of its size
-        welch = welch_warmup(np.array(series["fresh"]), g)
-        # shortest candidate covering welch; never settled takes the shortest, settled too late the longest
-        warmup = next((w for w in warmups if welch is not None and w >= welch), warmups[0] if welch is None else warmups[-1])
-        per_seed = [s[warmup] for s in summaries]
-        runs.append(dict(stats=aggregate(per_seed), series=series, per_seed=per_seed, warmup=warmup, welch_warmup=welch,
-                         stationary=welch is not None and welch <= warmups[-1], per_warmup=summaries,
+    for (summaries, _), s, welch in zip(results, series, welches):
+        per_seed = [x[warmup] for x in summaries]
+        runs.append(dict(stats=aggregate(per_seed), series=s, per_seed=per_seed, warmup=warmup, welch_warmup=welch,
+                         stationary=settled(welch, warmups), per_warmup=summaries,
                          # every warm-up is kept so the choice can be revisited without a rerun
                          stats_by_warmup={str(int(w)): aggregate([s[w] for s in summaries]) for w in warmups}))
     return runs, g
@@ -129,10 +138,8 @@ def e5_policy():
     runs, _ = sweep(configs)
     differences = {}
     for i, rate in enumerate(rates):
-        # a pair must share one window, so take the longer warm-up
-        warmup = max(runs[2 * i]["warmup"], runs[2 * i + 1]["warmup"])
-        a, b = ([s[warmup] for s in runs[j]["per_warmup"]] for j in (2 * i, 2 * i + 1))
-        differences[rate] = {"warmup": warmup}
+        a, b = runs[2 * i]["per_seed"], runs[2 * i + 1]["per_seed"]
+        differences[rate] = {"warmup": runs[2 * i]["warmup"]}
         differences[rate].update({k: stats.paired_difference(a, b, key=lambda s, k=k: s[k]) for k in KEYS})
         differences[rate]["merge_duration_p99"] = stats.paired_difference(a, b, key=lambda s: s["merge_duration_quantiles"][0.99])
     save("e5_policy", dict(rates=rates, policies=policies, runs=strip(runs), differences=differences))
@@ -204,14 +211,15 @@ def e9_factorial():
     seeds = range(2 if QUICK else 6)
     g = np.arange(0, HORIZON + STEP, STEP)
 
-    def longest_warmup(curves):  # the design stays balanced only with one warm-up for all cells
-        ends = [welch_warmup(np.array(mean_series(c)["fresh"]), g) for c in curves]
-        need = max((e for e in ends if e is not None), default=WARMUPS[0])
-        return next((w for w in WARMUPS if w >= need), WARMUPS[-1])
+    welches = []
+
+    def one_warmup(curves):
+        welches.extend(welch_warmup(np.array(mean_series(c)["fresh"]), g) for c in curves)
+        return common_warmup(welches, WARMUPS)
 
     until = HORIZON
-    results, effects, warmup = experiments.factorial(base(), factors, until, WARMUPS, responses, seeds, grid=g, choose=longest_warmup)
-    save("e9_factorial", dict(factors=list(factors), responses=responses, seeds=len(seeds), until=until, warmup=warmup,
+    results, effects, warmup = experiments.factorial(base(), factors, until, WARMUPS, responses, seeds, grid=g, choose=one_warmup)
+    save("e9_factorial", dict(factors=list(factors), responses=responses, seeds=len(seeds), until=until, warmup=warmup, welch=welches,
                               runs=[dict(signs=r["signs"], means=r["means"], per_seed={k: [s[k] for s in r["summaries"]] for k in responses})
                                     for r in results], effects=effects))
 
@@ -244,7 +252,7 @@ def _disk_job(job):
     series = {k: [r[k] for r in rows] for k in rows[0]}
     cap_drop = next((t for t, cap in zip(np.arange(0, until + STEP, STEP), series["cap"]) if cap < config.max_bytes_at_max_space), math.inf)
     first_nospace = table.history_nospace[0] if table.history_nospace else math.inf
-    tail = 600.0  # how much input a full disk still lets in
+    tail = 600.0
     arrivals = sum(1 for t, _ in table.history_inserts if t >= until - tail)
     nospace = sum(1 for t in table.history_nospace if t >= until - tail)
     return stats.summary(table), series, dict(first_nospace=first_nospace, cap_drop=float(cap_drop),
@@ -264,7 +272,7 @@ def e11_disk():
         events = {}
         for key in ("first_nospace", "cap_drop", "nospace_last_10_min"):
             values = [c[2][key] for c in chunk]
-            # an interval only if every seed had the event, None per seed means never
+            # an interval only if every seed has a value, None per seed means none
             events[key] = stats.confidence_interval(values) if all(math.isfinite(v) for v in values) else None
             events[key + "_per_seed"] = [v if math.isfinite(v) else None for v in values]
         runs.append(dict(stats=aggregate([c[0] for c in chunk]), series=mean_series([c[1] for c in chunk]), **events))

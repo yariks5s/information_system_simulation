@@ -53,7 +53,7 @@ class Config:
     partition_seconds: float = 0.0
     late_insert_fraction: float = 0.0  # share of inserts whose data belongs to the previous partition
     retention_partitions: int = 0  # newest partitions to keep, current included, 0 keeps all
-    # seconds from a trigger to the assignee run, 0 is "as soon as a thread is free"
+    # seconds from a trigger to the assignee run, 0 runs it at once
     assign_latency: float = 0.0
     # bytes the table may take, 0 means no limit (RFC 3.10)
     disk_bytes: int = 0
@@ -127,14 +127,11 @@ class Table:
         self.no_work_count = 0
         self._assignee_at = math.inf
         self._assignee_token = 0
-        # integral of the active part count over time
-        self.parts_area = 0.0
-        self._parts_changed_at = 0.0
         self.history_parts = []
         self.history_merges = []  # (assigned_at, done_at, source bytes)
         self.history_aborted = []  # (assigned_at, cancelled_at, source bytes)
         self.history_inserts = []  # (arrival_at, delay_ms or None if rejected)
-        self.history_nospace = []  # commit times of NOT_ENOUGH_SPACE rejections
+        self.history_nospace = []  # arrival times of inserts rejected with NOT_ENOUGH_SPACE
 
     @property
     def parts(self):
@@ -193,14 +190,14 @@ class Table:
             self.delayed += 1
             self.delay_total_ms += delay_ms
         self.in_flight += 1
-        self.engine.schedule(delay_ms / 1000, self.on_insert_commit, size, client, target)
+        self.engine.schedule(delay_ms / 1000, self.on_insert_commit, size, client, target, self.engine.now)
 
-    def on_insert_commit(self, size, client, key):
+    def on_insert_commit(self, size, client, key, arrived_at):
         self.in_flight -= 1
         # MergeTreeDataWriter reserves the in-memory block size, the model the part size (RFC 3.10)
         if self.cfg.disk_bytes and size > self.disk_free():
             self.rejected_disk += 1
-            self.history_nospace.append(self.engine.now)
+            self.history_nospace.append(arrived_at)
             if self.trace is not None:
                 self.trace.append(("nospace", self.engine.now, size))
             if client is not None:
@@ -211,7 +208,6 @@ class Table:
             # like clickhouse, data of a missing partition creates it, even one dropped before
             self.partition_bytes[key] = 0
             self.partitions = dict(sorted({**self.partitions, key: []}.items()))
-        self._account_parts()
         part = Part(next(self._ids), self.last_block, self.last_block, 0, size, self.engine.now, partition=key, fresh=size)
         self.partitions[key].append(part)
         self.partition_bytes[key] += size
@@ -298,7 +294,6 @@ class Table:
         level = max(p.level for p in sources) + 1
         merged = Part(task.id, sources[0].min_block, sources[-1].max_block, level, task.result_size, self.engine.now,
                       partition=key, blocks=sum(p.blocks for p in sources), fresh=task.result_fresh)
-        self._account_parts()
         parts[begin : begin + len(sources)] = [merged]
         self.part_count -= len(sources) - 1
         self.partition_bytes[key] += task.result_size - task.priority
@@ -328,7 +323,6 @@ class Table:
     def _drop(self, key):
         """DROP PARTITION: stopMergesAndWait cancels every merge of the table, not just this partition's"""
         self._cancel_merges()
-        self._account_parts()
         parts = self.partitions.pop(key)
         del self.partition_bytes[key]
         size = 0
@@ -378,13 +372,6 @@ class Table:
         """getMaxUnreservedFreeSpace, for the table alone"""
         return max(0.0, self.cfg.disk_bytes - self.disk_used())
 
-    def _account_parts(self):
-        self.parts_area += self.part_count * (self.engine.now - self._parts_changed_at)
-        self._parts_changed_at = self.engine.now
-
-    def mean_parts(self):
-        self._account_parts()
-        return self.parts_area / self.engine.now if self.engine.now else 0.0
 
     def check_invariants(self):
         """RFC section 7"""
@@ -430,9 +417,11 @@ if __name__ == "__main__":
     import sys
     import time
 
+    import stats
+
     for selector in ("simple", "tiered"):
         started = time.time()
         t = simulate(Config(selector=selector), until=float(sys.argv[1]) if len(sys.argv) > 1 else 86400)
-        print(f"{selector}: events {t.engine.events}, mean parts {t.mean_parts():.1f}, final parts {len(t.parts)}, "
+        print(f"{selector}: events {t.engine.events}, mean parts {stats.summary(t)['parts_mean']:.1f}, final parts {len(t.parts)}, "
               f"merges {t.merges_done}, write amplification {t.merged_bytes / t.inserted_bytes:.2f}, "
               f"selector runs {t.selector_runs}, wall {time.time() - started:.1f}s")

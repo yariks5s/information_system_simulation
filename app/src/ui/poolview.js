@@ -1,4 +1,4 @@
-import { el, bytes, PCT, partsText } from "./dom.js";
+import { el, bytes, PCT, partsText, plural } from "./dom.js";
 
 const MAX_SHOWN = 64;
 
@@ -71,6 +71,6 @@ export class PoolView {
     }
     const hidden = pool.tasks.filter(t => this.slotOf.get(t.id) >= shown).length;
     this.more.hidden = count <= shown;
-    this.more.textContent = `Показано ${shown} з ${count} місць; ще ${hidden} задач не вмістились.`;
+    this.more.textContent = `Показано ${shown} з ${count} ${count % 10 === 1 && count % 100 !== 11 ? "місця" : "місць"}. Ще ${hidden} ${plural(hidden, "задача не вмістилась", "задачі не вмістились", "задач не вмістились")}.`;
   }
 }

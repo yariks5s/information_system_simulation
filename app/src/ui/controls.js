@@ -8,7 +8,7 @@ export const PRESETS = {
             config: { insert_rate: 100 } },
   saturated: { title: "Насичений пул", text: "260 вставок/с. Усі 16 потоків зайняті, кусків стає більше, а злиття ширшими: система обмінює кількість кусків на менше підсилення записів.",
                config: { insert_rate: 260 } },
-  burst: { title: "Сплеск ×3", text: "150 вставок/с, а на другій хвилині потік утричі зростає на 3 хвилини. Під час сплеску кусків стає в рази більше, вмикається гальмування, а після сплеску система довго розбирає хвіст.",
+  burst: { title: "Сплеск ×3", text: "150 вставок/с, а з другої хвилини потік утричі зростає на 3 хвилини. Під час сплеску кусків стає в рази більше, вмикається гальмування, а після сплеску система довго розбирає хвіст.",
            config: { insert_rate: 150 }, actions: [[120, "burst", 3, 180]] },
   feedback: { title: "Гальмування як зворотний зв'язок", text: "35 замкнених клієнтів пропонують 350 вставок/с, більше за пропускну здатність злиттів. Пороги знижено до 300 і 900, обмеження за середнім розміром куска вимкнене. Затримки сповільнюють клієнтів, і кусків стає рівно стільки, скільки дозволяє поріг.",
               config: { arrivals: "closed", clients: 35, think_time: 0.1, parts_to_delay_insert: 300, parts_to_throw_insert: 900, max_avg_part_size_for_too_many_parts: 0 } },
@@ -16,7 +16,7 @@ export const PRESETS = {
            config: { insert_rate: 600, insert_bytes_mean: 0.29 * MB, threads: 4 } },
   partitions: { title: "Ротація партицій", text: "150 вставок/с, нова партиція кожні 2 модельні хвилини, зберігаються 3 найновіші, 10% вставок запізнюються в попередню партицію. Злиття не перетинають межу партиції, старі партиції видаляються цілком.",
                  config: { insert_rate: 150, partition_seconds: 120, retention_partitions: 3, late_insert_fraction: 0.1 } },
-  tiered: { title: "Деградація tiered-селектора", text: "Базовий tiered-селектор з base 2 зливає лише сусідні куски одного рівня. Куски різних рівнів перемішуються і блокують одне одного: пул майже простоює, а кусків стає дедалі більше.",
+  tiered: { title: "Деградація tiered-селектора", text: "Базовий tiered-селектор з base 2 зливає лише сусідні куски одного рівня. Куски різних рівнів перемішуються і блокують одне одного, тож кусків стає дедалі більше, аж до відхилення вставок.",
             config: { insert_rate: 150, selector: "tiered", base: 2 } },
   projection: { title: "Проєкція", text: "100 вставок/с у таблицю з проєкцією: кожен кусок на диску вдвічі більший, а злиття вдвічі довше. Порівняйте зайнятість пулу зі звичайною роботою.",
                 config: { insert_rate: 100, aux: [AUX.projection] } },
@@ -118,8 +118,9 @@ export function describeDifferences(a, b) {
 }
 
 function toggle(list, item, on) {
-  const rest = list.filter(a => a !== item);
-  return on ? [...rest, item] : rest;
+  const want = new Set(list.filter(a => a !== item));
+  if (on) want.add(item);
+  return Object.values(AUX).filter(a => want.has(a));
 }
 
 export class Controls {
@@ -178,8 +179,8 @@ export class Controls {
         input.addEventListener("change", () => this.lab.configure(f.set(input.checked, this.lab.config())));
       }
       const head = el("div", { class: "field-head" }, el("label", { class: "field-label", for: id }, f.label), value);
-      const node = f.type === "toggle" ? el("label", { class: "field toggle" }, input, el("span", {}, f.label)) : el("div", { class: "field" }, head, input);
-      if (f.hint) node.append(el("p", { class: "hint" }, f.hint));
+      const control = f.type === "toggle" ? el("label", { class: "field toggle" }, input, el("span", {}, f.label)) : el("div", { class: "field" }, head, input);
+      const node = f.hint ? el("div", {}, control, el("p", { class: "hint" }, f.hint)) : control;
       group.append(node);
       this.inputs.push({ f, node, input, value });
     }
@@ -188,7 +189,7 @@ export class Controls {
   apply(f, v) {
     const changes = { [f.key]: v };
     const c = this.lab.config();
-    // the server requires parts_to_throw_insert above parts_to_delay_insert
+    // the delay formula divides by parts_to_throw_insert minus parts_to_delay_insert
     if (f.key === "parts_to_delay_insert" && v >= c.parts_to_throw_insert) changes.parts_to_throw_insert = v + 1;
     if (f.key === "parts_to_throw_insert" && v <= c.parts_to_delay_insert) changes.parts_to_delay_insert = Math.max(1, v - 1);
     this.lab.configure(changes);

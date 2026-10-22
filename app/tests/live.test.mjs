@@ -16,7 +16,7 @@ function run(config, until, changes = []) {
   return table;
 }
 
-test("invariants hold while every parameter changes on the fly", () => {
+test("invariants hold while parameters change on the fly", () => {
   const t = run({ insert_rate: 100 }, 900, [
     [60, tb => tb.configure({ insert_rate: 300 })],
     [120, tb => tb.configure({ threads: 4, scheduling_policy: "shortest_task_first" })],
@@ -64,9 +64,8 @@ test("turning partitions off sends new inserts to the newest partition", () => {
   const table = run({ insert_rate: 100, partition_seconds: 60, retention_partitions: 3 }, 200);
   table.configure({ partition_seconds: 0 });
   table.engine.run(260, Infinity, () => table.checkInvariants());
-  const keys = [...table.partitions.keys()];
-  const newest = table.partitions.get(keys[keys.length - 1]);
-  assert.ok(keys[keys.length - 1] === table.currentPartition && newest.some(p => p.createdAt > 200), JSON.stringify(keys));
+  const fresh = [...table.partitions.values()].flat().filter(p => p.level === 0 && p.createdAt > 200);
+  assert.ok(fresh.length && fresh.every(p => p.partition === table.currentPartition), JSON.stringify([...table.partitions.keys()]));
 });
 
 test("a burst adds arrivals without moving the base ones", () => {
@@ -100,17 +99,17 @@ test("pausing inserts stops them, resuming starts them again", () => {
 test("statistics agree with the Python experiment E1", () => {
   const e1 = JSON.parse(readFileSync(new URL("../../results/e1_load.json", import.meta.url)));
   const i = e1.rates.indexOf(150);
-  const [pythonMean, pythonHalf] = e1.runs[i].stats.parts_mean;
+  const [pythonMean, pythonHalf] = e1.runs[i].stats.parts_mean, warmup = e1.runs[i].warmup;
   const means = [];
   for (let seed = 1; seed <= 4; seed++) {
     const table = new Table({ ...CALIBRATED, insert_rate: 150, seed });
     table.start();
-    table.engine.run(600);
+    table.engine.run(warmup);
     let area = 0, last = table.engine.now, count = table.partCount;
     table.observer = () => { area += count * (table.engine.now - last); last = table.engine.now; count = table.partCount; };
     table.engine.run(3600);
     area += count * (3600 - last);
-    means.push(area / 3000);
+    means.push(area / (3600 - warmup));
   }
   const mean = means.reduce((a, b) => a + b) / means.length;
   assert.ok(Math.abs(mean - pythonMean) < 0.03 * pythonMean, `JavaScript ${mean}, Python ${pythonMean} ± ${pythonHalf}`);

@@ -179,7 +179,7 @@ def paired_difference(a, b, key, level=0.95):
 
 
 def welch(curves, window):
-    """welch's procedure (law): centred moving average of the replication mean, m - window points long"""
+    """welch's procedure as in Law: centred moving average of the replication mean, len(mean) - window points long"""
     mean = np.mean(curves, axis=0)
     smoothed = np.empty(max(0, len(mean) - window), dtype=float)
     for i in range(len(smoothed)):

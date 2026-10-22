@@ -29,6 +29,8 @@ export class Lab {
     this.view = "B";
     this.$ = id => document.getElementById(id);
     this.tree = new PartsTree(this.$("tree"), { onPick: s => this.pick(s) });
+    let treeWidth = 0;  // a hidden tab or a resize while paused would keep a stale canvas
+    new ResizeObserver(([e]) => { if (e.contentRect.width !== treeWidth) { treeWidth = e.contentRect.width; if (this.b) this.drawAll(); } }).observe(this.$("tree").parentElement);
     this.pool = new PoolView(this.$("pool"), { onPick: s => this.pick(s) });
     this.inspector = new Inspector(this.$("inspector"), this.$("explain"), s => this.pick(s));
     this.log = new EventLog(this.$("log"), ref => this.pick(ref));
@@ -274,7 +276,9 @@ export class Lab {
     set("live-clients", cfg.arrivals === "open" ? `${NUM.format(cfg.insert_rate)} вставок/с` : `${INT.format(tb.activeClients)} клієнтів`);
     const { n, delay } = throttleState(tb);
     set("live-check", `n = ${INT.format(n)}: ` + (delay === null ? "відхилення" : delay > 0 ? "затримка"
-      : n >= cfg.parts_to_delay_insert ? "без затримки, кусок > 1 ГіБ" : "без затримки"));
+      : n >= cfg.parts_to_delay_insert ? `без затримки, середній кусок > ${gib(cfg.max_avg_part_size_for_too_many_parts)}` : "без затримки"));
+    set("live-guard", cfg.max_avg_part_size_for_too_many_parts ? `середній кусок > ${gib(cfg.max_avg_part_size_for_too_many_parts)}: без обмежень` : "обмеження за середнім розміром вимкнене");
+    set("live-insert", `вставка ≈ ${bytes(cfg.insert_bytes_mean)}`);
     set("live-parts", `${INT.format(tb.partCount)} шт`);
     set("live-assignee", tb.assigneeAt === Infinity || tb.assigneeAt <= tb.engine.now ? `${INT.format(w.merges / span * 60)} злиттів/хв` : `спить ${NUM.format(tb.assigneeAt - tb.engine.now)} с`);
     const m = tb.lastMerge;
@@ -284,7 +288,12 @@ export class Lab {
     set("live-throw", `n ≥ ${INT.format(cfg.parts_to_throw_insert)}: відхилити (TOO_MANY_PARTS)`);
     set("live-delay", `n ≥ ${INT.format(cfg.parts_to_delay_insert)}: затримати на`);
     set("live-formula", `max(${cfg.min_delay_to_insert_ms}, ${INT.format(maxMs)}·(n−${INT.format(cfg.parts_to_delay_insert - 1)})/${INT.format(allowed)}) мс`);
-    set("live-base", `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
+    const tiered = cfg.selector === "tiered";
+    set("live-selector-title", tiered ? "Tiered-селектор (база для порівняння)" : "SimpleMergeSelector");
+    set("live-sel-1", tiered ? "найлівіший ряд вільних кусків" : "діапазон сусідніх вільних кусків, якщо");
+    set("live-sel-2", tiered ? `одного рівня, ${Math.max(2, Math.trunc(cfg.base))} шт. підряд` : "(Σ + k·5МБ)/(max + 5МБ) ≥ base′");
+    set("live-base", tiered ? "сума не більша за межу розміру злиття" : `base′: від ${NUM.format(cfg.base)} до 2 з віком і кількістю`);
+    set("live-sel-4", tiered ? "без оцінки: перший знайдений ряд" : "вибір: min (Σ + 5МБ·k)/(k − 1.9)");
     set("live-pool-size", `${tb.pool.threads} потоків, ${tb.pool.maxTasks} задач`);
     set("live-cost", `(${NUM.format(cfg.merge_fixed_seconds * 1000)} мс + D/${NUM.format(cfg.merge_bytes_per_second / 1e6)} МБ/с)·ε·(1+δ)`);
     const parts = [...tb.partitions.values()].pop() || [];
@@ -334,7 +343,7 @@ export class Lab {
     const minutes = v => clock(v * 60);
     const title = x => "момент " + clock(x * 60);
     this.xAxis = { format: minutes };
-    const chart = (id, extra) => new Chart(this.$(id), { height: 190, x: this.xAxis, y: { min: 0, format: v => INT.format(v) }, tooltipTitle: title, series: [],
+    const chart = (id, extra) => new Chart(this.$(id), { height: 190, x: this.xAxis, y: { min: 0, minStep: 1, format: v => INT.format(v) }, tooltipTitle: title, series: [],
                                                          ariaLabel: this.$(id).previousElementSibling.textContent, ...extra });
     this.charts = {
       parts: chart("c-parts", { valueFormat: v => INT.format(v) }),
@@ -405,6 +414,8 @@ export class Lab {
 }
 
 // what the next insert would get, the same check the model runs
+const gib = b => NUM.format(b / 2 ** 30) + " ГіБ";
+
 function throttleState(tb) {
   let key = null, n = -1;
   for (const [k, parts] of tb.partitions) if (parts.length > n) { n = parts.length; key = k; }

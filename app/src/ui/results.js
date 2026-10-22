@@ -2,9 +2,8 @@ import { RESULTS } from "../data/results.js";
 import { el, sv, tooltip, bytes, clock, NUM, NUM2, NUM3, INT, PCT } from "./dom.js";
 import { Chart, Bars, table, card, ci, niceTicks, S } from "./charts.js";
 
-
-// null: the event did not happen in every replication
-const minutes = v => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : "ніколи");
+// an interval only when every replication had the event
+const minutes = (v, seen, seeds) => (v ? `${NUM.format(v[0] / 60)} ± ${NUM.format(v[1] / 60)} хв` : seen ? `у ${seen} з ${seeds} прогонів` : "ніколи");
 
 export function results() {
   const R = RESULTS, root = document.getElementById("tab-results");
@@ -71,13 +70,13 @@ export function results() {
 
   if (R.e4) {
     const { card: c, body } = card("E4. Компроміс селектора",
-      `${R.e4.rate} вставок/с. Підпис точки: значення merge_selector_base. Менше підсилення записів коштує більшої кількості кусків, а tiered при base 2 і 3 деградує.`, { tableView: () => table(
+      `${R.e4.rate} вставок/с. Підпис точки: значення merge_selector_base. Менше підсилення записів коштує більшої кількості кусків, а tiered при base 2 і 3 деградує. При base 2 tiered відхиляє всі вставки, тож підсилення записів не визначене і точки на графіку немає.`, { tableView: () => table(
         ["селектор", "base", "підсилення", "куски", "потоки"], R.e4.selectors.flatMap(s => s.bases.map((b, i) => [s.name, b, ci(s.wa[i]), ci(s.parts[i]), ci(s.busy[i])]))) });
     new Chart(body, { height: 260, mode: "scatter", x: { label: "підсилення записів" }, y: { log: true, label: "куски" },
       scatterRows: (s, i) => { const sel = R.e4.selectors.find(x => x.name === s.name); return [
         { name: "підсилення записів", value: ci(sel.wa[i]) }, { name: "активні куски", value: ci(sel.parts[i]) }, { name: "зайняті потоки", value: ci(sel.busy[i]) }]; },
       series: R.e4.selectors.map((s, i) => ({ name: s.name, color: S(i + 1), connect: true, labels: s.bases.map(b => String(b)), labelOffset: i ? [6, 14] : [-4, -9],
-        points: s.wa.map((w, j) => [w[0], s.parts[j][0]]) })) });
+        points: s.wa.map((w, j) => [w ? w[0] : null, s.parts[j][0]]) })) });
     grid.append(c);
   }
 
@@ -102,35 +101,35 @@ export function results() {
 
   if (R.e7) {
     const { card: c, body } = card("E7. Відновлення після сплеску",
-      "150 вставок/с і 5-хвилинний сплеск. Відновлення: перший момент, коли кусків не більше ніж на 10% більше, ніж у прогоні з тими самими випадковими числами без сплеску.",
-      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), r.recovery ? `${NUM.format(r.recovery[0] / 60)} ± ${NUM.format(r.recovery[1] / 60)} хв` : "не відновилось"])) });
+      "150 вставок/с і 5-хвилинний сплеск. Відновлення: час від кінця сплеску до моменту, коли кусків не більше ніж на 10% більше, ніж у прогоні з тими самими випадковими числами без сплеску.",
+      { tableView: () => table(["множник", "пік кусків", "відновлення"], R.e7.runs.filter(r => r.factor !== 1).map(r => [`×${r.factor}`, INT.format(r.peak), minutes(r.recovery, r.recovered, r.seeds)])) });
     const [start, length] = R.e7.burst;
     const shown = R.e7.runs;
     new Chart(body, { height: 260, x: { label: "модельний час, хв", format: v => INT.format(v) },
       y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
       series: shown.map((r, i) => ({ name: r.factor === 1 ? "без сплеску" : `сплеск ×${r.factor}`, color: r.factor === 1 ? "var(--axis)" : S(i),
         points: R.e7.grid.map((t, j) => [t / 60, r.series[j]]).filter(p => p[0] >= start / 60 - 10 && p[0] <= start / 60 + 45) })) });
-    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${r.recovery ? NUM.format(r.recovery[0] / 60) + " хв" : "не відновилось"}`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
+    body.append(el("p", { class: "note" }, "Час відновлення: " + shown.filter(r => r.factor !== 1).map(r => `×${r.factor}: ${r.recovery ? NUM.format(r.recovery[0] / 60) + " хв" : `відновлення у ${r.recovered} з ${r.seeds} прогонів`}`).join(", ") + `. Сплеск триває ${length / 60} хв.`));
     grid.append(c);
   }
 
   if (R.e10) {
     const names = { "one partition": "одна партиція", "rotation": "ротація", "rotation, 10% late inserts": "ротація, 10% запізнілих вставок" };
     const { card: c, body } = card("E10. Ротація партицій",
-      `Нова партиція кожні ${R.e10.rotation.partition_seconds / 60} модельних хвилин, зберігаються ${R.e10.rotation.retention_partitions} найновіші. Ротація робить кількість кусків стаціонарною.`,
+      `Нова партиція кожні ${R.e10.rotation.partition_seconds / 60} модельних хвилин, зберігаються ${R.e10.rotation.retention_partitions} найновіші. З відкритим входом ротація робить кількість кусків стаціонарною.`,
       { wide: true, tableView: () => table(["вхід", "варіант", "куски", "підсилення", "потік", "затримано", "відхилено"],
         ["open", "closed"].flatMap(part => R.e10[part].variants.map(v => [part === "open" ? "150/с відкритий" : "35 замкнених клієнтів", names[v.name] || v.name,
           ci(v.stats.parts_mean), ci(v.stats.write_amplification), ci(v.stats.insert_rate), PCT.format(v.stats.delayed_fraction[0]), PCT.format(v.stats.rejected_fraction[0])]))) });
     const row = el("div", { class: "grid two" });
     body.append(row);
-    for (const [part, title] of [["open", "150 вставок/с, відкритий вхід"], ["closed", "35 замкнених клієнтів, пропонують 350/с"]]) {
+    for (const [part, title] of [["open", "150 вставок/с, відкритий вхід"], ["closed", "35 замкнених клієнтів, найбільша партиція"]]) {
       const holder = el("div");
       row.append(el("div", {}, el("h3", {}, title), holder));
       const d = R.e10[part];
       new Chart(holder, { height: 230, x: { label: "модельний час, хв", format: v => INT.format(v) }, y: { min: 0 }, valueFormat: v => INT.format(v), tooltipTitle: x => clock(x * 60),
         thresholds: part === "closed" ? [{ y: 1000, label: "parts_to_delay_insert" }] : [],
         series: d.variants.map((v, i) => ({ name: names[v.name] || v.name, short: v.name === "one partition" ? "одна" : v.name === "rotation" ? "ротація" : "запізнілі",
-          color: S(i + 1), points: d.grid.map((t, j) => [t / 60, v.parts[j]]) })) });
+          color: S(i + 1), points: d.grid.map((t, j) => [t / 60, (part === "closed" ? v.largest : v.parts)[j]]) })) });
     }
     grid.append(c);
   }
@@ -141,7 +140,7 @@ export function results() {
     const { card: c, body } = card("E11. Диск, що заповнюється",
       `Одна партиція, 100 вставок/с, місця для таблиці ${bytes(R.e11.disk_bytes)}. Злиття стартує, лише коли вільно вдвічі більше за його джерела, а злиті джерела ще old_parts_lifetime лежать на диску. Тому злиття дробляться задовго до першої відхиленої вставки.`,
       { wide: true, tableView: () => table(["варіант", "межа злиття падає", "перша NOT_ENOUGH_SPACE", "NOT_ENOUGH_SPACE в останні 10 хв", "куски", "підсилення"],
-        R.e11.variants.map(v => [names[v.name] || v.name, minutes(v.cap_drop), minutes(v.first_nospace),
+        R.e11.variants.map(v => [names[v.name] || v.name, minutes(v.cap_drop, v.cap_drop_seeds, v.seeds), minutes(v.first_nospace, v.first_nospace_seeds, v.seeds),
           v.nospace_last_10_min ? PCT.format(v.nospace_last_10_min[0]) : "0%", ci(v.stats.parts_mean), ci(v.stats.write_amplification)])) });
     const row = el("div", { class: "grid two" });
     body.append(row);
@@ -200,7 +199,7 @@ export function validation() {
   root.append(el("div", { class: "card prose", style: "margin-bottom:16px" },
     el("h2", {}, "Модель проти живого сервера"),
     el("p", {}, "Кожне навантаження проганялося 3 рази по 6 хвилин на окремому сервері ClickHouse 26.10 і 20 разів у моделі. Розміри вставок модель брала з подій NewPart самого прогону, а вартість злиття лише з калібрування на інших навантаженнях."),
-    el("p", {}, "Середні характеристики збігаються в межах 3.3%. Підсилення записів у моделі на 6–8% вище. Гальмування залежить від хвоста розподілу кількості кусків, а на сервері цей хвіст важчий, тому частку затриманих вставок модель недооцінює на 13%.")));
+    el("p", {}, "17 з 23 порівнянь лежать у 95% довірчому інтервалі сервера, підсилення записів збігається в межах 1%. Найбільша розбіжність у гальмуванні: частку затриманих вставок модель занижує на 9.5%, а середню затримку на 28%.")));
   const grid = el("div", { class: "grid three" });
   root.append(grid);
   let lim = 10;

@@ -1,4 +1,4 @@
-import { el, bytes, clock, duration, INT, NUM2, NUM3, PCT, partsText } from "./dom.js";
+import { el, bytes, clock, duration, INT, NUM2, NUM3, PCT, partsText, plural } from "./dom.js";
 
 const MIB = 1024 * 1024;
 
@@ -82,7 +82,7 @@ export class Inspector {
     this.lastExplainKey = key;
     const root = this.explainRoot;
     const status = !x ? "Селектор ще не запускався."
-      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} місць зайняті; призначувач засинає.`
+      : x.outcome === "pool_full" ? `Останній запуск (${clock(x.at)}): пул повний, усі ${table.pool.maxTasks} ${plural(table.pool.maxTasks, "місце", "місця", "місць")} зайняті, призначувач засинає.`
       : x.outcome === "disabled" ? `Останній запуск (${clock(x.at)}): злиття вимкнені, max_bytes_to_merge_at_max_space_in_pool = 0.`
       : x.outcome === "disk_full" ? `Останній запуск (${clock(x.at)}): на диску вільно ${bytes(x.free)}, а злиття стартує, лише коли вільно вдвічі більше за його джерела; призначувач засинає.`
       : x.outcome === "nothing" && table.cfg.selector === "tiered" ? `Останній запуск (${clock(x.at)}): немає ряду з ${Math.max(2, Math.trunc(table.cfg.base))} сусідніх вільних кусків одного рівня в межах розміру злиття; призначувач засинає.`
@@ -97,9 +97,9 @@ export class Inspector {
       root.replaceChildren(...out);
       return;
     }
-    const lhs = (m.sumSize + m.count * 5 * MIB) / (m.maxSize + 5 * MIB);
+    const lhs = (m.checkedSum + m.checkedCount * 5 * MIB) / (m.maxSize + 5 * MIB);
     out.push(el("p", {}, `${partsText(m.count)} у партиції ${m.key}, позиції ${m.begin}–${m.end - 1}, разом ${bytes(m.sumSize)}.`), rows([
-      ["умова допуску", `(Σ + k·5 МБ)/(max + 5 МБ) = ${NUM2.format(lhs)} ≥ base′ = ${NUM2.format(m.loweredBase)}`],
+      ["умова допуску", `(Σ + k·5 МБ)/(max + 5 МБ) = ${NUM2.format(lhs)} ≥ base′ = ${NUM2.format(m.loweredBase)}${m.trimmed ? `, для ${partsText(m.checkedCount)} до відкидання дрібних` : ""}`],
       ["base′", `з ${NUM2.format(m.base ?? table.cfg.base)}: наймолодший кусок ${duration(m.minAge)}, у відрізку вільних кусків ${INT.format(m.segmentLength)}`],
       ["оцінка", `(Σ + 5 МБ·k)/(k − 1.9) = ${bytes(m.score)}${m.aligned ? ", знижена за вирівнювання з лівим сусідом" : ""}`],
       ["відкинуто дрібних справа", String(m.trimmed || 0)],

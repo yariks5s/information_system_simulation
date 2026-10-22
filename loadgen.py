@@ -78,6 +78,7 @@ def run(table, out_dir, duration, rows, mode="open", rate=1.0, clients=4, think=
         except ServerError as error:
             if error.code != TOO_MANY_PARTS:
                 failures.append(error)
+                abort.set()
                 raise
             status = "rejected"
         with lock:

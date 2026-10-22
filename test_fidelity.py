@@ -131,7 +131,7 @@ def test_max_parts_limit_details():
 
 def test_tiered_merges_at_least_two_parts():
     ps = [Part(i, i + 1, i + 1, 0, MIB, 0.0) for i in range(3)]
-    begin, end = select_tiered(ps, 1e7, 10**12, Config(selector="tiered", base=1.5))
+    begin, end = select_tiered(ps, 10**12, Config(selector="tiered", base=1.5))
     assert end - begin == 2
 
 

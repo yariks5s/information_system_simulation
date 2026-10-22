@@ -36,7 +36,7 @@ function loweredBase(sumSize, minAge, rangeSize, base) {
   const minAgeToLower = lerp(AGE_AT_MIN_SIZE[0], AGE_AT_MAX_SIZE[0], sizeNormalized);
   const maxAgeToLower = lerp(AGE_AT_MIN_SIZE[1], AGE_AT_MAX_SIZE[1], sizeNormalized);
   const ageNormalized = unit(minAge, minAgeToLower, maxAgeToLower);
-  // clickhouse passes the size of the mergeable range here, not of the whole partition
+  // clickhouse passes the part count of the free range here, not of the whole partition
   const partsNormalized = unit(rangeSize, PARTS_TO_LOWER_BASE[0], PARTS_TO_LOWER_BASE[1]);
   return lerp(base, 2.0, Math.min(1.0, ageNormalized + partsNormalized));
 }
@@ -100,7 +100,8 @@ function segmentBest(segment, offset, key, now, maxBytes, maxParts, cfg, stats) 
         stats.allowed++;
         const s = score(segment, begin, end, sumSize);
         const candidate = { key, score: s.score, begin: offset + begin, end: offset + s.end, sumSize: s.sumSize, count: s.end - begin,
-                            maxSize, minAge, loweredBase: base, aligned: s.aligned, trimmed: end - s.end, segmentLength: n };
+                            maxSize, minAge, loweredBase: base, aligned: s.aligned, trimmed: end - s.end, segmentLength: n,
+                            checkedSum: sumSize, checkedCount: end - begin };
         if (best === null || better(candidate, best)) best = candidate;
       }
     }

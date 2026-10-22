@@ -25,5 +25,5 @@ class Engine:
             self.events += 1
             if after_event:
                 after_event()
-        if self.events < stop and until < math.inf:
+        if self.events < stop and until < math.inf and until > self.now:
             self.now = until

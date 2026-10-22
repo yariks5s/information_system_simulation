@@ -98,7 +98,7 @@
           <div class="card">
             <div class="card-head">
               <div><h2 id="pool-title">Пул фонових задач</h2><p class="sub">Кожне місце: задача злиття і частка її роботи, що вже виконана. Клацніть на задачу, щоб побачити її джерела в дереві.</p></div>
-              <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--axis)"></span>чекає потоку</span></div>
+              <div class="legend"><span class="key"><span class="swatch" style="background:var(--series-1)"></span>виконується</span><span class="key"><span class="swatch" style="background:var(--text-muted)"></span>чекає потоку</span></div>
             </div>
             <div id="pool"></div>
           </div>
@@ -110,7 +110,7 @@
 
         <div class="card">
           <div class="card-head">
-            <div><h2>Як змінюється система</h2><p class="sub">Одна точка на секунду модельного часу; лінії згладжені за 5 секунд.</p></div>
+            <div><h2>Як змінюється система</h2><p class="sub">Одна точка на секунду модельного часу. Потоки і вставки згладжені за 5 секунд, підсилення записів за хвилину.</p></div>
             <label class="muted">Вікно
               <select id="window">
                 <option value="300">5 хв</option>
@@ -163,7 +163,7 @@
         <text class="box-text" x="468" y="116" id="live-throw">n ≥ 3000: відхилити (TOO_MANY_PARTS)</text>
         <text class="box-text" x="468" y="134" id="live-delay">n ≥ 1000: затримати на</text>
         <text class="formula" x="468" y="152" id="live-formula">max(10, 1000·(n−999)/2000) мс</text>
-        <text class="box-text" x="468" y="170">середній кусок &gt; 1 ГіБ: без обмежень</text>
+        <text class="box-text" x="468" y="170" id="live-guard">середній кусок &gt; 1 ГіБ: без обмежень</text>
 
         <rect class="box accent" x="880" y="60" width="300" height="166" rx="10"/>
         <text class="box-title" x="898" y="90">Активні куски</text>
@@ -182,12 +182,12 @@
         <text class="box-text" x="898" y="470">пул повний: вибір пропускається</text>
 
         <rect class="box" x="450" y="360" width="300" height="166" rx="10"/>
-        <text class="box-title" x="468" y="390">SimpleMergeSelector</text>
+        <text class="box-title" x="468" y="390" id="live-selector-title">SimpleMergeSelector</text>
         <text class="live" id="live-selector" x="468" y="496"></text>
-        <text class="box-text" x="468" y="416">діапазон сусідніх вільних кусків, якщо</text>
-        <text class="formula" x="468" y="434">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
+        <text class="box-text" x="468" y="416" id="live-sel-1">діапазон сусідніх вільних кусків, якщо</text>
+        <text class="formula" x="468" y="434" id="live-sel-2">(Σ + k·5МБ)/(max + 5МБ) ≥ base′</text>
         <text class="box-text" x="468" y="452" id="live-base">base′: від 5 до 2 з віком і кількістю</text>
-        <text class="formula" x="468" y="470">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
+        <text class="formula" x="468" y="470" id="live-sel-4">вибір: min (Σ + 5МБ·k)/(k − 1.9)</text>
 
         <rect class="box" x="20" y="360" width="300" height="166" rx="10"/>
         <text class="box-title" x="38" y="390">Пул фонових задач</text>
@@ -198,7 +198,7 @@
         <text class="formula" x="38" y="470" id="live-cost">(2.7 мс + D/244.5 МБ/с)·ε·(1+δ)</text>
 
         <path class="arrow" d="M320,110 L446,110" marker-end="url(#arr)"/>
-        <text class="arrow-label" x="330" y="100">вставка ≈ 3.6 МБ</text>
+        <text class="arrow-label" x="330" y="100" id="live-insert">вставка ≈ 3.6 МБ</text>
         <path class="arrow" d="M750,110 L876,110" marker-end="url(#arr)"/>
         <text class="arrow-label" x="760" y="100">кусок рівня 0</text>
         <path class="arrow" d="M1030,226 L1030,356" marker-end="url(#arr)"/>

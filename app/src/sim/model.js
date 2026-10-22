@@ -68,7 +68,7 @@ export class Table {
     this.rng = rng ? rng.streams : streams(cfg.seed, ...STREAMS);
     this.think = [];
     for (let c = 0; c < cfg.clients; c++) this.think.push(this.clientRng(c));
-    this.clientLive = [];  // true while a closed client has an event pending, so a restart never starts a second loop
+    this.clientLive = [];  // true while a closed client has an event pending, so startIdleClients never starts a second loop
     this.pool = new Pool(this.engine, cfg.threads, cfg.threads * cfg.concurrency_ratio, cfg.scheduling_policy, task => this.onMergeDone(task));
     this.partitions = new Map([[0, []]]);  // keys ascending, parts ordered by block
     this.partitionBytes = new Map([[0, 0]]);
@@ -218,7 +218,7 @@ export class Table {
 
   onInsertCommit(size, client, key, delay) {
     this.inFlight--;
-    // MergeTreeDataWriter reserves the part size, NOT_ENOUGH_SPACE otherwise
+    // MergeTreeDataWriter reserves the block size, the model the part size
     if (this.cfg.disk_bytes && size > this.diskFree()) {
       this.rejectedDisk++;
       this.emit("nospace", size, client, delay);
@@ -256,8 +256,7 @@ export class Table {
 
   postpone() {
     this.noWorkCount++;
-    // std::pow saturates to inf in clickhouse, the cap gives the same 600 s
-    const delay = Math.min(600.0, 0.1 * Math.pow(1.1, Math.min(this.noWorkCount, 200))) + this.rng.assignee.uniform(0, 1);
+    const delay = Math.min(600.0, 0.1 * Math.pow(1.1, this.noWorkCount)) + this.rng.assignee.uniform(0, 1);
     this.scheduleAssignee(delay);
     this.emit("sleep", delay);
   }
@@ -433,6 +432,7 @@ export class Table {
 
 
   configure(changes) {
+    if ("old_parts_lifetime" in changes) this.removeOutdated();  // expired parts must not come back under a longer lifetime
     const cfg = this.cfg, old = { ...cfg };
     Object.assign(cfg, changes);
     this.updateDerived();

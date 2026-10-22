@@ -58,7 +58,7 @@ export class Engine {
       this.step();
       if (afterEvent) afterEvent();
     }
-    if (this.events < stop && until < Infinity) this.now = until;
+    if (this.events < stop && until < Infinity && until > this.now) this.now = until;
   }
 }
 

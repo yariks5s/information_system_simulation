@@ -1,6 +1,7 @@
 """M2 acceptance, see RFC section 10"""
 import math
 
+import stats
 from inputs import MIB
 from model import Config, Part, Table, simulate
 from selector import _max_parts_to_merge, _score, max_source_parts_bytes, select_simple
@@ -78,7 +79,7 @@ def test_invariants_with_simple_selector():
     table = Table(Config())
     table.start()
     table.engine.run(max_events=3 * 10**5, after_event=table.check_invariants)
-    assert table.merges_done > 0 and table.mean_parts() < 100
+    assert table.merges_done > 0 and stats.summary(table)["parts_mean"] < 100
 
 
 if __name__ == "__main__":
