@@ -113,6 +113,7 @@ flowchart TD
 
 **1. Системні пакети.** Потрібні Python 3.10+, git, pandoc (для звіту) і Node.js 22 (для тестів лабораторії):
 
+    sudo apt-get update
     sudo apt-get install -y git python3 python3-venv pandoc curl
     curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt-get install -y nodejs
 
