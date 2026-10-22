@@ -9,3 +9,4 @@ server/*
 !server/config.xml
 !server/users.xml
 tmp/
+.venv/

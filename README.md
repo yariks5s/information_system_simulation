@@ -160,7 +160,7 @@ flowchart TD
     python3 calibrate.py --refit                 # перерахувати calibration.json зі збережених злиттів
     python3 validate.py compare open             # модельна частина валідації (також closed, throttled)
 
-`calibrate.py --refit`, `plots.py` і `docs/build.sh` перезаписують файли в репозиторії. З іншими версіями numpy, scipy чи matplotlib останні знаки чисел і дрібниці графіків можуть відрізнятися, тож `git status` покаже зміни. Повернути збережені файли можна командою `git checkout calibration.json results/ docs/`.
+`calibrate.py --refit`, `plots.py`, `validate.py compare` і `docs/build.sh` перезаписують файли в репозиторії. З іншими версіями numpy, scipy чи matplotlib останні знаки чисел і дрібниці графіків можуть відрізнятися, тож `git status` покаже зміни. Повернути збережені файли можна командою `git checkout calibration.json results/ runs/ docs/`.
 
 **5. Лабораторія.** Відкрити `app/dist/index.html` у браузері. Це один файл, інтернет не потрібен. Тести лабораторії:
 
