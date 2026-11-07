@@ -116,6 +116,8 @@ flowchart TD
 
 ### Модулі
 
+Python-код лежить у `src/`, тести в `tests/`.
+
 | Файл | Роль |
 |---|---|
 | `engine.py` | календар подій: купа за часом і порядковим номером |
@@ -126,8 +128,10 @@ flowchart TD
 | `model.py` | стан таблиці, обробники подій, конфігурація, інваріанти |
 | `stats.py` | ймовірнісно-часові характеристики з записаних фактів, розігрів за методом Велча, паралельні репліки, довірчі інтервали |
 | `experiments.py`, `run_experiments.py` | плани експериментів E1–E11, зокрема факторний план 2⁵ |
+| `loadgen.py`, `calibrate.py`, `validate.py` | навантаження на живий сервер, калібрування, порівняння моделі з сервером |
+| `plots.py` | графіки з `results/*.json` |
 | `open_questions.py` | перевірка гіпотез про розбіжності валідації |
-| `test_*.py` | тести моделі: граничні випадки з точною відповіддю, інваріанти, закон Літтла, відповідність коду ClickHouse |
+| `tests/test_*.py` | тести моделі: граничні випадки з точною відповіддю, інваріанти, закон Літтла, відповідність коду ClickHouse |
 
 ## Як запустити
 
@@ -150,16 +154,18 @@ flowchart TD
 
 **3. Тести моделі.** Близько 5 хвилин, або 2 хвилини паралельно з `-n auto`:
 
-    python3 -m pytest -q -n auto test_*.py
+    python3 -m pytest -q -n auto tests
 
 **4. Експерименти.** Швидкий режим пише в `results_quick/` і не чіпає збережених результатів:
 
-    python3 run_experiments.py --quick e1_load   # один експеримент, близько хвилини
-    python3 plots.py --quick                     # графіки в results_quick/
-    python3 run_experiments.py                   # усі E1–E11: кілька годин на 32 ядрах, пише в results/
-    python3 plots.py                             # графіки в results/
-    python3 calibrate.py --refit                 # перерахувати calibration.json зі збережених злиттів
-    python3 validate.py compare open             # модельна частина валідації (також closed, throttled)
+    python3 src/run_experiments.py --quick e1_load   # один експеримент, близько хвилини
+    python3 src/plots.py --quick                     # графіки в results_quick/
+    python3 src/run_experiments.py                   # усі E1–E11: кілька годин на 32 ядрах, пише в results/
+    python3 src/plots.py                             # графіки в results/
+    python3 src/calibrate.py --refit                 # перерахувати calibration.json зі збережених злиттів
+    python3 src/validate.py compare open             # модельна частина валідації (також closed, throttled)
+
+Усі команди запускаються з кореня репозиторію.
 
 `calibrate.py --refit`, `plots.py`, `validate.py compare` і `docs/build.sh` перезаписують файли в репозиторії. З іншими версіями numpy, scipy чи matplotlib останні знаки чисел і дрібниці графіків можуть відрізнятися, тож `git status` покаже зміни. Повернути збережені файли можна командою `git checkout calibration.json results/ runs/ docs/`.
 
@@ -286,13 +292,9 @@ flowchart TD
 
 | Шлях | Що це |
 |---|---|
-| `engine.py`, `inputs.py`, `pool.py`, `selector.py`, `throttle.py`, `model.py` | модель на Python |
-| `stats.py` | ймовірнісно-часові характеристики, розігрів, репліки, довірчі інтервали |
-| `loadgen.py`, `calibrate.py`, `validate.py` | навантаження на живий сервер, калібрування, валідація |
-| `experiments.py`, `run_experiments.py`, `plots.py` | експерименти E1–E11 і графіки |
+| `src/` | Python-код: модель, статистика, калібрування, валідація, експерименти і графіки (див. [Модулі](#модулі)) |
+| `tests/` | тести Python-моделі |
 | `calibration.json`, `results/`, `runs/` | відкалібровані параметри, результати експериментів, виміри на сервері |
-| `test_*.py` | тести Python-моделі |
-| `open_questions.py` | перевірка гіпотез про розбіжності валідації |
 | `app/` | лабораторія в браузері, [app/README.md](app/README.md) |
 | `docs/` | план, повний і короткий звіт (`.md`, `.docx`, `.pdf`), `build.sh` для їх збирання, знімки в `docs/img/` |
 | `server/` | конфігурація окремого сервера ClickHouse для калібрування і валідації |

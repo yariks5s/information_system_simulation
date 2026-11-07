@@ -1,4 +1,4 @@
-"""report figures from results/*.json: python3 plots.py [--quick]"""
+"""report figures from results/*.json: python3 src/plots.py [--quick]"""
 import json
 import os
 import sys

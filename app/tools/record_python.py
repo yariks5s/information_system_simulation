@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from calibrate import calibrated_config  # noqa: E402
 from inputs import MIB  # noqa: E402

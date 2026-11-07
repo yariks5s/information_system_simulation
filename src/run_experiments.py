@@ -1,4 +1,4 @@
-"""experiments of RFC section 9 into results/: python3 run_experiments.py [--quick] [name ...]"""
+"""experiments of RFC section 9 into results/: python3 src/run_experiments.py [--quick] [name ...]"""
 import json
 import math
 import os

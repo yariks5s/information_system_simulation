@@ -1,4 +1,4 @@
-"""assignee latency and own-part counting vs stored live runs (RFC section 8): python3 open_questions.py"""
+"""assignee latency and own-part counting vs stored live runs (RFC section 8): python3 src/open_questions.py"""
 import json
 from dataclasses import replace
 

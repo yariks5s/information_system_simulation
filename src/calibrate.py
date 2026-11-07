@@ -1,4 +1,4 @@
-"""merge cost fit of RFC 3.7 from system.part_log: python3 calibrate.py [--report | --refit | --workload name]"""
+"""merge cost fit of RFC 3.7 from system.part_log: python3 src/calibrate.py [--report | --refit | --workload name]"""
 import json
 import math
 import sys

@@ -1,4 +1,4 @@
-"""live server vs model (RFC section 8): python3 validate.py live|compare open|closed|throttled"""
+"""live server vs model (RFC section 8): python3 src/validate.py live|compare open|closed|throttled"""
 import csv
 import json
 import math

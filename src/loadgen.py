@@ -1,4 +1,4 @@
-"""insert load and a 1 s monitor for the live server (RFC section 8): python3 loadgen.py out_dir [options]"""
+"""insert load and a 1 s monitor for the live server (RFC section 8): python3 src/loadgen.py out_dir [options]"""
 import argparse
 import csv
 import json
@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 URL = os.environ.get("SIM_CLICKHOUSE_URL", "http://127.0.0.1:19481/")
 TOO_MANY_PARTS = 252
-DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server", "data")
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server", "data")
 MIN_FREE_BYTES = 20 * 2**30  # the disk is shared with other work
 EVENTS = ("DelayedInserts", "RejectedInserts", "DelayedInsertsMilliseconds")
 
