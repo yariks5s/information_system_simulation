@@ -26,6 +26,7 @@
 ![Лабораторія під час сплеску вставок](docs/img/readme/lab.png)
 
 - [Звіт](docs/report.md) ([PDF](docs/report.pdf)): постановка, модель, калібрування, валідація, експерименти E1–E11, висновки.
+- [Короткий звіт](docs/short_report.md) ([PDF](docs/short_report.pdf), [DOCX](docs/short_report.docx)): те саме на 10 сторінках, з головними графіками і таблицями.
 - [RFC.md](RFC.md): повна специфікація моделі з посиланнями на код ClickHouse. Будь-яка зміна моделі спершу вноситься сюди.
 - [app/README.md](app/README.md): будова лабораторії і її тести.
 
@@ -171,7 +172,7 @@ flowchart TD
 
     playwright install --with-deps chromium      # системні бібліотеки ставить через sudo; або свій Chromium у змінній CHROMIUM
     cd app && python3 tests/browser_check.py light && cd ..
-    cd docs && ./build.sh && cd ..               # report.docx, report.pdf і plan.docx з Markdown
+    cd docs && ./build.sh && cd ..               # повний і короткий звіт (docx, pdf) і план з Markdown
 
 Калібрування і валідація потребують окремого сервера ClickHouse. Треба скопіювати Release-бінарник у `server/clickhouse` і запустити `server/clickhouse server --config-file=server/config.xml --daemon` (порти 19480 і 19481). Шляхи в `server/config.xml` абсолютні й розраховані на `/home/ubuntu/merge-sim`, тож для іншого каталогу їх треба змінити.
 
@@ -293,5 +294,5 @@ flowchart TD
 | `test_*.py` | тести Python-моделі |
 | `open_questions.py` | перевірка гіпотез про розбіжності валідації |
 | `app/` | лабораторія в браузері, [app/README.md](app/README.md) |
-| `docs/` | план і звіт (`.md`, `.docx`, `.pdf`), `build.sh` для їх збирання, знімки в `docs/img/` |
+| `docs/` | план, повний і короткий звіт (`.md`, `.docx`, `.pdf`), `build.sh` для їх збирання, знімки в `docs/img/` |
 | `server/` | конфігурація окремого сервера ClickHouse для калібрування і валідації |
