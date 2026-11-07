@@ -158,12 +158,12 @@ Python-код лежить у `src/`, тести в `tests/`.
 
 **4. Експерименти.** Швидкий режим пише в `results_quick/` і не чіпає збережених результатів:
 
-    python3 src/run_experiments.py --quick e1_load   # один експеримент, близько хвилини
-    python3 src/plots.py --quick                     # графіки в results_quick/
-    python3 src/run_experiments.py                   # усі E1–E11: кілька годин на 32 ядрах, пише в results/
-    python3 src/plots.py                             # графіки в results/
-    python3 src/calibrate.py --refit                 # перерахувати calibration.json зі збережених злиттів
-    python3 src/validate.py compare open             # модельна частина валідації (також closed, throttled)
+    python3 src/run_experiments.py --quick e1_load    # один експеримент, близько хвилини
+    python3 src/plots.py --quick                      # графіки в results_quick/
+    python3 src/run_experiments.py                    # усі E1–E11: кілька годин на 32 ядрах, пише в results/
+    python3 src/plots.py                              # графіки в results/
+    python3 src/calibrate.py --refit                  # перерахувати calibration.json зі збережених злиттів
+    python3 src/validate.py compare open              # модельна частина валідації (також closed, throttled)
 
 Усі команди запускаються з кореня репозиторію.
 
@@ -171,14 +171,14 @@ Python-код лежить у `src/`, тести в `tests/`.
 
 **5. Лабораторія.** Відкрити `app/dist/index.html` у браузері. Це один файл, інтернет не потрібен. Тести лабораторії:
 
-    python3 app/tools/record_python.py           # один раз: записати прогони Python-моделі (120 МБ, не в git)
+    python3 app/tools/record_python.py                # один раз: записати прогони Python-моделі (120 МБ, не в git)
     cd app && node --test tests/*.test.mjs && cd ..
 
 **6. Перевірка сторінки в браузері і PDF звіту.** Потрібен Chromium для `playwright`:
 
-    playwright install --with-deps chromium      # системні бібліотеки ставить через sudo; або свій Chromium у змінній CHROMIUM
+    playwright install --with-deps chromium           # системні бібліотеки ставить через sudo; або свій Chromium у змінній CHROMIUM
     cd app && python3 tests/browser_check.py light && cd ..
-    cd docs && ./build.sh && cd ..               # повний і короткий звіт (docx, pdf) і план з Markdown
+    cd docs && ./build.sh && cd ..                    # повний і короткий звіт (docx, pdf) і план з Markdown
 
 Калібрування і валідація потребують окремого сервера ClickHouse. Треба скопіювати Release-бінарник у `server/clickhouse` і запустити `server/clickhouse server --config-file=server/config.xml --daemon` (порти 19480 і 19481). Шляхи в `server/config.xml` абсолютні й розраховані на `/home/ubuntu/merge-sim`, тож для іншого каталогу їх треба змінити.
 
